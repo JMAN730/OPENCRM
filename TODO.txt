@@ -1,0 +1,34 @@
+# Project TODOs
+
+## Done
+
+- [x] **Integrate the lead generation scraper** (2026-04-18)
+  - Python Google Maps scraper now runs from the CRM at `/scraper`.
+  - Modular plug-in: code under `src/server/scraper/` and `src/features/scraper/`.
+  - `ScraperJob` model tracks status, locations, logs, scraped/imported counts.
+  - All endpoints are `protectedProcedure` (auth required); locations sanitized.
+  - Auto-imports `leads.csv` rows into the Leads table on completion.
+  - Per-job output dirs at `scraper-output/<jobId>/`.
+  - Configurable via env: `SCRAPER_PYTHON_PATH`, `SCRAPER_SCRIPT_PATH`,
+    `SCRAPER_OUTPUT_BASE_DIR`, `SCRAPER_ENABLED`.
+
+## Open
+
+- [ ] **Wire UI category selection through to scraper.py CLI**
+  - The form lets users pick categories, but scraper.py currently always uses
+    its built-in `CATEGORIES` list. Add a `--categories` flag in scraper.py
+    and pass `job.categories` from the runner.
+
+- [ ] **Scheduled scraping jobs** (cron-style recurring runs)
+  - Run a saved location/category set daily/weekly automatically.
+
+- [ ] **Dashboard stats**
+  - Replace hardcoded zeros with real tRPC queries (dashboardRouter exists
+    but isn't wired into the dashboard page yet).
+
+- [ ] **Leads table polish**
+  - Search bar is UI-only — implement filtering.
+  - Dropdown actions (View Details, Delete Lead) currently do nothing.
+
+- [ ] **Tasks & Outreach pages**
+  - Both are placeholder empty states with no functionality.
