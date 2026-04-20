@@ -1,0 +1,72 @@
+Build a production-ready, scalable web-based CRM for cold calling, sales outreach, and lead management with the following architecture and requirements:
+
+Tech Stack:
+
+* Frontend: Next.js (App Router) with TypeScript, Tailwind CSS, and ShadCN UI
+* Backend: Next.js server actions + tRPC for end-to-end typesafe APIs
+* Database: PostgreSQL with Prisma ORM
+* Caching/Queue: Redis (Upstash or self-hosted) for job queues, rate limiting, and caching
+* Authentication: Auth.js (NextAuth) with JWT + OAuth (Google) + email login
+* Real-time: WebSockets (Pusher or Socket.io) for live updates (calls, agent status, dashboards)
+* VoIP/Telephony: Twilio API (voice, recordings, call status, webhooks)
+* File Storage: AWS S3 or Cloudflare R2 for call recordings and attachments
+* Deployment: Vercel (frontend/backend) + managed Postgres (Neon/Supabase)
+
+Core Features:
+
+* Multi-tenant architecture (teams/organizations with role-based access control)
+* Lead/contact management with tagging, custom fields, and advanced filtering
+* Smart lead pipelines (stages, drag-and-drop Kanban view)
+* Built-in dialer (click-to-call + auto-dialer + power dialer modes)
+* Call logging with automatic recording, transcription, and AI summaries
+* Notes, activity timeline, and disposition tracking per contact
+* Follow-up scheduling with reminders, tasks, and calendar sync
+* Email + SMS outreach (Twilio + Resend/SendGrid integration)
+* Unified communication timeline (calls, texts, emails in one thread)
+
+Advanced Features:
+
+* AI integration (OpenAI API):
+
+  * Auto-generate call scripts
+  * Real-time call transcription + sentiment analysis
+  * Post-call summaries and suggested next actions
+* Predictive dialer logic (queue prioritization, retry rules, time zone awareness)
+* Lead scoring system (based on activity, engagement, and custom rules)
+* Workflow automation (if/then triggers for follow-ups, tagging, notifications)
+* Bulk import/export (CSV) and data enrichment APIs
+* Custom dashboards with analytics (calls/hour, conversion rate, agent performance)
+* Live agent dashboard (active calls, statuses, leaderboards)
+* Notifications system (in-app + email)
+
+Architecture & Engineering:
+
+* Clean modular architecture (feature-based folder structure)
+* API rate limiting, validation (Zod), and error handling
+* Background workers (Redis queues) for async jobs (calls, emails, AI processing)
+* Webhook handling (Twilio events, email events)
+* Audit logs for all critical actions
+* Environment-based config and secrets management
+
+UX/UI Requirements:
+
+* Fast, responsive UI with optimistic updates
+* Keyboard shortcuts for power users (call, save notes, next lead)
+* Dark/light mode
+* Mobile-friendly interface
+
+Security & Scalability:
+
+* Row-level security / tenant isolation
+* Input validation and sanitization
+* Scalable DB schema with indexing
+* Logging and monitoring hooks (Sentry)
+
+Deliverables:
+
+* Fully working MVP with all core systems wired together
+* Clear project structure and setup instructions
+* Seed data for testing (dummy leads and calls)
+* Example environment variables file
+
+Prioritize developer experience, scalability, and real-world usability for a sales team making high-volume cold calls daily.
