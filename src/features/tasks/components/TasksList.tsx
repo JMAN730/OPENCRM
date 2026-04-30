@@ -52,7 +52,7 @@ export function TasksList() {
     );
   }
 
-  const isOverdue = (date: Date) => {
+  const isOverdue = (date: Date | string) => {
     return new Date(date) < new Date() && new Date(date).toDateString() !== new Date().toDateString();
   };
 
@@ -94,17 +94,15 @@ export function TasksList() {
               <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
                 Completed
               </Badge>
-            ) : isOverdue(task.dueDate!) ? (
+            ) : task.dueDate && isOverdue(task.dueDate) ? (
               <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
                 Overdue
               </Badge>
             ) : null}
             
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreHorizontal size={16} />
-                </Button>
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
+                <MoreHorizontal size={16} />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="gap-2 cursor-pointer">

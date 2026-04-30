@@ -45,5 +45,9 @@ next-env.d.ts
 # tauri
 /src-tauri/target
 
+# Server bundle (populated by prepare-standalone.mjs before tauri build)
+/src-tauri/server/*
+!/src-tauri/server/placeholder.txt
+
 # scraper job output (per-job CSV/log files)
 /scraper-output

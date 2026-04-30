@@ -5,10 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
-  // No adapter needed: JWT sessions are stored in cookies, not the DB.
-  // The Credentials provider works entirely without an adapter.
   providers: [
-    // Only enable Google OAuth when credentials are actually configured
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           GoogleProvider({
@@ -41,6 +38,7 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days — persists across browser close
   },
   callbacks: {
     async session({ session, token }) {

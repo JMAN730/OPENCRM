@@ -6,12 +6,13 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../out"
+    "beforeBuildCommand": "npm run build && node scripts/prepare-standalone.mjs",
+    "frontendDist": "frontend-placeholder"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "OpenCRM",
         "width": 1280,
         "height": 800,
@@ -25,7 +26,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "resources": {
+      "server/**/*": "server"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
