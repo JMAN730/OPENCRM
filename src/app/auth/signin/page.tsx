@@ -1,56 +1,302 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { signIn, getSession, useSession } from "next-auth/react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
+import { X, UserPlus, ArrowLeft } from "lucide-react";
+import { trpc } from "@/app/_trpc/client";
+
+type SavedUser = {
+  email: string;
+  name: string;
+  image?: string | null;
+};
+
+const STORAGE_KEY = "crm_saved_users";
+
+function getSavedUsers(): SavedUser[] {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function upsertSavedUser(user: SavedUser) {
+  const rest = getSavedUsers().filter((u) => u.email !== user.email);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([user, ...rest]));
+}
+
+function removeSavedUser(email: string) {
+  const users = getSavedUsers().filter((u) => u.email !== email);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
 
 export default function SignInPage() {
+  const { status } = useSession();
+  const router = useRouter();
+
+  const [savedUsers, setSavedUsers] = useState<SavedUser[]>([]);
+  const [mounted, setMounted] = useState(false);
+  const [view, setView] = useState<"picker" | "password" | "new">("picker");
+  const [selectedUser, setSelectedUser] = useState<SavedUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [error, setError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const resetPasswordMutation = trpc.auth.resetPassword.useMutation({
+    onSuccess: () => setResetSuccess(true),
+    onError: (err) => setError(err.message),
+  });
+
+  const handleResetPassword = () => {
+    const emailToReset = view === "password" ? selectedUser!.email : email;
+    if (!emailToReset) {
+      setError("Enter your email first.");
+      return;
+    }
+    setError("");
+    setResetSuccess(false);
+    resetPasswordMutation.mutate({ email: emailToReset });
+  };
+
+  useEffect(() => {
+    if (status === "authenticated") router.push("/dashboard");
+  }, [status, router]);
+
+  useEffect(() => {
+    setMounted(true);
+    const users = getSavedUsers();
+    setSavedUsers(users);
+    if (users.length === 0) setView("new");
+  }, []);
+
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
+
+    const loginEmail = view === "password" ? selectedUser!.email : email;
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: loginEmail,
         password,
         redirect: false,
       });
 
       if (result?.error) {
-        toast.error("Invalid credentials");
+        setError(
+          view === "password"
+            ? "Incorrect password. Please try again."
+            : "Incorrect email or password. Please try again."
+        );
       } else {
+        const session = await getSession();
+        if (session?.user?.email) {
+          upsertSavedUser({
+            email: session.user.email,
+            name: session.user.name ?? session.user.email,
+            image: session.user.image,
+          });
+        }
         router.push("/dashboard");
         router.refresh();
       }
-    } catch (error) {
-      toast.error("Something went wrong");
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleSelectUser = (user: SavedUser) => {
+    setSelectedUser(user);
+    setPassword("");
+    setError("");
+    setView("password");
+  };
+
+  const handleRemoveUser = (email: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeSavedUser(email);
+    const updated = getSavedUsers();
+    setSavedUsers(updated);
+    if (updated.length === 0) setView("new");
+  };
+
+  const handleBack = () => {
+    setError("");
+    setPassword("");
+    setSelectedUser(null);
+    setView("picker");
+  };
+
+  if (status === "loading" || !mounted) return null;
+
+  // ── Account picker ──────────────────────────────────────────────────────────
+  if (view === "picker") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
+        <div className="flex flex-col items-center gap-10 w-full max-w-lg">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold">Welcome back</h1>
+            <p className="mt-1 text-muted-foreground">Select your account to continue</p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-3">
+            {savedUsers.map((user) => (
+              <div
+                key={user.email}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectUser(user)}
+                onKeyDown={(e) => e.key === "Enter" && handleSelectUser(user)}
+                className="group relative flex w-32 cursor-pointer flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <button
+                  onClick={(e) => handleRemoveUser(user.email, e)}
+                  className="absolute right-2 top-2 rounded-full bg-muted p-0.5 opacity-0 transition-opacity hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100"
+                  aria-label="Remove account"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+                <Avatar className="h-16 w-16 text-lg">
+                  {user.image && <AvatarImage src={user.image} alt={user.name} />}
+                  <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                </Avatar>
+                <span className="text-center text-sm font-medium leading-tight">
+                  {user.name}
+                </span>
+              </div>
+            ))}
+
+            <button
+              onClick={() => { setEmail(""); setPassword(""); setError(""); setView("new"); }}
+              className="flex w-32 flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">
+                <UserPlus className="h-6 w-6 text-muted-foreground/60" />
+              </div>
+              <span className="text-sm font-medium text-muted-foreground">Add account</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Password prompt for saved user ──────────────────────────────────────────
+  if (view === "password" && selectedUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
+        <Card className="w-full max-w-sm border-none shadow-lg">
+          <CardHeader className="space-y-4 text-center">
+            <div className="flex justify-center">
+              <Avatar className="h-20 w-20 text-2xl">
+                {selectedUser.image && (
+                  <AvatarImage src={selectedUser.image} alt={selectedUser.name} />
+                )}
+                <AvatarFallback>{getInitials(selectedUser.name)}</AvatarFallback>
+              </Avatar>
+            </div>
+            <div>
+              <CardTitle className="text-xl">{selectedUser.name}</CardTitle>
+              <CardDescription>{selectedUser.email}</CardDescription>
+            </div>
+          </CardHeader>
+          <form onSubmit={handleSignIn}>
+            <CardContent className="space-y-4">
+              {error && (
+                <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoFocus
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  required
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col gap-3 border-t-0 bg-transparent">
+              <Button className="w-full" type="submit" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
+              </Button>
+              {resetSuccess ? (
+                <p className="text-center text-sm text-green-600">Password has been reset.</p>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetPassword}
+                  disabled={resetPasswordMutation.isPending}
+                >
+                  {resetPasswordMutation.isPending ? "Resetting..." : "Forgot password?"}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleBack}
+                className="gap-1.5"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to accounts
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── New account form ────────────────────────────────────────────────────────
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-md shadow-lg border-none">
+      <Card className="w-full max-w-md border-none shadow-lg">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
-          <CardDescription>
-            Enter your email and password to access your account
-          </CardDescription>
+          <CardDescription>Enter your email and password to access your account</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSignIn}>
           <CardContent className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -58,7 +304,7 @@ export default function SignInPage() {
                 type="email"
                 placeholder="admin@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 required
               />
             </div>
@@ -68,18 +314,46 @@ export default function SignInPage() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setError(""); }}
                 required
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-4 border-t-0 bg-transparent">
             <Button className="w-full" type="submit" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
+            {resetSuccess ? (
+              <p className="text-center text-sm text-green-600">Password has been reset.</p>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleResetPassword}
+                disabled={resetPasswordMutation.isPending}
+              >
+                {resetPasswordMutation.isPending ? "Resetting..." : "Forgot password?"}
+              </Button>
+            )}
+            {savedUsers.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleBack}
+                className="gap-1.5"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to accounts
+              </Button>
+            )}
             <p className="text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
-              <Link href="/auth/register" className="text-foreground hover:underline underline-offset-4">
+              <Link
+                href="/auth/register"
+                className="text-foreground underline-offset-4 hover:underline"
+              >
                 Create one
               </Link>
             </p>

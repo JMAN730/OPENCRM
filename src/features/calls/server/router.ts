@@ -11,8 +11,7 @@ export const callsRouter = createTRPCRouter({
       disposition: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const userId = (ctx.session.user as any).id;
-      const organizationId = (ctx.session.user as any).organizationId;
+      const { id: userId, organizationId } = ctx.session.user;
 
       if (!organizationId) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
@@ -41,7 +40,7 @@ export const callsRouter = createTRPCRouter({
   getForLead: protectedProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const organizationId = (ctx.session.user as any).organizationId;
+      const { organizationId } = ctx.session.user;
 
       if (!organizationId) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
@@ -66,7 +65,7 @@ export const callsRouter = createTRPCRouter({
     }),
 
   getRecent: protectedProcedure.query(async ({ ctx }) => {
-    const organizationId = (ctx.session.user as any).organizationId;
+    const { organizationId } = ctx.session.user;
 
     if (!organizationId) {
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });

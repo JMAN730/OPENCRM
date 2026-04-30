@@ -17,7 +17,7 @@ export const leadsRouter = createTRPCRouter({
   getAll: protectedProcedure
     .input(z.object({ search: z.string().optional() }).optional())
     .query(({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId;
+      const organizationId = ctx.session.user.organizationId ?? undefined;
       return ctx.prisma.lead.findMany({
         where: {
           organizationId,
@@ -36,15 +36,18 @@ export const leadsRouter = createTRPCRouter({
     }),
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }) => {
-      return ctx.prisma.lead.findUnique({
-        where: { id: input.id },
+    .query(async ({ ctx, input }) => {
+      const organizationId = ctx.session.user.organizationId ?? undefined;
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, organizationId },
       });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return lead;
     }),
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId;
+      const organizationId = ctx.session.user.organizationId ?? undefined;
       // Ensure the lead belongs to the user's organization
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.id, organizationId },
@@ -86,7 +89,6 @@ export const leadsRouter = createTRPCRouter({
           organizationId,
           assignedToId,
         })),
-        skipDuplicates: true,
       });
       return { count: result.count };
     }),
