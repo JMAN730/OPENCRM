@@ -64,11 +64,9 @@ export default function TasksPage() {
           </div>
           
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus size={16} />
-                New Task
-              </Button>
+            <DialogTrigger render={<Button className="gap-2" />}>
+              <Plus size={16} />
+              New Task
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>

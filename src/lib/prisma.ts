@@ -1,20 +1,20 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
-import { createClient } from "@libsql/client";
+import path from "path";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// Build an absolute, forward-slash URL so @libsql/client works on Windows.
+// PrismaLibSql is a factory — it takes a config object, not a pre-created client.
+const dbAbsPath = path
+  .resolve(process.cwd(), "prisma", "dev.db")
+  .replace(/\\/g, "/");
+const DB_URL = `file:///${dbAbsPath}`;
 
-function createPrismaClient() {
-  const libsql = createClient({ url: "file:prisma/dev.db" });
-  const adapter = new PrismaLibSql(libsql);
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
-}
+const adapter = new PrismaLibSql({ url: DB_URL });
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({ adapter, log: ["error", "warn"] });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

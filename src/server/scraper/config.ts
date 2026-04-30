@@ -7,7 +7,10 @@ const DEFAULT_PYTHON =
     ? "C:/Users/jo/Desktop/Lead_Generation - private/venv/Scripts/python.exe"
     : "/Users/jo/Desktop/Lead_Generation - private/venv/bin/python";
 
-const DEFAULT_SCRIPT = path.join(REPO_ROOT, "src/server/scraper/scraper.py");
+const DEFAULT_SCRIPT =
+  process.platform === "win32"
+    ? "C:/Users/jo/Desktop/Lead_Generation - private/scraper.py"
+    : "/Users/jo/Desktop/Lead_Generation - private/scraper.py";
 
 export const scraperConfig = {
   pythonPath: process.env.SCRAPER_PYTHON_PATH || DEFAULT_PYTHON,
