@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 // NextAuth Models
@@ -105,6 +104,7 @@ model Lead {
   website   String?
   status    LeadStatus @default(NEW)
   source    String?
+  value     Float?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
@@ -283,3 +283,4 @@ enum ScraperJobStatus {
   COMPLETED
   FAILED
   STOPPED
+}

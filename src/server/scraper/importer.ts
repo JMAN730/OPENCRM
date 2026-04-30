@@ -106,7 +106,6 @@ export async function importRowsToLeads(opts: {
 
   const result = await prisma.lead.createMany({
     data: toInsert,
-    skipDuplicates: true,
   });
 
   await prisma.scraperJob.update({
