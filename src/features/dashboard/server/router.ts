@@ -1,14 +1,9 @@
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
-import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 
 export const dashboardRouter = createTRPCRouter({
-  getKpiStats: protectedProcedure.query(async ({ ctx }) => {
-    const organizationId = ctx.session.user.organizationId;
-
-    if (!organizationId) {
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
-    }
+  getKpiStats: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -73,15 +68,13 @@ export const dashboardRouter = createTRPCRouter({
       ? ((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)
       : "0.0";
 
-    const monthlyRevenue = revenueResult._sum.value ?? 0;
-
     return {
       totalLeads: totalLeadsCount,
       callsToday: callsTodayCount,
       appointmentsSet: appointmentsSetCount,
       followupsDue: followupsDueCount,
       conversionRate: `${conversionRate}%`,
-      monthlyRevenue,
+      monthlyRevenue: revenueResult._sum.value ?? 0,
       recentCalls: recentCalls.map((c) => ({
         id: c.id,
         status: c.status,

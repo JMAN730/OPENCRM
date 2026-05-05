@@ -36,10 +36,22 @@ const enforceUserIsAuthed = t.procedure.use(({ ctx, next }) => {
   }
   return next({
     ctx: {
-      // infers the `session` as non-nullable
       session: { ...ctx.session, user: ctx.session.user },
     },
   });
 });
 
 export const protectedProcedure = enforceUserIsAuthed;
+
+const enforceUserHasOrg = enforceUserIsAuthed.use(({ ctx, next }) => {
+  const { organizationId } = ctx.session.user;
+  if (!organizationId) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "User has no organization.",
+    });
+  }
+  return next({ ctx: { ...ctx, organizationId } });
+});
+
+export const organizationProcedure = enforceUserHasOrg;

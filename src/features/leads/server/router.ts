@@ -1,4 +1,4 @@
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
@@ -14,14 +14,13 @@ const leadInputSchema = z.object({
 });
 
 export const leadsRouter = createTRPCRouter({
-  getAll: protectedProcedure
-    .input(z.object({ search: z.string().optional() }).optional())
+  getAll: organizationProcedure
+    .input(z.object({ search: z.string().optional() }))
     .query(({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId ?? undefined;
       return ctx.prisma.lead.findMany({
         where: {
-          organizationId,
-          OR: input?.search ? [
+          organizationId: ctx.organizationId,
+          OR: input.search ? [
             { company: { contains: input.search } },
             { firstName: { contains: input.search } },
             { lastName: { contains: input.search } },
@@ -29,65 +28,50 @@ export const leadsRouter = createTRPCRouter({
             { phone: { contains: input.search } },
           ] : undefined,
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: { createdAt: "desc" },
       });
     }),
-  getById: protectedProcedure
+
+  getById: organizationProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId ?? undefined;
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, organizationId },
+        where: { id: input.id, organizationId: ctx.organizationId },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       return lead;
     }),
-  delete: protectedProcedure
+
+  delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId ?? undefined;
-      // Ensure the lead belongs to the user's organization
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, organizationId },
+        where: { id: input.id, organizationId: ctx.organizationId },
       });
-      if (!lead) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      }
-      return ctx.prisma.lead.delete({
-        where: { id: input.id },
-      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return ctx.prisma.lead.delete({ where: { id: input.id } });
     }),
-  create: protectedProcedure
+
+  create: organizationProcedure
     .input(leadInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId;
-      if (!organizationId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User has no organization." });
-      }
+    .mutation(({ ctx, input }) => {
       return ctx.prisma.lead.create({
         data: {
           ...input,
-          organizationId,
+          organizationId: ctx.organizationId,
           assignedToId: ctx.session.user.id,
         },
       });
     }),
 
-  bulkCreate: protectedProcedure
+  bulkCreate: organizationProcedure
     .input(z.array(leadInputSchema).min(1).max(5000))
     .mutation(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId;
-      const assignedToId = ctx.session.user.id;
-      if (!organizationId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User has no organization." });
-      }
       const result = await ctx.prisma.lead.createMany({
         data: input.map((lead) => ({
           ...lead,
-          organizationId,
-          assignedToId,
+          organizationId: ctx.organizationId,
+          assignedToId: ctx.session.user.id,
         })),
       });
       return { count: result.count };

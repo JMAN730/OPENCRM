@@ -1,9 +1,9 @@
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 export const callsRouter = createTRPCRouter({
-  logCall: protectedProcedure
+  logCall: organizationProcedure
     .input(z.object({
       leadId: z.string(),
       status: z.enum(["BUSY", "NO_ANSWER", "CONNECTED", "FAILED", "CANCELED"]),
@@ -11,25 +11,19 @@ export const callsRouter = createTRPCRouter({
       disposition: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { id: userId, organizationId } = ctx.session.user;
-
-      if (!organizationId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
-      }
-
       const lead = await ctx.prisma.lead.findUnique({
         where: { id: input.leadId },
         select: { organizationId: true },
       });
 
-      if (!lead || lead.organizationId !== organizationId) {
+      if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
       return ctx.prisma.callLog.create({
         data: {
           leadId: input.leadId,
-          userId,
+          userId: ctx.session.user.id,
           status: input.status,
           duration: input.duration,
           disposition: input.disposition,
@@ -37,21 +31,15 @@ export const callsRouter = createTRPCRouter({
       });
     }),
 
-  getForLead: protectedProcedure
+  getForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { organizationId } = ctx.session.user;
-
-      if (!organizationId) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
-      }
-
       const lead = await ctx.prisma.lead.findUnique({
         where: { id: input.leadId },
         select: { organizationId: true },
       });
 
-      if (!lead || lead.organizationId !== organizationId) {
+      if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
@@ -64,17 +52,9 @@ export const callsRouter = createTRPCRouter({
       });
     }),
 
-  getRecent: protectedProcedure.query(async ({ ctx }) => {
-    const { organizationId } = ctx.session.user;
-
-    if (!organizationId) {
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "User organization not found." });
-    }
-
+  getRecent: organizationProcedure.query(({ ctx }) => {
     return ctx.prisma.callLog.findMany({
-      where: {
-        lead: { organizationId },
-      },
+      where: { lead: { organizationId: ctx.organizationId } },
       take: 10,
       orderBy: { createdAt: "desc" },
       include: {
