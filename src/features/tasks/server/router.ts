@@ -1,25 +1,22 @@
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 export const tasksRouter = createTRPCRouter({
-  create: protectedProcedure
+  create: organizationProcedure
     .input(z.object({
       leadId: z.string().optional(),
       title: z.string().min(1),
       description: z.string().optional(),
-      dueDate: z.string().optional(), // ISO string from client
+      dueDate: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id
-      const organizationId = ctx.session.user.organizationId;
-
       if (input.leadId) {
         const lead = await ctx.prisma.lead.findUnique({
           where: { id: input.leadId },
           select: { organizationId: true },
         });
-        if (!lead || lead.organizationId !== organizationId) {
+        if (!lead || lead.organizationId !== ctx.organizationId) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
         }
       }
@@ -27,7 +24,7 @@ export const tasksRouter = createTRPCRouter({
       return ctx.prisma.task.create({
         data: {
           leadId: input.leadId,
-          userId,
+          userId: ctx.session.user.id,
           title: input.title,
           description: input.description,
           dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
@@ -43,14 +40,12 @@ export const tasksRouter = createTRPCRouter({
       dueDate: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-
       const task = await ctx.prisma.task.findUnique({
         where: { id: input.taskId },
         select: { userId: true },
       });
 
-      if (!task || task.userId !== userId) {
+      if (!task || task.userId !== ctx.session.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
       }
 
@@ -64,17 +59,15 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
-  getAllForLead: protectedProcedure
+  getAllForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const organizationId = ctx.session.user.organizationId;
-
       const lead = await ctx.prisma.lead.findUnique({
         where: { id: input.leadId },
         select: { organizationId: true },
       });
 
-      if (!lead || lead.organizationId !== organizationId) {
+      if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
@@ -85,16 +78,14 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
-  getDueToday: protectedProcedure.query(async ({ ctx }) => {
-    const organizationId = ctx.session.user.organizationId;
-
+  getDueToday: organizationProcedure.query(({ ctx }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
     return ctx.prisma.task.findMany({
       where: {
-        user: { organizationId },
+        user: { organizationId: ctx.organizationId },
         dueDate: { gte: today, lt: tomorrow },
         completed: false,
       },
@@ -104,17 +95,10 @@ export const tasksRouter = createTRPCRouter({
     });
   }),
 
-  getAll: protectedProcedure.query(async ({ ctx }) => {
-    const organizationId = ctx.session.user.organizationId;
-
+  getAll: organizationProcedure.query(({ ctx }) => {
     return ctx.prisma.task.findMany({
-      where: {
-        user: { organizationId },
-      },
-      orderBy: [
-        { completed: "asc" },
-        { dueDate: "asc" },
-      ],
+      where: { user: { organizationId: ctx.organizationId } },
+      orderBy: [{ completed: "asc" }, { dueDate: "asc" }],
       include: {
         lead: { select: { firstName: true, lastName: true, company: true } },
         user: { select: { name: true, image: true } },

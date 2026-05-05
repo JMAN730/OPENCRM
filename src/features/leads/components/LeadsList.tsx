@@ -46,6 +46,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { useDebounce } from "@/hooks/use-debounce";
+import { getLeadStatusColor } from "@/features/leads/utils";
 
 type Lead = {
   id: string;
@@ -61,17 +62,6 @@ type Lead = {
 };
 
 function LeadDetailDialog({ lead, onClose }: { lead: Lead; onClose: () => void }) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "NEW": return "bg-blue-500/10 text-blue-500";
-      case "CONTACTED": return "bg-amber-500/10 text-amber-500";
-      case "QUALIFIED": return "bg-green-500/10 text-green-500";
-      case "LOST": return "bg-destructive/10 text-destructive";
-      case "WON": return "bg-emerald-500/10 text-emerald-500";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
-
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
 
   return (
@@ -81,7 +71,7 @@ function LeadDetailDialog({ lead, onClose }: { lead: Lead; onClose: () => void }
           <DialogTitle>{lead.company || fullName || "Lead Details"}</DialogTitle>
           <DialogDescription className="sr-only">Lead details</DialogDescription>
           <div className="flex items-center gap-2 pt-1">
-            <Badge variant="outline" className={getStatusColor(lead.status)}>
+            <Badge variant="outline" className={getLeadStatusColor(lead.status)}>
               {lead.status}
             </Badge>
             {lead.source && (
@@ -235,15 +225,6 @@ export function LeadsList() {
     createLead.mutate(data);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "NEW": return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20";
-      case "CONTACTED": return "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20";
-      case "QUALIFIED": return "bg-green-500/10 text-green-500 hover:bg-green-500/20";
-      case "LOST": return "bg-destructive/10 text-destructive hover:bg-destructive/20";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -365,7 +346,7 @@ export function LeadsList() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={getStatusColor(lead.status)}>
+                    <Badge variant="outline" className={getLeadStatusColor(lead.status)}>
                       {lead.status}
                     </Badge>
                   </TableCell>

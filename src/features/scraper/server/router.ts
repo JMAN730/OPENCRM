@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { sanitizeLocations } from "@/server/scraper/sanitize";
 import {
   scraperConfig,
@@ -32,22 +32,6 @@ function deserializeJob<T extends { locations: string; categories: string }>(
   return { ...job, locations: parseArray(job.locations), categories: parseArray(job.categories) };
 }
 
-function getOrgId(ctx: { session: { user: unknown } }): string {
-  const orgId = (ctx.session.user as { organizationId?: string }).organizationId;
-  if (!orgId) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "User has no organization.",
-    });
-  }
-  return orgId;
-}
-
-function getUserId(ctx: { session: { user: unknown } }): string {
-  const id = (ctx.session.user as { id?: string }).id;
-  if (!id) throw new TRPCError({ code: "UNAUTHORIZED" });
-  return id;
-}
 
 const startInput = z.object({
   locations: z
@@ -66,7 +50,7 @@ const startInput = z.object({
 });
 
 export const scraperRouter = createTRPCRouter({
-  config: protectedProcedure.query(() => ({
+  config: organizationProcedure.query(() => ({
     enabled: scraperConfig.enabled,
     categories: SCRAPER_CATEGORIES,
     maxLocations: scraperConfig.maxLocations,
@@ -74,11 +58,10 @@ export const scraperRouter = createTRPCRouter({
     maxConcurrency: scraperConfig.maxConcurrency,
   })),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: organizationProcedure.query(async ({ ctx }) => {
     await reconcileOrphanedJobs();
-    const orgId = getOrgId(ctx);
     const jobs = await ctx.prisma.scraperJob.findMany({
-      where: { organizationId: orgId },
+      where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
       take: 50,
       select: {
@@ -100,18 +83,17 @@ export const scraperRouter = createTRPCRouter({
     return jobs.map(deserializeJob);
   }),
 
-  getById: protectedProcedure
+  getById: organizationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const orgId = getOrgId(ctx);
       const job = await ctx.prisma.scraperJob.findFirst({
-        where: { id: input.id, organizationId: orgId },
+        where: { id: input.id, organizationId: ctx.organizationId },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
       return { ...deserializeJob(job), isRunning: isJobRunning(job.id) };
     }),
 
-  start: protectedProcedure
+  start: organizationProcedure
     .input(startInput)
     .mutation(async ({ ctx, input }) => {
       if (!scraperConfig.enabled) {
@@ -120,8 +102,7 @@ export const scraperRouter = createTRPCRouter({
           message: "Scraper feature is disabled.",
         });
       }
-      const orgId = getOrgId(ctx);
-      const userId = getUserId(ctx);
+      const { organizationId, session: { user: { id: userId } } } = ctx;
 
       let cleanLocations: string[];
       try {
@@ -140,7 +121,7 @@ export const scraperRouter = createTRPCRouter({
 
       const job = await ctx.prisma.scraperJob.create({
         data: {
-          organizationId: orgId,
+          organizationId,
           userId,
           locations: serializeArray(cleanLocations),
           categories: serializeArray(validCategories),
@@ -171,12 +152,11 @@ export const scraperRouter = createTRPCRouter({
       return { id: job.id };
     }),
 
-  stop: protectedProcedure
+  stop: organizationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const orgId = getOrgId(ctx);
       const job = await ctx.prisma.scraperJob.findFirst({
-        where: { id: input.id, organizationId: orgId },
+        where: { id: input.id, organizationId: ctx.organizationId },
         select: { id: true, status: true },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
@@ -187,12 +167,11 @@ export const scraperRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  delete: protectedProcedure
+  delete: organizationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const orgId = getOrgId(ctx);
       const job = await ctx.prisma.scraperJob.findFirst({
-        where: { id: input.id, organizationId: orgId },
+        where: { id: input.id, organizationId: ctx.organizationId },
         select: { id: true, status: true },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
@@ -207,7 +186,7 @@ export const scraperRouter = createTRPCRouter({
     }),
 
   // Manually re-import (or filter-import) the CSV produced by a finished job
-  importResults: protectedProcedure
+  importResults: organizationProcedure
     .input(
       z.object({
         id: z.string().min(1),
@@ -221,9 +200,8 @@ export const scraperRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const orgId = getOrgId(ctx);
       const job = await ctx.prisma.scraperJob.findFirst({
-        where: { id: input.id, organizationId: orgId },
+        where: { id: input.id, organizationId: ctx.organizationId },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
       if (!job.outputDir) {
@@ -236,20 +214,19 @@ export const scraperRouter = createTRPCRouter({
       const filtered = applyFilter(rows, input.filter);
       const result = await importRowsToLeads({
         rows: filtered,
-        organizationId: orgId,
-        assignedToId: getUserId(ctx),
+        organizationId: ctx.organizationId,
+        assignedToId: ctx.session.user.id,
         jobId: job.id,
       });
       return { ...result, considered: filtered.length, total: rows.length };
     }),
 
   // Preview the produced CSV without importing — used for filter UI
-  previewResults: protectedProcedure
+  previewResults: organizationProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const orgId = getOrgId(ctx);
       const job = await ctx.prisma.scraperJob.findFirst({
-        where: { id: input.id, organizationId: orgId },
+        where: { id: input.id, organizationId: ctx.organizationId },
         select: { outputDir: true },
       });
       if (!job?.outputDir) return { rows: [] as Array<Record<string, string>> };

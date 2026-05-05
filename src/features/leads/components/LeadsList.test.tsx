@@ -20,6 +20,9 @@ vi.mock('@/app/_trpc/client', () => ({
       create: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      delete: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       bulkCreate: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
