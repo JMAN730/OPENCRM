@@ -8,8 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start dev server at http://localhost:3000
 npm run build        # Production build
 npm run lint         # ESLint
+npm run seed         # Seed the database (npx prisma db seed)
 
-npx vitest           # Run all tests
+npx vitest           # Run all tests (watch mode)
 npx vitest run       # Run tests once (no watch)
 npx vitest src/features/leads/components/LeadsList.test.tsx  # Run a single test file
 
@@ -19,28 +20,63 @@ npx prisma studio    # Open Prisma Studio GUI
 
 ## Environment
 
-Create a `.env` file:
+Create a `.env` file (see `.env.example` for reference):
+
 ```dotenv
-DATABASE_URL="postgresql://user:password@host:port/database?schema=public"
+# Required
+DATABASE_URL="file:./dev.db"                    # SQLite (dev) or postgresql://... (prod)
 NEXTAUTH_SECRET="your-secret"
 NEXTAUTH_URL="http://localhost:3000"
-GOOGLE_CLIENT_ID="..."       # optional
-GOOGLE_CLIENT_SECRET="..."   # optional
+
+# Optional – OAuth
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+
+# Optional – Twilio (calling features)
+TWILIO_ACCOUNT_SID="..."
+TWILIO_AUTH_TOKEN="..."
+TWILIO_PHONE_NUMBER="..."
+
+# Optional – AI features
+OPENAI_API_KEY="..."
+
+# Optional – File storage
+AWS_ACCESS_KEY_ID="..."
+AWS_SECRET_ACCESS_KEY="..."
+AWS_REGION="..."
+AWS_S3_BUCKET="..."
+
+# Optional – Caching
+REDIS_URL="redis://localhost:6379"
 ```
 
 ## Architecture
 
 ### Request flow
 
-Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`) → HTTP POST `/api/trpc` → tRPC handler → procedure in `src/features/<feature>/server/router.ts` → Prisma → PostgreSQL.
+Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`) → HTTP POST `/api/trpc` → tRPC handler (`src/app/api/trpc/[trpc]/route.ts`) → procedure in `src/features/<feature>/server/router.ts` → Prisma → Database.
 
 ### tRPC setup
 
 - **Context** (`src/server/trpc.ts`): attaches `prisma` client and `session` to every request.
 - **Procedures**: `publicProcedure` (unauthenticated) and `protectedProcedure` (throws `UNAUTHORIZED` if no session).
-- **Root router** (`src/server/api/root.ts`): merge feature routers here. Currently only `leads` is wired up — add others as `<feature>: <feature>Router`.
+- **Root router** (`src/server/api/root.ts`): merges all feature routers.
 - **Client** (`src/app/_trpc/client.ts`): typed `trpc` hook object, imported in any client component.
 - **Provider** (`src/app/_trpc/Provider.tsx` + `src/components/Providers.tsx`): wraps the app in `SessionProvider` → `TRPCProvider` → `QueryClientProvider`.
+
+### Root router — registered namespaces
+
+```typescript
+// src/server/api/root.ts
+appRouter = {
+  auth:      authRouter,      // me query
+  leads:     leadsRouter,     // full CRUD + bulk import
+  calls:     callsRouter,     // call logging + retrieval
+  tasks:     tasksRouter,     // task CRUD + filtering
+  dashboard: dashboardRouter, // KPI aggregations
+  scraper:   scraperRouter,   // Google Maps lead scraper
+}
+```
 
 ### Adding a new feature router
 
@@ -50,22 +86,114 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 
 ### Authentication
 
-`src/lib/auth.ts` — NextAuth with JWT sessions. `session.user` is extended with `id`, `role`, and `organizationId` via the `jwt`/`session` callbacks. All `protectedProcedure` handlers read `ctx.session.user` and cast to `any` for these extra fields (no type augmentation yet).
+`src/lib/auth.ts` — NextAuth with JWT sessions. Session types are augmented in `src/types/next-auth.d.ts`; `session.user` includes `id`, `role`, and `organizationId` via the `jwt`/`session` callbacks.
 
-The Credentials provider auto-creates a user + "Demo Organization" on first login — no password validation exists; it is demo-only.
+- **Registration** (`POST /api/auth/register`): creates a new `Organization` and `User` (ADMIN role) with a bcrypt-hashed password. Not demo-only.
+- **Credentials provider**: validates email + bcrypt password.
+- **Google OAuth**: enabled when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set.
+- All `protectedProcedure` handlers read `ctx.session.user` (cast to `any` for extended fields where TypeScript doesn't infer them from context).
 
 ### Multi-tenancy
 
-Every `Lead` (and organization-scoped data) is filtered by `organizationId` taken from the session token. New feature routers must apply this same filter.
+Every organization-scoped model (`Lead`, `ScraperJob`, etc.) is filtered by `organizationId` taken from the session token. **New feature routers must apply this same filter.**
+
+```typescript
+// Pattern used in every protected query
+where: { organizationId: (ctx.session.user as any).organizationId }
+```
 
 ### Page layout
 
 All authenticated pages wrap their content in `<DashboardLayout>` (from `src/components/layout/DashboardLayout.tsx`), which renders the `Sidebar` + `Header` + main content area + `Toaster`. Pages live in `src/app/<section>/page.tsx` and import feature components from `src/features/<feature>/components/`.
 
-### Database
+---
 
-Prisma schema at `prisma/schema.prisma`. Uses `prisma db push` (no migration history). Key models: `Organization` → `User` → `Lead` → `CallLog | Note | Activity | Task`. `Pipeline` / `PipelineStage` exist in the schema but are not yet surfaced in the UI.
+## Feature Map
 
-### Testing
+| Feature | Page route | tRPC namespace | Components |
+|---------|-----------|---------------|-----------|
+| Dashboard | `/dashboard` | `dashboard` | KPI cards, recent calls, upcoming tasks |
+| Leads | `/leads` | `leads` | `LeadsList`, `ImportLeadsDialog` |
+| Dialer | `/dialer` | `calls` | `Dialer` (keypad + call sim) |
+| Tasks | `/tasks` | `tasks` | `TasksList` |
+| Scraper | `/scraper` | `scraper` | `ScraperPanel`, `StartJobForm`, `JobsTable`, `JobDetailDialog` |
+| Outreach | `/outreach` | — | Stub |
+| Analytics | `/analytics` | — | Stub |
+| Settings | `/settings` | — | Stub |
+
+---
+
+## Database
+
+Prisma schema at `prisma/schema.prisma`. Uses `prisma db push` (no migration history). Dev database is SQLite (`prisma/dev.db`); production uses PostgreSQL.
+
+### Key models
+
+```
+Organization → User → Lead → CallLog
+                           → Note
+                           → Activity
+                           → Task
+Organization → Pipeline → PipelineStage
+Organization → ScraperJob
+```
+
+### Enums
+
+| Enum | Values |
+|------|--------|
+| `UserRole` | `ADMIN`, `MANAGER`, `USER` |
+| `LeadStatus` | `NEW`, `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `LOST`, `WON` |
+| `CallStatus` | `BUSY`, `NO_ANSWER`, `CONNECTED`, `FAILED`, `CANCELED` |
+| `ScraperJobStatus` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` |
+
+`Pipeline` / `PipelineStage` exist in the schema but are not yet surfaced in the UI.
+
+---
+
+## Scraper system
+
+The lead scraper (`/scraper`) generates leads from Google Maps.
+
+- **Backend**: `src/server/scraper/` — `runner.ts` spawns `scraper.py` as a child process, buffers logs, tracks job state in-memory.
+- **Output**: CSV files written to `scraper-output/{jobId}/`.
+- **Import**: `src/server/scraper/importer.ts` parses CSV and bulk-inserts leads.
+- **Jobs**: persisted in `ScraperJob` DB model; active job registry is in-memory (server restart clears it).
+- **Auto-import**: `ScraperJob.autoImport` flag triggers import on completion.
+
+---
+
+## UI conventions
+
+- **CSS**: Tailwind CSS v4 (`@tailwindcss/postcss`)
+- **Components**: shadcn/ui (in `src/components/ui/`) — use existing components before adding new ones
+- **Icons**: lucide-react
+- **Toast notifications**: sonner (`toast.success()`, `toast.error()`)
+- **Animation**: framer-motion (used sparingly)
+- **`cn()` utility**: `src/lib/utils.ts` — combines `clsx` + `tailwind-merge`
+- **Path alias**: `@/` maps to `src/`
+
+---
+
+## Testing
 
 Vitest + jsdom + React Testing Library. Setup file: `src/test/setup.ts`. Tests co-located with components (`*.test.tsx`). The `@` alias resolves to `src/`.
+
+Existing tests:
+- `src/features/leads/components/LeadsList.test.tsx`
+- `src/server/scraper/sanitize.test.ts`
+
+---
+
+## Key conventions for AI assistants
+
+1. **Always filter by `organizationId`** in any new tRPC procedure that reads org-scoped data.
+2. **Use `protectedProcedure`** for anything that requires a logged-in user; `publicProcedure` only for auth endpoints.
+3. **Validate all inputs with Zod** before business logic in every procedure.
+4. **Register new routers** in `src/server/api/root.ts` — the root router is the single source of truth.
+5. **Use `prisma db push`**, not `prisma migrate` — there is no migration history.
+6. **Add pages** under `src/app/<section>/page.tsx` and mark them `"use client"` if they use tRPC hooks or browser APIs.
+7. **Use shadcn/ui components** from `src/components/ui/` before writing custom primitives.
+8. **Session user fields** (`id`, `role`, `organizationId`) require a cast: `(ctx.session.user as any).organizationId`.
+9. **Desktop app**: `src-tauri/` contains a WIP Tauri wrapper — do not modify it unless explicitly asked.
+10. **Scraper jobs** are tracked in-memory; do not rely on job status surviving a server restart without querying the DB.
