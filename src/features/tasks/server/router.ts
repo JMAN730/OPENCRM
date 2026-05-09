@@ -8,7 +8,7 @@ export const tasksRouter = createTRPCRouter({
       leadId: z.string().optional(),
       title: z.string().min(1),
       description: z.string().optional(),
-      dueDate: z.string().optional(),
+      dueDate: z.coerce.date().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (input.leadId) {
@@ -27,7 +27,7 @@ export const tasksRouter = createTRPCRouter({
           userId: ctx.session.user.id,
           title: input.title,
           description: input.description,
-          dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
+          dueDate: input.dueDate,
         },
       });
     }),
@@ -37,7 +37,7 @@ export const tasksRouter = createTRPCRouter({
       taskId: z.string(),
       completed: z.boolean().optional(),
       title: z.string().min(1).optional(),
-      dueDate: z.string().optional(),
+      dueDate: z.coerce.date().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const task = await ctx.prisma.task.findUnique({
@@ -54,7 +54,7 @@ export const tasksRouter = createTRPCRouter({
         data: {
           completed: input.completed,
           title: input.title,
-          dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
+          dueDate: input.dueDate,
         },
       });
     }),

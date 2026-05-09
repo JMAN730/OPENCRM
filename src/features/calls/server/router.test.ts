@@ -70,6 +70,12 @@ describe("callsRouter", () => {
         caller.calls.logCall({ leadId: "lead-1", status: "CONNECTED", duration: -1 })
       ).rejects.toThrow();
     });
+
+    it("rejects duration of zero (must be positive)", async () => {
+      await expect(
+        caller.calls.logCall({ leadId: "lead-1", status: "CONNECTED", duration: 0 })
+      ).rejects.toThrow();
+    });
   });
 
   describe("getForLead", () => {

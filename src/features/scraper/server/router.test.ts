@@ -16,6 +16,30 @@ vi.mock("@/server/scraper/importer", () => ({
     .mockResolvedValue({ inserted: 0, skipped: 0 }),
 }));
 
+// Stub the config so tests run independently of env vars.
+// The scraper is enabled here; disabled-by-default behavior is covered in config.test.ts.
+vi.mock("@/server/scraper/config", () => ({
+  scraperConfig: {
+    enabled: true,
+    pythonPath: "/usr/bin/python3",
+    scriptPath: "/app/scraper.py",
+    outputBaseDir: "/tmp/scraper-output",
+    maxLogLength: 200_000,
+    maxLocations: 50,
+    maxLimit: 200,
+    maxConcurrency: 4,
+  },
+  SCRAPER_CATEGORIES: [
+    "Mobile Mechanics",
+    "Power washing Business",
+    "Landscaping",
+    "Tree Removal",
+    "Cleaning",
+    "Concrete",
+    "Fencing Companies",
+  ],
+}));
+
 import { createTestCaller } from "@/test/trpc";
 import * as runner from "@/server/scraper/runner";
 import * as importer from "@/server/scraper/importer";
@@ -30,7 +54,7 @@ describe("scraperRouter", () => {
   });
 
   describe("config", () => {
-    it("exposes the public config fields only", async () => {
+    it("exposes the public config fields without leaking internal paths", async () => {
       const cfg = await caller.scraper.config();
       expect(cfg).toMatchObject({
         enabled: expect.any(Boolean),
@@ -39,7 +63,6 @@ describe("scraperRouter", () => {
         maxConcurrency: expect.any(Number),
       });
       expect(cfg.categories.length).toBeGreaterThan(0);
-      // Should NOT leak internal binary paths
       expect(cfg).not.toHaveProperty("pythonPath");
       expect(cfg).not.toHaveProperty("scriptPath");
     });
