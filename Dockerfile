@@ -9,6 +9,7 @@ RUN npm ci
 # Generate Prisma client in the same stage as npm ci so the correct
 # platform binaries (linux-musl) are used without any npx resolution issues
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN ./node_modules/.bin/prisma generate
 
