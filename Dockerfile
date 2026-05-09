@@ -45,11 +45,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Prisma schema + generated client for runtime db push
+# Prisma schema + generated client + CLI for runtime db push
 COPY --from=deps   --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=deps   --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps   --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=deps   --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=deps   --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
