@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { trpc } from "@/app/_trpc/client";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const register = trpc.auth.register.useMutation();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -24,19 +27,16 @@ export default function RegisterPage() {
     const password = form.get("password") as string;
     const organizationName = form.get("organizationName") as string;
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, organizationName }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      let message = "Something went wrong.";
-      try {
-        const data = JSON.parse(text);
-        message = data.error || message;
-      } catch {}
+    try {
+      await register.mutateAsync({
+        name,
+        email,
+        password,
+        organizationName: organizationName || undefined,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong.";
       setError(message);
       setIsLoading(false);
       return;

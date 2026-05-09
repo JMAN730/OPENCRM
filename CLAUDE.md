@@ -16,6 +16,8 @@ npx vitest src/features/leads/components/LeadsList.test.tsx  # Run a single test
 
 npx prisma db push   # Sync schema to database (no migrations generated)
 npx prisma studio    # Open Prisma Studio GUI
+
+docker compose up --build   # Start full stack (Next.js + PostgreSQL) on http://localhost:3000
 ```
 
 ## Environment
@@ -23,10 +25,15 @@ npx prisma studio    # Open Prisma Studio GUI
 Create a `.env` file (see `.env.example` for reference):
 
 ```dotenv
-# Required
-DATABASE_URL="file:./dev.db"                    # SQLite (dev) or postgresql://... (prod)
+# Required (PostgreSQL is the canonical DB; the schema uses provider = "postgresql")
+DATABASE_URL="postgresql://crm:crm@localhost:5432/crm"
 NEXTAUTH_SECRET="your-secret"
 NEXTAUTH_URL="http://localhost:3000"
+
+# Required when running via docker compose (used by the postgres service)
+POSTGRES_USER="crm"
+POSTGRES_PASSWORD="crm"
+POSTGRES_DB="crm"
 
 # Optional – OAuth
 GOOGLE_CLIENT_ID="..."
@@ -88,7 +95,7 @@ appRouter = {
 
 `src/lib/auth.ts` — NextAuth with JWT sessions. Session types are augmented in `src/types/next-auth.d.ts`; `session.user` includes `id`, `role`, and `organizationId` via the `jwt`/`session` callbacks.
 
-- **Registration** (`POST /api/auth/register`): creates a new `Organization` and `User` (ADMIN role) with a bcrypt-hashed password. Not demo-only.
+- **Registration** (`trpc.auth.register`): creates a new `Organization` and `User` (ADMIN role) with a bcrypt-hashed password. Validated via Zod (min 8-char password, valid email, non-empty name). The legacy `POST /api/auth/register` endpoint has been removed.
 - **Credentials provider**: validates email + bcrypt password.
 - **Google OAuth**: enabled when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set.
 - All `protectedProcedure` handlers read `ctx.session.user` (cast to `any` for extended fields where TypeScript doesn't infer them from context).
@@ -125,7 +132,9 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 
 ## Database
 
-Prisma schema at `prisma/schema.prisma`. Uses `prisma db push` (no migration history). Dev database is SQLite (`prisma/dev.db`); production uses PostgreSQL.
+Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Uses `prisma db push` (no migration history). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. The `docker-entrypoint.sh` runs `prisma db push --skip-generate` on container start so the schema is always synced.
+
+FK relations use `onDelete: Cascade` for owned rows (e.g. deleting a `Lead` removes its `CallLog`/`Note`/`Activity`/`Task`) and `onDelete: SetNull` where the parent is optional context (e.g. `assignedTo` on `Lead`).
 
 ### Key models
 

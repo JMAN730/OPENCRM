@@ -25,3 +25,115 @@ describe("authRouter.resetPassword", () => {
     });
   });
 });
+
+describe("authRouter.register", () => {
+  const validInput = {
+    name: "Alice",
+    email: "alice@example.com",
+    password: "supersecret",
+    organizationName: "Acme",
+  };
+
+  it("rejects missing name", async () => {
+    const { caller } = createTestCaller({ session: null });
+    await expect(
+      caller.auth.register({ ...validInput, name: "" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects malformed emails", async () => {
+    const { caller } = createTestCaller({ session: null });
+    await expect(
+      caller.auth.register({ ...validInput, email: "nope" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects passwords shorter than 8 chars", async () => {
+    const { caller } = createTestCaller({ session: null });
+    await expect(
+      caller.auth.register({ ...validInput, password: "short" })
+    ).rejects.toThrow();
+  });
+
+  it("returns CONFLICT when email already exists", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue({ id: "existing", email: "alice@example.com" });
+
+    await expect(caller.auth.register(validInput)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.organization.create).not.toHaveBeenCalled();
+  });
+
+  it("hashes the password before storing", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-1", name: "Acme" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register(validInput);
+
+    const passwordStored = prisma.user.create.mock.calls[0][0].data.password;
+    expect(passwordStored).not.toBe(validInput.password);
+    expect(passwordStored).toMatch(/^\$2[aby]\$/);
+  });
+
+  it("normalizes email to lowercase before storing/checking", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-1", name: "Acme" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register({ ...validInput, email: "Alice@Example.COM" });
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "alice@example.com" },
+    });
+    expect(prisma.user.create.mock.calls[0][0].data.email).toBe("alice@example.com");
+  });
+
+  it("uses a default organization name when none provided", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-1", name: "Alice's Organization" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register({ ...validInput, organizationName: undefined });
+
+    expect(prisma.organization.create).toHaveBeenCalledWith({
+      data: { name: "Alice's Organization" },
+    });
+  });
+
+  it("trims provided organizationName", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-1", name: "Acme" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register({ ...validInput, organizationName: "  Acme  " });
+
+    expect(prisma.organization.create).toHaveBeenCalledWith({
+      data: { name: "Acme" },
+    });
+  });
+
+  it("creates user with ADMIN role linked to the new org", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-99", name: "Acme" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register(validInput);
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: "Alice",
+        email: "alice@example.com",
+        organizationId: "org-99",
+        role: "ADMIN",
+      }),
+    });
+  });
+});

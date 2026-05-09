@@ -8,6 +8,16 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // Only collect tests from source. Excludes Tauri build artifacts and
+    // git worktree copies that vitest would otherwise pick up as duplicates.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: [
+      'node_modules/**',
+      'dist/**',
+      '.next/**',
+      'src-tauri/**',
+      '.claude/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
@@ -15,7 +25,6 @@ export default defineConfig({
         'src/features/**/server/**',
         'src/server/scraper/**',
         'src/lib/auth.ts',
-        'src/app/api/auth/register/route.ts',
       ],
       exclude: [
         '**/*.test.ts',

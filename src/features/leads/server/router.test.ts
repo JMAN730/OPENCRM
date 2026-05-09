@@ -27,11 +27,11 @@ describe("leadsRouter", () => {
 
       const args = prisma.lead.findMany.mock.calls[0][0];
       expect(args.where.OR).toEqual([
-        { company: { contains: "acme" } },
-        { firstName: { contains: "acme" } },
-        { lastName: { contains: "acme" } },
-        { email: { contains: "acme" } },
-        { phone: { contains: "acme" } },
+        { company: { contains: "acme", mode: "insensitive" } },
+        { firstName: { contains: "acme", mode: "insensitive" } },
+        { lastName: { contains: "acme", mode: "insensitive" } },
+        { email: { contains: "acme", mode: "insensitive" } },
+        { phone: { contains: "acme", mode: "insensitive" } },
       ]);
     });
 

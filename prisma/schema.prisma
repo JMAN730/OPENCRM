@@ -3,9 +3,11 @@ generator client {
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
+// Prisma 7: connection URL lives in `prisma.config.ts` and the adapter
+// is constructed in `src/lib/prisma.ts`. Provider determines the SQL dialect
+// Prisma generates (postgres syntax for indexes, casts, etc).
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // NextAuth Models
@@ -109,13 +111,13 @@ model Lead {
   value     Float?
 
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   assignedToId String?
-  assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   pipelineStageId String?
-  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
+  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
 
   calls      CallLog[]
   notes      Note[]
@@ -125,6 +127,9 @@ model Lead {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
 }
 
 enum LeadStatus {
@@ -170,9 +175,9 @@ model PipelineStage {
 model CallLog {
   id     String @id @default(cuid())
   leadId String
-  lead   Lead   @relation(fields: [leadId], references: [id])
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   duration      Int?
   status        CallStatus
@@ -182,6 +187,9 @@ model CallLog {
   twilioCallSid String? @unique
 
   createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([userId])
 }
 
 enum CallStatus {
@@ -196,12 +204,14 @@ model Note {
   id      String @id @default(cuid())
   content String
   leadId  String
-  lead    Lead   @relation(fields: [leadId], references: [id])
+  lead    Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId  String
-  user    User   @relation(fields: [userId], references: [id])
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([leadId])
 }
 
 model Activity {
@@ -209,11 +219,13 @@ model Activity {
   type        String
   description String
   leadId      String
-  lead        Lead   @relation(fields: [leadId], references: [id])
+  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId      String
-  user        User   @relation(fields: [userId], references: [id])
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  @@index([leadId])
 }
 
 model Task {
@@ -224,12 +236,15 @@ model Task {
   completed   Boolean   @default(false)
 
   leadId String?
-  lead   Lead?   @relation(fields: [leadId], references: [id])
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId String
-  user   User    @relation(fields: [userId], references: [id])
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([userId, dueDate])
 }
 
 model VerificationToken {

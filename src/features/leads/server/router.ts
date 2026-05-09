@@ -2,31 +2,48 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
+// Accept "" as a synonym for "absent" so optional URL/email fields don't reject
+// empty form inputs. Real values are still validated by .email()/.url().
+const optionalEmail = z.union([z.literal(""), z.string().email().max(255)]).optional();
+const optionalUrl = z.union([z.literal(""), z.string().url().max(2048)]).optional();
+const optionalShortString = (max: number) =>
+  z.string().max(max).optional();
+
 const leadInputSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  email: z.string().optional(),
-  phone: z.string().optional(),
-  company: z.string().optional(),
-  website: z.string().optional(),
-  status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "UNQUALIFIED", "LOST", "WON"]).default("NEW"),
-  source: z.string().optional(),
+  firstName: optionalShortString(100),
+  lastName: optionalShortString(100),
+  email: optionalEmail,
+  phone: optionalShortString(40),
+  company: optionalShortString(200),
+  website: optionalUrl,
+  status: z
+    .enum(["NEW", "CONTACTED", "QUALIFIED", "UNQUALIFIED", "LOST", "WON"])
+    .default("NEW"),
+  source: optionalShortString(100),
 });
 
 export const leadsRouter = createTRPCRouter({
   getAll: organizationProcedure
-    .input(z.object({ search: z.string().optional() }))
+    .input(
+      z
+        .object({ search: z.string().max(100).optional() })
+        .optional()
+        .default({})
+    )
     .query(({ ctx, input }) => {
+      const search = input.search?.trim();
       return ctx.prisma.lead.findMany({
         where: {
           organizationId: ctx.organizationId,
-          OR: input.search ? [
-            { company: { contains: input.search } },
-            { firstName: { contains: input.search } },
-            { lastName: { contains: input.search } },
-            { email: { contains: input.search } },
-            { phone: { contains: input.search } },
-          ] : undefined,
+          OR: search
+            ? [
+                { company: { contains: search, mode: "insensitive" } },
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+                { email: { contains: search, mode: "insensitive" } },
+                { phone: { contains: search, mode: "insensitive" } },
+              ]
+            : undefined,
         },
         orderBy: { createdAt: "desc" },
       });

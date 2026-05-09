@@ -90,7 +90,7 @@ export function createTestCaller(opts: CallerOptions = {}) {
       : opts.session ?? createTestSession(opts.sessionOverrides);
 
   const ctx = {
-    prisma: prisma as unknown as import("@/lib/prisma").prisma extends infer P ? P : never,
+    prisma: prisma as unknown as typeof import("@/lib/prisma").prisma,
     session,
     headers: new Headers(),
   };
