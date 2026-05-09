@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env
+.env.local
+.claude
+prisma/dev.db
+src-tauri
+.expo
+*.log
