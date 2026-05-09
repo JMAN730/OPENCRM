@@ -14,6 +14,18 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      target: deps
+    restart: "no"
+    env_file:
+      - .env
+    command: ["node", "node_modules/prisma/build/index.js", "db", "push", "--skip-generate"]
+    depends_on:
+      db:
+        condition: service_healthy
+
   app:
     build: .
     restart: unless-stopped
@@ -24,6 +36,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
