@@ -41,6 +41,15 @@ describe("leadsRouter", () => {
       const args = prisma.lead.findMany.mock.calls[0][0];
       expect(args.orderBy).toEqual({ createdAt: "desc" });
     });
+
+    it("treats whitespace-only search as no search (no OR clause)", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "   " });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toBeUndefined();
+    });
   });
 
   describe("getById", () => {

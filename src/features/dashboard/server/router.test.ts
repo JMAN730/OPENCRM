@@ -127,5 +127,10 @@ describe("dashboardRouter.getKpiStats", () => {
       expect(call[0].where.lead.organizationId).toBe("org-1");
     }
     expect(prisma.lead.aggregate.mock.calls[0][0].where.organizationId).toBe("org-1");
+    // followupsDue must scope via user.organizationId (not lead.organizationId)
+    // so standalone tasks (not linked to a lead) are included
+    const taskCountCall = prisma.task.count.mock.calls[0][0];
+    expect(taskCountCall.where.user.organizationId).toBe("org-1");
+    expect(taskCountCall.where).not.toHaveProperty("lead");
   });
 });
