@@ -30,7 +30,7 @@ export const dashboardRouter = createTRPCRouter({
         where: { organizationId, status: { in: ["QUALIFIED", "WON"] } },
       }),
       ctx.prisma.task.count({
-        where: { lead: { organizationId }, completed: false, dueDate: { gte: today, lt: tomorrow } },
+        where: { user: { organizationId }, completed: false, dueDate: { gte: today, lt: tomorrow } },
       }),
       ctx.prisma.lead.count({ where: { organizationId, status: "QUALIFIED" } }),
       ctx.prisma.lead.aggregate({
