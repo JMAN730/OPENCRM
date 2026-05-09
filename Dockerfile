@@ -14,7 +14,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client for the builder (postgresql provider)
+# Generate Prisma client — DATABASE_URL is not used during generate,
+# but Prisma requires it to be defined when reading the schema
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
