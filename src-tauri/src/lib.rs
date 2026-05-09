@@ -44,13 +44,34 @@ fn wait_for_port(port: u16) -> bool {
 #[cfg(not(debug_assertions))]
 fn start_server(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
-    let server_dir = resource_dir.join("server");
-    let server_js = server_dir.join("server.js");
 
-    // Store the SQLite database in the user's AppData directory so it persists
-    // across app updates without being overwritten.
+    // The server was bundled as a ZIP to preserve directory structure (NSIS
+    // flattens resource globs).  Extract it into AppData on first run.
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
+
+    let server_dir = data_dir.join("server");
+    let server_js = server_dir.join("server.js");
+
+    if !server_js.exists() {
+        let zip_path = resource_dir.join("server.zip");
+        Command::new("powershell")
+            .args([
+                "-WindowStyle",
+                "Hidden",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!(
+                    "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                    zip_path.display(),
+                    server_dir.display()
+                ),
+            ])
+            .status()?;
+    }
+
+    // Store the SQLite database in AppData so it persists across app updates.
     let db_path = data_dir.join("opencrm.db");
 
     // Seed from the bundled copy on first run.
@@ -62,7 +83,9 @@ fn start_server(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     }
 
     let port = free_port();
-    let database_url = format!("file:{}", db_path.display());
+    // libSQL requires file:///C:/... format on Windows.
+    let db_str = db_path.display().to_string().replace('\\', "/");
+    let database_url = format!("file:///{}", db_str);
     let nextauth_url = format!("http://127.0.0.1:{}", port);
 
     let child = Command::new("node")
@@ -89,7 +112,7 @@ fn start_server(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
         .ok_or("main window not found")?;
 
     let url: tauri::Url = format!("http://127.0.0.1:{}", port).parse()?;
-    win.navigate(url);
+    let _ = win.navigate(url);
 
     Ok(())
 }

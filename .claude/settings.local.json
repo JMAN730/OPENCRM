@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(npm run *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(node -e ' *)",
+      "Bash(node check-users.mjs)",
+      "Bash(npm list *)",
+      "Read(//tmp/**)",
+      "Bash(curl *)"
     ]
   }
 }

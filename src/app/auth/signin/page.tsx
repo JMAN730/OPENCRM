@@ -156,7 +156,12 @@ export default function SignInPage() {
     setView("picker");
   };
 
-  if (status === "loading" || !mounted) return null;
+  if (status === "loading" || !mounted)
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/50">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
 
   // ── Account picker ──────────────────────────────────────────────────────────
   if (view === "picker") {
