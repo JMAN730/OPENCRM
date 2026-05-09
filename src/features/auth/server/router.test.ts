@@ -119,6 +119,19 @@ describe("authRouter.register", () => {
     });
   });
 
+  it("falls back to default org name when organizationName is whitespace-only", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.organization.create.mockResolvedValue({ id: "org-1", name: "Alice's Organization" });
+    prisma.user.create.mockResolvedValue({ id: "u-1" });
+
+    await caller.auth.register({ ...validInput, organizationName: "   " });
+
+    expect(prisma.organization.create).toHaveBeenCalledWith({
+      data: { name: "Alice's Organization" },
+    });
+  });
+
   it("creates user with ADMIN role linked to the new org", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.user.findUnique.mockResolvedValue(null);

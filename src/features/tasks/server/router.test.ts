@@ -61,6 +61,13 @@ describe("tasksRouter", () => {
     it("rejects empty titles", async () => {
       await expect(caller.tasks.create({ title: "" })).rejects.toThrow();
     });
+
+    it("rejects garbage dueDate strings", async () => {
+      await expect(
+        // @ts-expect-error — testing zod runtime coercion of unparseable date
+        caller.tasks.create({ title: "x", dueDate: "not-a-date" })
+      ).rejects.toThrow();
+    });
   });
 
   describe("update", () => {
@@ -90,6 +97,13 @@ describe("tasksRouter", () => {
       await expect(
         caller.tasks.update({ taskId: "missing", completed: true })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("rejects garbage dueDate strings", async () => {
+      await expect(
+        // @ts-expect-error — testing zod runtime coercion of unparseable date
+        caller.tasks.update({ taskId: "t1", dueDate: "not-a-date" })
+      ).rejects.toThrow();
     });
   });
 
