@@ -106,6 +106,8 @@ model Lead {
   status    LeadStatus @default(NEW)
   source    String?
   value     Float?
+  callOutcome CallOutcome @default(NOT_CONTACTED)
+  callNotes String?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -195,6 +197,14 @@ enum CallStatus {
   CONNECTED
   FAILED
   CANCELED
+}
+
+enum CallOutcome {
+  NOT_CONTACTED
+  ANSWERED
+  HUNG_UP
+  NO_ANSWER
+  AI_VOICEMAIL
 }
 
 model Note {

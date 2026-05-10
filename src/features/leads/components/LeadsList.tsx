@@ -45,6 +45,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
+import { LeadDetailsModal } from "./LeadDetailsModal";
 import { useDebounce } from "@/hooks/use-debounce";
 import { getLeadStatusColor } from "@/features/leads/utils";
 
@@ -58,128 +59,10 @@ type Lead = {
   website?: string | null;
   status: string;
   source?: string | null;
+  callOutcome?: string | null;
+  callNotes?: string | null;
   createdAt: string;
 };
-
-function LeadDetailDialog({ lead, onClose }: { lead: Lead; onClose: () => void }) {
-  const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{lead.company || fullName || "Lead Details"}</DialogTitle>
-          <DialogDescription className="sr-only">Lead details</DialogDescription>
-          <div className="flex items-center gap-2 pt-1">
-            <Badge variant="outline" className={getLeadStatusColor(lead.status)}>
-              {lead.status}
-            </Badge>
-            {lead.source && (
-              <span className="text-xs text-muted-foreground">{lead.source}</span>
-            )}
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-3 py-2">
-          {fullName && (
-            <div className="flex items-start gap-3">
-              <User size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Name</p>
-                <p className="text-sm font-medium">{fullName}</p>
-              </div>
-            </div>
-          )}
-
-          {lead.company && (
-            <div className="flex items-start gap-3">
-              <Building2 size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Company</p>
-                <p className="text-sm font-medium">{lead.company}</p>
-              </div>
-            </div>
-          )}
-
-          {lead.email && (
-            <div className="flex items-start gap-3">
-              <Mail size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Email</p>
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="text-sm font-medium text-primary hover:underline underline-offset-4"
-                >
-                  {lead.email}
-                </a>
-              </div>
-            </div>
-          )}
-
-          {lead.phone && (
-            <div className="flex items-start gap-3">
-              <Phone size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Phone</p>
-                <a
-                  href={`tel:${lead.phone}`}
-                  className="text-sm font-medium text-primary hover:underline underline-offset-4"
-                >
-                  {lead.phone}
-                </a>
-              </div>
-            </div>
-          )}
-
-          {lead.website && (
-            <div className="flex items-start gap-3">
-              <Globe size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Website</p>
-                <a
-                  href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium text-primary hover:underline underline-offset-4 break-all"
-                >
-                  {lead.website}
-                </a>
-              </div>
-            </div>
-          )}
-
-          {lead.source && (
-            <div className="flex items-start gap-3">
-              <Tag size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">Source</p>
-                <p className="text-sm font-medium">{lead.source}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-start gap-3">
-            <Calendar size={15} className="text-muted-foreground mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs text-muted-foreground">Created</p>
-              <p className="text-sm font-medium">
-                {new Date(lead.createdAt).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 export function LeadsList() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -229,7 +112,11 @@ export function LeadsList() {
   return (
     <div className="space-y-4">
       {selectedLead && (
-        <LeadDetailDialog lead={selectedLead} onClose={() => setSelectedLead(null)} />
+        <LeadDetailsModal
+          lead={selectedLead}
+          isOpen={!!selectedLead}
+          onClose={() => setSelectedLead(null)}
+        />
       )}
 
       <div className="flex items-center justify-between gap-4">
@@ -322,7 +209,11 @@ export function LeadsList() {
               </TableRow>
             ) : (
               leads?.map((lead) => (
-                <TableRow key={lead.id}>
+                <TableRow
+                  key={lead.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setSelectedLead(lead)}
+                >
                   <TableCell className="font-medium">
                     {lead.company || <span className="text-muted-foreground">—</span>}
                   </TableCell>
@@ -334,12 +225,20 @@ export function LeadsList() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {lead.email && (
-                        <a href={`mailto:${lead.email}`} className="text-muted-foreground hover:text-primary">
+                        <a
+                          href={`mailto:${lead.email}`}
+                          className="text-muted-foreground hover:text-primary"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Mail size={16} />
                         </a>
                       )}
                       {lead.phone && (
-                        <a href={`tel:${lead.phone}`} className="text-muted-foreground hover:text-primary">
+                        <a
+                          href={`tel:${lead.phone}`}
+                          className="text-muted-foreground hover:text-primary"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Phone size={16} />
                         </a>
                       )}
@@ -353,7 +252,7 @@ export function LeadsList() {
                   <TableCell className="text-muted-foreground">
                     {new Date(lead.createdAt).toLocaleDateString()}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 p-0" />}>
                         <MoreHorizontal size={16} />
