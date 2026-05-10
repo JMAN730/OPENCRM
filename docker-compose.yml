@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
@@ -19,8 +19,8 @@ services:
       context: .
       target: deps
     restart: "no"
-    env_file:
-      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
     command: ["node", "node_modules/prisma/build/index.js", "db", "push", "--skip-generate"]
     depends_on:
       db:
@@ -31,8 +31,11 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NODE_ENV: ${NODE_ENV}
     depends_on:
       db:
         condition: service_healthy
@@ -40,4 +43,4 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  postgres_data:
+  postgres_data_v2:
