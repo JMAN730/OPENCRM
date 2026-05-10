@@ -1,10 +1,10 @@
 # Architecture Guide
 
-This document describes the architecture and design patterns used in Modern CRM.
+This document describes the architecture and design patterns used in Open CRM.
 
 ## High-Level Overview
 
-Modern CRM is built as a full-stack TypeScript application using Next.js 15, tRPC, Prisma, and PostgreSQL. The application follows a feature-based modular architecture with clear separation of concerns.
+Open CRM is built as a full-stack TypeScript application using Next.js 15, tRPC, Prisma, and PostgreSQL. The application follows a feature-based modular architecture with clear separation of concerns.
 
 ```
 ┌─────────────────────────────────────────┐
