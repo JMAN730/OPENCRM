@@ -1,13 +1,6 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { prisma } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
 import { subDays, subHours, subMinutes } from "date-fns";
-import path from "path";
-
-const dbAbsPath = path.resolve(process.cwd(), "prisma", "dev.db").replace(/\\/g, "/");
-const adapter = new PrismaLibSql({ url: `file:///${dbAbsPath}` });
-const prisma = new PrismaClient({ adapter } as any);
-
 // ── Name pools ───────────────────────────────────────────────────────────────
 
 const FIRST = [
