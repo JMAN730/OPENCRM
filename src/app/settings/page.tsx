@@ -1,11 +1,40 @@
+"use client";
+
+import { useState } from "react";
+import { signOut } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Settings as SettingsIcon, User, Shield, Bell, CreditCard } from "lucide-react";
+import { trpc } from "@/app/_trpc/client";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
+  const [open, setOpen] = useState(false);
+
+  const deleteAccount = trpc.auth.deleteAccount.useMutation({
+    onSuccess: async () => {
+      toast.success("Account deleted");
+      await signOut({ callbackUrl: "/login" });
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to delete account");
+      setOpen(false);
+    },
+  });
+
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-8">
@@ -70,8 +99,37 @@ export default function SettingsPage() {
                 <Button variant="outline">Change Password</Button>
                 <div className="pt-4 border-t border-border">
                   <p className="text-sm font-medium text-destructive">Danger Zone</p>
-                  <p className="text-xs text-muted-foreground mb-3">Once you delete your account, there is no going back.</p>
-                  <Button variant="destructive">Delete Account</Button>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Once you delete your account, there is no going back.
+                  </p>
+                  <Dialog open={open} onOpenChange={setOpen}>
+                    <DialogTrigger render={<Button variant="destructive" />}>
+                      Delete Account
+                    </DialogTrigger>
+                    <DialogContent showCloseButton={false}>
+                      <DialogHeader>
+                        <DialogTitle>Delete account?</DialogTitle>
+                        <DialogDescription>
+                          This will permanently delete your account and all associated data. This
+                          action cannot be undone.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <DialogClose
+                          render={<Button variant="outline" disabled={deleteAccount.isPending} />}
+                        >
+                          Cancel
+                        </DialogClose>
+                        <Button
+                          variant="destructive"
+                          disabled={deleteAccount.isPending}
+                          onClick={() => deleteAccount.mutate()}
+                        >
+                          {deleteAccount.isPending ? "Deleting…" : "Delete Account"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </CardContent>
             </Card>
