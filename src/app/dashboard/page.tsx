@@ -110,33 +110,67 @@ function PhoneReachCard({ statusDistribution }: { statusDistribution: { status: 
   const connected = data.find((d) => d.label === "Connected")?.value ?? 0;
   const connectRate = sum > 0 ? ((connected / sum) * 100).toFixed(1) + "%" : "—";
 
+function PhoneReachCard({ data }: { data: { status: string; count: number }[] }) {
+  const total = data.reduce((s, d) => s + d.count, 0);
+
+  if (total === 0) {
+    return (
+      <div className="crm-card flush">
+        <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· 30 days</span></div>
+        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>No calls logged yet</div>
+      </div>
+    );
+  }
+
+  const connected = data.find((d) => d.status === "CONNECTED")?.count ?? 0;
+  const connectRate = ((connected / total) * 100).toFixed(1);
+  const size = 140, stroke = 20, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
+  const C = 2 * Math.PI * r;
+  let acc = 0;
+
   return (
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Phone reach</h3>
-        <span className="crm-sub">· last 30 days · {sum} dials</span>
-        <div className="crm-actions">
-          <button className="crm-btn ghost icon" style={{ height: 26, width: 26 }}><MoreHorizontal size={14} /></button>
-        </div>
+        <span className="crm-sub">· last 30 days · {total} dials</span>
       </div>
-      {sum === 0 ? (
-        <div className="crm-empty">No call data yet.</div>
-      ) : (
-        <div className="crm-donut-wrap">
-          <DonutChart data={data} label={connectRate} />
-          <div style={{ textAlign: "center", marginTop: -8, fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            live connect rate
+      <div className="crm-donut-wrap">
+        <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
+            {data.map((d, i) => {
+              const cfg = CALL_STATUS[d.status];
+              const len = (d.count / total) * C;
+              const off = C - acc;
+              acc += len;
+              return (
+                <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                  stroke={cfg?.color ?? "var(--crm-fg-faint)"} strokeWidth={stroke}
+                  strokeDasharray={`${len - 1} ${C - len + 1}`}
+                  strokeDashoffset={off}
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                  strokeLinecap="butt"
+                />
+              );
+            })}
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{connectRate}%</div>
+            <div style={{ fontSize: 10, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>connect</div>
           </div>
-          <div className="crm-legend">
-            {data.map((s, i) => (
+        </div>
+        <div className="crm-legend">
+          {data.map((d, i) => {
+            const cfg = CALL_STATUS[d.status];
+            return (
               <div key={i} className="crm-legend-row">
-                <span className="crm-swatch" style={{ background: s.color, width: 12, height: 12, borderRadius: 4 }} />
-                <span>{s.label}</span>
-                <span className="crm-pct">{((s.value / sum) * 100).toFixed(1)}%</span>
-                <span className="crm-count">{s.value}</span>
+                <span className="crm-swatch" style={{ background: cfg?.color ?? "var(--crm-fg-faint)", width: 10, height: 10, borderRadius: 3 }} />
+                <span>{cfg?.label ?? d.status}</span>
+                <span className="crm-pct">{((d.count / total) * 100).toFixed(1)}%</span>
+                <span className="crm-count">{d.count}</span>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -156,6 +190,20 @@ const LEAD_STATUS_LABEL: Record<string, string> = {
 function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; count: number }[] }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);
   const max = Math.max(...leadsByStatus.map((p) => p.count), 1);
+function PipelineCard({ leads }: { leads: Lead[] }) {
+  if (!leads.length) {
+    return (
+      <div className="crm-card flush">
+        <div className="crm-card-head"><h3>Pipeline</h3></div>
+        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>No leads yet — add your first lead to see the pipeline</div>
+      </div>
+    );
+  }
+
+  const counts: Record<string, number> = {};
+  leads.forEach((l) => { counts[l.status] = (counts[l.status] ?? 0) + 1; });
+  const rows = LEAD_STATUS_ORDER.map((s) => ({ status: s, count: counts[s] ?? 0 })).filter((r) => r.count > 0);
+  const max = Math.max(...rows.map((r) => r.count));
 
   return (
     <div className="crm-card flush">
@@ -186,7 +234,6 @@ function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; coun
   );
 }
 
-/* ── Tasks Card ── */
 function TasksCard() {
   const { data: tasks, isLoading } = trpc.tasks.getAll.useQuery();
   const utils = trpc.useUtils();
@@ -253,13 +300,7 @@ function CallsCard({
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Recent calls</h3>
-        <span className="crm-sub">· today</span>
-        <div className="crm-actions">
-          <button className="crm-btn ghost" style={{ height: 26, padding: "0 8px", fontSize: 12 }}>
-            <Phone size={12} /> Open dialer
-          </button>
-          <button className="crm-btn ghost icon" style={{ height: 26, width: 26 }}><MoreHorizontal size={14} /></button>
-        </div>
+        <span className="crm-sub">· {callsToday} today</span>
       </div>
       {recentCalls.length === 0 ? (
         <div className="crm-empty">No calls logged yet.</div>
@@ -287,12 +328,8 @@ function CallsCard({
                   </td>
                   <td>
                     <div className="crm-contact-cell">
-                      <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>
-                        {call.phone.slice(-2)}
-                      </div>
-                      <div className="crm-meta">
-                        <span className="crm-n">{call.phone}</span>
-                      </div>
+                      <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>{call.phone.slice(-2)}</div>
+                      <div className="crm-meta"><span className="crm-n">{call.phone}</span></div>
                     </div>
                   </td>
                   <td><span className={`crm-tag ${cfg.cls}`}>{cfg.label}</span></td>
@@ -310,11 +347,15 @@ function CallsCard({
   );
 }
 
-/* ── Dashboard Page ── */
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
-  const [range, setRange] = useState("30D");
+  const { data: leadsRaw } = trpc.leads.getAll.useQuery();
+  const leads: Lead[] = leadsRaw ?? [];
+
+  const firstName = session?.user?.name?.split(" ")[0] ?? "there";
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const name = session?.user?.name?.split(" ")[0] ?? "";
   const revenue = stats?.monthlyRevenue
@@ -335,31 +376,31 @@ export default function DashboardPage() {
               You have{" "}
               <strong style={{ color: "var(--crm-fg)" }}>{stats?.followupsDue ?? 0} task{stats?.followupsDue !== 1 ? "s" : ""}</strong>{" "}
               due today.
+            <h1 className="crm-page-title">{greeting}, {firstName}</h1>
+            <div className="crm-page-sub">
+              {callsToday > 0 && (
+                <><strong style={{ color: "var(--crm-fg)" }}>{callsToday}</strong> call{callsToday !== 1 ? "s" : ""} logged today · </>
+              )}
+              {followupsDue > 0
+                ? <><strong style={{ color: "var(--crm-fg)" }}>{followupsDue}</strong> follow-up{followupsDue !== 1 ? "s" : ""} due</>
+                : "No follow-ups due today"}
             </div>
-          </div>
-          <div className="crm-page-head-actions">
-            <div className="crm-tabs" role="tablist">
-              {["7D", "30D", "QTD", "YTD"].map((r) => (
-                <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r}</button>
-              ))}
-            </div>
-            <button className="crm-btn"><Download size={13} /> Export</button>
           </div>
         </div>
 
         <div className="crm-kpi-grid">
-          <KPICard label="Revenue" icon={DollarSign} value={revenue} />
-          <KPICard label="Total leads" icon={Users} value={totalLeads} />
-          <KPICard label="Conversion rate" icon={TrendingUp} value={convRate} />
+          <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} note={`Won deals · last 30 days`} />
+          <KPICard label="Total leads" icon={Users} value={totalLeads} note={`${convRate} conversion rate`} />
+          <KPICard label="Calls today" icon={Phone} value={callsToday} note={`${stats?.appointmentsSet ?? 0} qualified all time`} />
         </div>
 
         <div className="crm-grid-row">
-          <CallsCard recentCalls={stats?.recentCalls ?? []} />
-          <PhoneReachCard statusDistribution={stats?.charts?.statusDistribution ?? []} />
+          <CallsCard calls={recentCalls} callsToday={callsToday} />
+          <PhoneReachCard data={statusDist} />
         </div>
 
         <div className="crm-grid-row">
-          <PipelineCard leadsByStatus={stats?.leadsByStatus ?? []} />
+          <PipelineCard leads={leads} />
           <TasksCard />
         </div>
       </div>
