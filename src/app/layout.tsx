@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Modern CRM",
+  title: "Open CRM",
   description: "Production-ready CRM for high-volume sales teams",
 };
 
