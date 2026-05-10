@@ -21,7 +21,7 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: ${DATABASE_URL}
-    command: ["node", "node_modules/prisma/build/index.js", "db", "push", "--skip-generate"]
+    command: ["node", "node_modules/prisma/build/index.js", "db", "push"]
     depends_on:
       db:
         condition: service_healthy
