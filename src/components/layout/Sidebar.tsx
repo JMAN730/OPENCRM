@@ -37,7 +37,7 @@ export function Sidebar() {
         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
           C
         </div>
-        <span className="text-xl font-bold">Modern CRM</span>
+        <span className="text-xl font-bold">Open CRM</span>
       </div>
       
       <nav className="flex-1 space-y-1">
