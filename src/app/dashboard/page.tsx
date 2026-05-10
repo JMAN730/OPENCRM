@@ -5,13 +5,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   DollarSign,
   Users,
-  TrendingUp,
   Phone,
   PhoneOutgoing,
-  Download,
-  MoreHorizontal,
-  Plus,
   CheckCheck,
+  Plus,
 } from "lucide-react";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
@@ -52,42 +49,6 @@ function KPICard({
   );
 }
 
-/* ── Donut Chart ── */
-function DonutChart({ data, label }: { data: { color: string; value: number }[]; label: string }) {
-  const size = 180, stroke = 22, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
-  const C = 2 * Math.PI * r;
-  const sum = data.reduce((s, d) => s + d.value, 0);
-  if (sum === 0) return null;
-  let acc = 0;
-  return (
-    <div style={{ position: "relative" }}>
-      <svg className="crm-donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
-        {data.map((d, i) => {
-          const len = (d.value / sum) * C;
-          const off = C - acc;
-          acc += len;
-          return (
-            <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-              stroke={d.color} strokeWidth={stroke}
-              strokeDasharray={`${len - 2} ${C - len + 2}`}
-              strokeDashoffset={off}
-              transform={`rotate(-90 ${cx} ${cy})`}
-              strokeLinecap="butt"
-            />
-          );
-        })}
-      </svg>
-      <div className="crm-donut-center">
-        <div style={{ textAlign: "center" }}>
-          <div className="crm-big">{label}</div>
-          <div className="crm-lbl">connect rate</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Phone Reach Card ── */
 const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
   CONNECTED: { label: "Connected",  color: "var(--crm-accent)" },
@@ -96,19 +57,6 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
   FAILED:    { label: "Failed",     color: "oklch(64% 0.18 25)" },
   CANCELED:  { label: "Canceled",   color: "oklch(70% 0.04 80)" },
 };
-
-function PhoneReachCard({ statusDistribution }: { statusDistribution: { status: string; count: number }[] }) {
-  const data = statusDistribution
-    .map((s) => ({
-      label: STATUS_DISPLAY[s.status]?.label ?? s.status,
-      color: STATUS_DISPLAY[s.status]?.color ?? "var(--crm-fg-faint)",
-      value: s.count,
-    }))
-    .sort((a, b) => b.value - a.value);
-
-  const sum = data.reduce((s, d) => s + d.value, 0);
-  const connected = data.find((d) => d.label === "Connected")?.value ?? 0;
-  const connectRate = sum > 0 ? ((connected / sum) * 100).toFixed(1) + "%" : "—";
 
 function PhoneReachCard({ data }: { data: { status: string; count: number }[] }) {
   const total = data.reduce((s, d) => s + d.count, 0);
@@ -139,7 +87,7 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
             {data.map((d, i) => {
-              const cfg = CALL_STATUS[d.status];
+              const cfg = STATUS_DISPLAY[d.status];
               const len = (d.count / total) * C;
               const off = C - acc;
               acc += len;
@@ -161,7 +109,7 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
         </div>
         <div className="crm-legend">
           {data.map((d, i) => {
-            const cfg = CALL_STATUS[d.status];
+            const cfg = STATUS_DISPLAY[d.status];
             return (
               <div key={i} className="crm-legend-row">
                 <span className="crm-swatch" style={{ background: cfg?.color ?? "var(--crm-fg-faint)", width: 10, height: 10, borderRadius: 3 }} />
@@ -172,7 +120,7 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
             );
           })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -187,11 +135,13 @@ const LEAD_STATUS_LABEL: Record<string, string> = {
   WON:         "Won",
 };
 
+const LEAD_STATUS_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "UNQUALIFIED", "LOST", "WON"];
+
 function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; count: number }[] }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);
   const max = Math.max(...leadsByStatus.map((p) => p.count), 1);
-function PipelineCard({ leads }: { leads: Lead[] }) {
-  if (!leads.length) {
+
+  if (total === 0) {
     return (
       <div className="crm-card flush">
         <div className="crm-card-head"><h3>Pipeline</h3></div>
@@ -200,10 +150,10 @@ function PipelineCard({ leads }: { leads: Lead[] }) {
     );
   }
 
-  const counts: Record<string, number> = {};
-  leads.forEach((l) => { counts[l.status] = (counts[l.status] ?? 0) + 1; });
-  const rows = LEAD_STATUS_ORDER.map((s) => ({ status: s, count: counts[s] ?? 0 })).filter((r) => r.count > 0);
-  const max = Math.max(...rows.map((r) => r.count));
+  // Ensure they appear in the right order
+  const orderedData = LEAD_STATUS_ORDER
+    .map((s) => leadsByStatus.find((l) => l.status === s))
+    .filter((l): l is { status: string; count: number } => !!l && l.count > 0);
 
   return (
     <div className="crm-card flush">
@@ -211,25 +161,21 @@ function PipelineCard({ leads }: { leads: Lead[] }) {
         <h3>Pipeline</h3>
         <span className="crm-sub">· {total.toLocaleString()} leads</span>
       </div>
-      {total === 0 ? (
-        <div className="crm-empty">No leads yet.</div>
-      ) : (
-        <div className="crm-funnel">
-          {leadsByStatus.map((s) => (
-            <div key={s.status} className="crm-funnel-row">
-              <div className="crm-lbl">{LEAD_STATUS_LABEL[s.status] ?? s.status}</div>
-              <div className="crm-bar">
-                <span style={{ width: (s.count / max * 100) + "%" }}>
-                  {s.count.toLocaleString()}
-                </span>
-              </div>
-              <div className="crm-num">
-                <span className="crm-pct">{total > 0 ? ((s.count / total) * 100).toFixed(1) : "0"}%</span>
-              </div>
+      <div className="crm-funnel">
+        {orderedData.map((s) => (
+          <div key={s.status} className="crm-funnel-row">
+            <div className="crm-lbl">{LEAD_STATUS_LABEL[s.status] ?? s.status}</div>
+            <div className="crm-bar">
+              <span style={{ width: (s.count / max * 100) + "%" }}>
+                {s.count.toLocaleString()}
+              </span>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="crm-num">
+              <span className="crm-pct">{((s.count / total) * 100).toFixed(1)}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -262,7 +208,7 @@ function TasksCard() {
         <div className="crm-empty">No tasks yet.</div>
       ) : (
         <div className="crm-tasks">
-          {displayed.map((t: typeof taskList[number]) => (
+          {displayed.map((t: any) => (
             <div key={t.id} className="crm-task" data-done={t.completed}>
               <div
                 className="crm-check"
@@ -293,8 +239,10 @@ const CALL_STATUS_MAP: Record<string, { label: string; cls: string }> = {
 
 function CallsCard({
   recentCalls,
+  callsToday,
 }: {
   recentCalls: { id: string; phone: string; status: string; duration?: number | null; createdAt: string }[];
+  callsToday: number;
 }) {
   return (
     <div className="crm-card flush">
@@ -351,31 +299,33 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
   const { data: leadsRaw } = trpc.leads.getAll.useQuery();
-  const leads: Lead[] = leadsRaw ?? [];
+  const leads: any[] = leadsRaw ?? [];
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const name = session?.user?.name?.split(" ")[0] ?? "";
   const revenue = stats?.monthlyRevenue
     ? "$" + (stats.monthlyRevenue / 1000).toFixed(1) + "K"
     : "$0";
   const totalLeads = stats?.totalLeads?.toLocaleString() ?? "0";
-  const convRate = typeof stats?.conversionRate === "string"
-    ? stats.conversionRate
-    : "0.0%";
+
+  const followupsDue = stats?.followupsDue ?? 0;
+  const callsToday = (stats as any)?.callsToday ?? 0;
+
+  // Compute leadsByStatus for PipelineCard
+  const leadsByStatusMap: Record<string, number> = {};
+  leads.forEach((l) => { leadsByStatusMap[l.status] = (leadsByStatusMap[l.status] ?? 0) + 1; });
+  const leadsByStatus = Object.keys(leadsByStatusMap).map(k => ({ status: k, count: leadsByStatusMap[k] }));
+
+  const recentCalls = (stats as any)?.recentCalls ?? [];
+  const statusDist = (stats as any)?.statusDistribution ?? [];
 
   return (
     <DashboardLayout>
       <div className="crm-content">
         <div className="crm-page-head">
           <div>
-            <h1 className="crm-page-title">{getGreeting()}{name ? `, ${name}` : ""}</h1>
-            <div className="crm-page-sub">
-              You have{" "}
-              <strong style={{ color: "var(--crm-fg)" }}>{stats?.followupsDue ?? 0} task{stats?.followupsDue !== 1 ? "s" : ""}</strong>{" "}
-              due today.
             <h1 className="crm-page-title">{greeting}, {firstName}</h1>
             <div className="crm-page-sub">
               {callsToday > 0 && (
@@ -389,18 +339,18 @@ export default function DashboardPage() {
         </div>
 
         <div className="crm-kpi-grid">
-          <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} note={`Won deals · last 30 days`} />
-          <KPICard label="Total leads" icon={Users} value={totalLeads} note={`${convRate} conversion rate`} />
-          <KPICard label="Calls today" icon={Phone} value={callsToday} note={`${stats?.appointmentsSet ?? 0} qualified all time`} />
+          <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} />
+          <KPICard label="Total leads" icon={Users} value={totalLeads} />
+          <KPICard label="Calls today" icon={Phone} value={callsToday} />
         </div>
 
         <div className="crm-grid-row">
-          <CallsCard calls={recentCalls} callsToday={callsToday} />
+          <CallsCard recentCalls={recentCalls} callsToday={callsToday} />
           <PhoneReachCard data={statusDist} />
         </div>
 
         <div className="crm-grid-row">
-          <PipelineCard leads={leads} />
+          <PipelineCard leadsByStatus={leadsByStatus} />
           <TasksCard />
         </div>
       </div>
