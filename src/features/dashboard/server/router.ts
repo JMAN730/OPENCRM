@@ -19,6 +19,7 @@ export const dashboardRouter = createTRPCRouter({
       qualifiedLeadsCount,
       revenueResult,
       statusDistribution,
+      leadsByStatusResult,
       recentCalls,
       ...callsPerDayCounts
     ] = await Promise.all([
@@ -40,6 +41,11 @@ export const dashboardRouter = createTRPCRouter({
       ctx.prisma.callLog.groupBy({
         by: ["status"],
         where: { lead: { organizationId }, createdAt: { gte: thirtyDaysAgo } },
+        _count: { id: true },
+      }),
+      ctx.prisma.lead.groupBy({
+        by: ["status"],
+        where: { organizationId },
         _count: { id: true },
       }),
       ctx.prisma.callLog.findMany({
@@ -75,6 +81,10 @@ export const dashboardRouter = createTRPCRouter({
       followupsDue: followupsDueCount,
       conversionRate: `${conversionRate}%`,
       monthlyRevenue: revenueResult._sum.value ?? 0,
+      leadsByStatus: leadsByStatusResult.map((s) => ({
+        status: s.status,
+        count: s._count.id,
+      })),
       recentCalls: recentCalls.map((c) => ({
         id: c.id,
         status: c.status,
