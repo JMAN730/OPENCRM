@@ -7,7 +7,7 @@ export const scraperConfig = {
   scriptPath: process.env.SCRAPER_SCRIPT_PATH ?? "",
   outputBaseDir:
     process.env.SCRAPER_OUTPUT_BASE_DIR ?? path.join(REPO_ROOT, "scraper-output"),
-  // Scraper is disabled unless both python path and script path are explicitly configured.
+  // Scraper is enabled by default; explicitly set SCRAPER_ENABLED=false to disable
   enabled:
     process.env.SCRAPER_ENABLED !== "false" &&
     !!process.env.SCRAPER_PYTHON_PATH &&
