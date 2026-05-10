@@ -19,11 +19,6 @@ import {
   Phone,
   ExternalLink,
   Trash2,
-  Globe,
-  Building2,
-  User,
-  Tag,
-  Calendar,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,6 +43,14 @@ import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 import { useDebounce } from "@/hooks/use-debounce";
 import { getLeadStatusColor } from "@/features/leads/utils";
+
+const CALL_OUTCOME_LABELS: Record<string, string> = {
+  NOT_CONTACTED: "Not Contacted",
+  ANSWERED: "Answered",
+  HUNG_UP: "Hung Up",
+  NO_ANSWER: "No Answer",
+  AI_VOICEMAIL: "AI Voicemail",
+};
 
 type Lead = {
   id: string;
@@ -113,6 +116,7 @@ export function LeadsList() {
     <div className="space-y-4">
       {selectedLead && (
         <LeadDetailsModal
+          key={selectedLead.id}
           lead={selectedLead}
           isOpen={!!selectedLead}
           onClose={() => setSelectedLead(null)}
@@ -190,6 +194,7 @@ export function LeadsList() {
               <TableHead>Name</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Call Outcome</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -197,13 +202,13 @@ export function LeadsList() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   Loading leads...
                 </TableCell>
               </TableRow>
             ) : leads?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No leads found.
                 </TableCell>
               </TableRow>
@@ -248,6 +253,11 @@ export function LeadsList() {
                     <Badge variant="outline" className={getLeadStatusColor(lead.status)}>
                       {lead.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {lead.callOutcome
+                      ? (CALL_OUTCOME_LABELS[lead.callOutcome] ?? lead.callOutcome)
+                      : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(lead.createdAt).toLocaleDateString()}
