@@ -716,6 +716,7 @@
 
 /* ===== Tasks ===== */
 .crm-tasks { padding: 4px 0; }
+.crm-empty { padding: 24px var(--crm-pad-card); color: var(--crm-fg-faint); font-size: 13px; text-align: center; }
 .crm-task {
   display: grid;
   grid-template-columns: 18px 1fr auto;
