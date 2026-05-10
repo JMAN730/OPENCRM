@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,7 @@ import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Maps common CSV header variants to our lead fields
+// Maps common CSV/XLSX header variants to our lead fields
 const FIELD_MAP: Record<string, string> = {
   // Company / business name
   name: "company", "business name": "company", "company name": "company",
@@ -30,7 +31,7 @@ const FIELD_MAP: Record<string, string> = {
   phone: "phone", "phone number": "phone", mobile: "phone", telephone: "phone",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
-  source: "source", "lead source": "source",
+  source: "source", "lead source": "source", category: "source",
   status: "status",
 };
 
@@ -45,12 +46,52 @@ type ParsedLead = {
   status?: "NEW" | "CONTACTED" | "QUALIFIED" | "UNQUALIFIED" | "LOST" | "WON";
 };
 
-function normalizeRow(row: Record<string, string>): ParsedLead {
+// Normalizes a cell value to a clean string, handling Excel numeric types
+function cellToString(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") {
+    // Excel stores phone numbers as floats — strip decimal and convert
+    return Number.isInteger(value) ? String(value) : String(Math.round(value));
+  }
+  return String(value).trim();
+}
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function isValidUrl(s: string): boolean {
+  try { new URL(s); return true; } catch { return false; }
+}
+
+// Attempt to turn a bare domain into a URL (e.g. "example.com" → "https://example.com")
+function coerceUrl(s: string): string | undefined {
+  if (isValidUrl(s)) return s;
+  const prefixed = "https://" + s;
+  return isValidUrl(prefixed) ? prefixed : undefined;
+}
+
+function normalizeRow(row: Record<string, unknown>): ParsedLead {
   const lead: Record<string, string> = {};
   for (const [rawKey, value] of Object.entries(row)) {
     const normalized = rawKey.trim().toLowerCase();
     const field = FIELD_MAP[normalized];
-    if (field && value?.trim()) lead[field] = value.trim();
+    const str = cellToString(value);
+    if (field && str) lead[field] = str;
+  }
+
+  // If the "email" value is actually a URL, move it to website
+  if (lead.email && !isValidEmail(lead.email)) {
+    const asUrl = coerceUrl(lead.email);
+    if (asUrl && !lead.website) lead.website = asUrl;
+    delete lead.email;
+  }
+
+  // Ensure website is a valid URL; try to add protocol if missing
+  if (lead.website) {
+    const coerced = coerceUrl(lead.website);
+    if (coerced) lead.website = coerced;
+    else delete lead.website;
   }
 
   const validStatuses = ["NEW","CONTACTED","QUALIFIED","UNQUALIFIED","LOST","WON"] as const;
@@ -85,12 +126,30 @@ export function ImportLeadsDialog({ onImported }: Props) {
     onError: (err) => toast.error(err.message),
   });
 
-  const parseFile = (file: File) => {
-    if (!file.name.endsWith(".csv")) {
-      toast.error("Please upload a .csv file");
-      return;
-    }
-    setFileName(file.name);
+  const parseXlsx = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target!.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+        const parsed = jsonRows.map(normalizeRow).filter(
+          (r) => r.company || r.firstName || r.lastName || r.email || r.phone
+        );
+        if (parsed.length === 0) {
+          toast.error("No valid leads found. Check your column headers.");
+          return;
+        }
+        setRows(parsed);
+      } catch {
+        toast.error("Failed to parse Excel file. Please check the file format.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const parseCsv = (file: File) => {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
@@ -105,6 +164,18 @@ export function ImportLeadsDialog({ onImported }: Props) {
         setRows(parsed);
       },
     });
+  };
+
+  const parseFile = (file: File) => {
+    const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isCsv = file.name.endsWith(".csv");
+    if (!isXlsx && !isCsv) {
+      toast.error("Please upload a .csv or .xlsx file");
+      return;
+    }
+    setFileName(file.name);
+    if (isXlsx) parseXlsx(file);
+    else parseCsv(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,14 +198,14 @@ export function ImportLeadsDialog({ onImported }: Props) {
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger render={<Button variant="outline" className="gap-2" />}>
         <Upload size={16} />
-        Import CSV
+        Import
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Import leads from CSV</DialogTitle>
+          <DialogTitle>Import leads</DialogTitle>
           <DialogDescription>
-            Supports columns: first name, last name, email, phone, company, website, source.
+            Supports .csv and .xlsx files. Columns: first name, last name, email, phone, company, website, source / category.
           </DialogDescription>
         </DialogHeader>
 
@@ -150,12 +221,12 @@ export function ImportLeadsDialog({ onImported }: Props) {
             onDrop={handleDrop}
           >
             <Upload size={28} className="mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm font-medium">Drop your CSV here or click to browse</p>
-            <p className="text-xs text-muted-foreground mt-1">Max 5,000 rows</p>
+            <p className="text-sm font-medium">Drop your file here or click to browse</p>
+            <p className="text-xs text-muted-foreground mt-1">CSV or XLSX · Max 5,000 rows</p>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               className="hidden"
               onChange={handleFileChange}
             />

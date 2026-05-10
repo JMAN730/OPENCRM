@@ -18,7 +18,7 @@ This checklist helps ensure your project is ready for public GitHub release.
 ## Configuration ✅
 
 - [x] **package.json** – Updated with metadata and removed "private" flag
-  - Name: "modern-crm"
+  - Name: "opencrm"
   - Description added
   - License: "MIT"
   - Repository info added
@@ -109,7 +109,7 @@ git push origin v0.1.0
 # Create a GitHub Release
 # Go to https://github.com/YOUR_USERNAME/crm/releases/new
 # Tag: v0.1.0
-# Title: Modern CRM v0.1.0 - Initial Release
+# Title: Open CRM v0.1.0 - Initial Release
 # Description: First public release with core CRM features
 ```
 

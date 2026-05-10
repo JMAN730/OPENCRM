@@ -22,6 +22,11 @@ const leadInputSchema = z.object({
   source: optionalShortString(100),
 });
 
+const callOutcomeSchema = z.object({
+  callOutcome: z.enum(["NOT_CONTACTED", "ANSWERED", "HUNG_UP", "NO_ANSWER", "AI_VOICEMAIL"]),
+  callNotes: z.string().max(1000).optional(),
+});
+
 export const leadsRouter = createTRPCRouter({
   getAll: organizationProcedure
     .input(
@@ -92,5 +97,21 @@ export const leadsRouter = createTRPCRouter({
         })),
       });
       return { count: result.count };
+    }),
+
+  updateCallOutcome: organizationProcedure
+    .input(z.object({ id: z.string(), ...callOutcomeSchema.shape }))
+    .mutation(async ({ ctx, input }) => {
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return ctx.prisma.lead.update({
+        where: { id: input.id },
+        data: {
+          callOutcome: input.callOutcome,
+          callNotes: input.callNotes,
+        },
+      });
     }),
 });
