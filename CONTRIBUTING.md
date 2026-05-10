@@ -1,4 +1,4 @@
-# Contributing to Modern CRM
+# Contributing to Open CRM
 
 First, thank you for considering contributing! This document provides guidelines and instructions for contributing.
 
@@ -216,4 +216,4 @@ Releases are made by maintainers following semantic versioning:
 - Open a new Discussion for questions
 - Review [ARCHITECTURE.md](ARCHITECTURE.md) for technical details
 
-Thank you for contributing to Modern CRM! 🚀
+Thank you for contributing to Open CRM! 🚀
