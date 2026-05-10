@@ -1,12 +1,10 @@
-import { defineConfig } from "prisma/config";
-
-export default defineConfig({
+export default {
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "file:prisma/dev.db",
+    url: process.env.DATABASE_URL ?? "postgresql://crm:crm@localhost:5432/crm",
   },
-});
+};
