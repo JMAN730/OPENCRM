@@ -1,7 +1,7 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure } from "@/server/trpc";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/trpc";
 
 export const authRouter = createTRPCRouter({
   // Stub — email-based reset is not yet implemented. Returns success so the UI
@@ -53,4 +53,14 @@ export const authRouter = createTRPCRouter({
 
       return { ok: true };
     }),
+
+  deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+
+    // ScraperJob.userId is required with no cascade, must be deleted first
+    await ctx.prisma.scraperJob.deleteMany({ where: { userId } });
+    await ctx.prisma.user.delete({ where: { id: userId } });
+
+    return { ok: true };
+  }),
 });

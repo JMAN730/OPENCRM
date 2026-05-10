@@ -1,33 +1,48 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
+import { trpc } from "@/app/_trpc/client";
+import { toast } from "sonner";
 
 const NAV = ["Profile", "Workspace", "Members", "Integrations", "Billing", "API", "Audit log"];
 
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [active, setActive] = useState("Profile");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const userName = session?.user?.name ?? "—";
   const userEmail = session?.user?.email ?? "—";
 
+  const deleteAccount = trpc.auth.deleteAccount.useMutation({
+    onSuccess: async () => {
+      toast.success("Account deleted");
+      await signOut({ callbackUrl: "/login" });
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to delete account");
+      setConfirmDelete(false);
+    },
+  });
+
+  const profileRows: [string, string][] = [
+    ["Name",  userName],
+    ["Email", userEmail],
+    ["Role",  (session?.user as { role?: string } | undefined)?.role ?? "USER"],
+  ];
+
+  const workspaceRows: [string, string][] = [
+    ["Workspace name",    "My workspace"],
+    ["Time zone",         Intl.DateTimeFormat().resolvedOptions().timeZone],
+    ["Default currency",  "USD ($)"],
+    ["Fiscal year start", "January"],
+  ];
+
   const rows: [string, string][] =
-    active === "Profile"
-      ? [
-          ["Name",  userName],
-          ["Email", userEmail],
-          ["Role",  (session?.user as { role?: string } | undefined)?.role ?? "USER"],
-        ]
-      : active === "Workspace"
-      ? [
-          ["Workspace name",    "My workspace"],
-          ["Time zone",         Intl.DateTimeFormat().resolvedOptions().timeZone],
-          ["Default currency",  "USD ($)"],
-          ["Fiscal year start", "January"],
-        ]
-      : [];
+    active === "Profile" ? profileRows :
+    active === "Workspace" ? workspaceRows : [];
 
   const desc: Record<string, string> = {
     Profile:      "Your personal information and account preferences.",
@@ -88,9 +103,49 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 ))}
-                <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
-                  <button className="crm-btn primary" style={{ height: 32, padding: "0 16px" }}>Save changes</button>
-                </div>
+
+                {active === "Profile" && (
+                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>
+                    <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
+                      Once you delete your account, there is no going back.
+                    </div>
+                    {!confirmDelete ? (
+                      <button
+                        className="crm-btn"
+                        style={{ height: 32, padding: "0 16px", border: "1px solid var(--crm-neg)", color: "var(--crm-neg)" }}
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        Delete account
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>Are you sure?</span>
+                        <button
+                          className="crm-btn"
+                          style={{ height: 32, padding: "0 14px", background: "var(--crm-neg)", color: "white", border: "none" }}
+                          disabled={deleteAccount.isPending}
+                          onClick={() => deleteAccount.mutate()}
+                        >
+                          {deleteAccount.isPending ? "Deleting…" : "Yes, delete"}
+                        </button>
+                        <button
+                          className="crm-btn"
+                          style={{ height: 32, padding: "0 14px" }}
+                          onClick={() => setConfirmDelete(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {active !== "Profile" && (
+                  <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                    <button className="crm-btn primary" style={{ height: 32, padding: "0 16px" }}>Save changes</button>
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ padding: "32px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13, borderTop: "1px solid var(--crm-border)" }}>
