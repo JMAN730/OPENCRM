@@ -26,6 +26,9 @@ vi.mock('@/app/_trpc/client', () => ({
       bulkCreate: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      updateCallOutcome: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
     },
   },
 }))
@@ -56,6 +59,7 @@ describe('LeadsList', () => {
           company: 'Acme Corp',
           email: 'john@example.com',
           phone: '123456789',
+          callOutcome: 'NOT_CONTACTED',
           createdAt: new Date().toISOString(),
         },
       ],
