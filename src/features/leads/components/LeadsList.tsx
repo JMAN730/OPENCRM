@@ -2,55 +2,13 @@
 
 import { trpc } from "@/app/_trpc/client";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  Search,
-  MoreHorizontal,
-  Mail,
-  Phone,
-  ExternalLink,
-  Trash2,
+  Plus, Search, Filter, MoreVertical, X, Check, MoreHorizontal,
+  Phone, Mail, Star, ArrowUpDown, ArrowUp, ArrowDown, Upload,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
-import { LeadDetailsModal } from "./LeadDetailsModal";
 import { useDebounce } from "@/hooks/use-debounce";
-import { getLeadStatusColor } from "@/features/leads/utils";
-
-const CALL_OUTCOME_LABELS: Record<string, string> = {
-  NOT_CONTACTED: "Not Contacted",
-  ANSWERED: "Answered",
-  HUNG_UP: "Hung Up",
-  NO_ANSWER: "No Answer",
-  AI_VOICEMAIL: "AI Voicemail",
-};
 
 type Lead = {
   id: string;
@@ -62,252 +20,375 @@ type Lead = {
   website?: string | null;
   status: string;
   source?: string | null;
-  callOutcome?: string | null;
-  callNotes?: string | null;
   createdAt: string;
 };
 
+const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
+  NEW:         { cls: "plain",  label: "New" },
+  CONTACTED:   { cls: "accent", label: "Contacted" },
+  QUALIFIED:   { cls: "",       label: "Qualified" },
+  UNQUALIFIED: { cls: "neg",    label: "Unqualified" },
+  LOST:        { cls: "neg",    label: "Lost" },
+  WON:         { cls: "pos",    label: "Won" },
+};
+
+const OUTCOME_CHIPS = ["Connected", "Voicemail", "AI voicemail", "No answer", "Hung up", "Wrong number"];
+
+function StageTag({ status }: { status: string }) {
+  const cfg = STATUS_LABELS[status] ?? STATUS_LABELS.NEW;
+  return <span className={`crm-tag ${cfg.cls}`}>{cfg.label}</span>;
+}
+
+function initials(name: string) {
+  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function avatarClass(seed: string) {
+  const n = (seed.charCodeAt(0) % 6) + 1;
+  return `c${n}`;
+}
+
+/* ── Lead Drawer ── */
+function LeadDrawer({ lead, onClose }: { lead: Lead; onClose: () => void }) {
+  const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.company || "Lead";
+  const email = lead.email || "";
+  const company = lead.company || "";
+  const status = lead.status;
+
+  return (
+    <>
+      <div className="crm-drawer-backdrop" onClick={onClose} />
+      <div className="crm-drawer">
+        <div className="crm-drawer-head">
+          <div className={`crm-avatar lg ${avatarClass(fullName)}`}>{initials(fullName)}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--crm-fg)" }}>{fullName}</div>
+            <div style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>{company}</div>
+          </div>
+          <button className="crm-btn ghost icon" onClick={onClose}><X size={15} /></button>
+        </div>
+        <div className="crm-drawer-body">
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="crm-btn primary" style={{ flex: 1 }}>
+              <Phone size={13} /> Call
+            </button>
+            <button className="crm-btn" style={{ flex: 1 }}>
+              <Mail size={13} /> Email
+            </button>
+            <button className="crm-btn icon"><Star size={14} /></button>
+            <button className="crm-btn icon"><MoreHorizontal size={14} /></button>
+          </div>
+
+          <div className="crm-drawer-section">
+            <h4>Details</h4>
+            <div className="crm-kv">
+              <span className="crm-k">Status</span>
+              <span className="crm-v"><StageTag status={status} /></span>
+              <span className="crm-k">Source</span>
+              <span className="crm-v">{lead.source || "—"}</span>
+              {email && (
+                <>
+                  <span className="crm-k">Email</span>
+                  <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>{email}</span>
+                </>
+              )}
+              {lead.phone && (
+                <>
+                  <span className="crm-k">Phone</span>
+                  <span className="crm-v">{lead.phone}</span>
+                </>
+              )}
+              {lead.website && (
+                <>
+                  <span className="crm-k">Website</span>
+                  <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>{lead.website}</span>
+                </>
+              )}
+              <span className="crm-k">Created</span>
+              <span className="crm-v">{new Date(lead.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Add Lead Dialog (minimal, inline) ── */
+function AddLeadForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (data: Record<string, string>) => void }) {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    onSubmit({
+      firstName: fd.get("firstName") as string,
+      lastName:  fd.get("lastName")  as string,
+      company:   fd.get("company")   as string,
+      email:     fd.get("email")     as string,
+      phone:     fd.get("phone")     as string,
+    });
+  };
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "oklch(15% 0.012 70 / 0.32)",
+      backdropFilter: "blur(2px)", zIndex: 60, display: "grid", placeItems: "center",
+    }}>
+      <div style={{
+        background: "var(--crm-surface)", border: "1px solid var(--crm-border)",
+        borderRadius: "var(--crm-radius-lg)", padding: 28, width: 440,
+        boxShadow: "var(--crm-shadow-pop)",
+      }}>
+        <h3 style={{ margin: "0 0 18px", fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--crm-fg)" }}>
+          New lead
+        </h3>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[["firstName", "First name"], ["lastName", "Last name"]].map(([n, l]) => (
+              <label key={n} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <span style={{ fontSize: 12, color: "var(--crm-fg-muted)", fontWeight: 500 }}>{l}</span>
+                <input name={n} style={{
+                  height: 34, padding: "0 10px", border: "1px solid var(--crm-border)",
+                  borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface-2)",
+                  fontSize: 13, fontFamily: "var(--crm-font-sans)", color: "var(--crm-fg)", outline: "none",
+                }} />
+              </label>
+            ))}
+          </div>
+          {[["company", "Company"], ["email", "Work email"], ["phone", "Phone"]].map(([n, l]) => (
+            <label key={n} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              <span style={{ fontSize: 12, color: "var(--crm-fg-muted)", fontWeight: 500 }}>{l}</span>
+              <input name={n} type={n === "email" ? "email" : "text"} style={{
+                height: 34, padding: "0 10px", border: "1px solid var(--crm-border)",
+                borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface-2)",
+                fontSize: 13, fontFamily: "var(--crm-font-sans)", color: "var(--crm-fg)", outline: "none",
+              }} />
+            </label>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <button type="button" className="crm-btn ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel}>Cancel</button>
+            <button type="submit" className="crm-btn primary" style={{ flex: 1, justifyContent: "center" }}>Create lead</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Leads Component ── */
 export function LeadsList() {
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
+  const [outcomeFilter, setOutcomeFilter] = useState(new Set<string>());
+  const [sortBy, setSortBy] = useState<{ key: keyof Lead; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" });
+  const [selected, setSelected] = useState(new Set<string>());
+  const [showAdd, setShowAdd] = useState(false);
 
   const utils = trpc.useUtils();
-  const { data: leads, isLoading } = trpc.leads.getAll.useQuery({ search: debouncedSearch });
+  const { data: leads = [], isLoading } = trpc.leads.getAll.useQuery({ search: debouncedSearch });
 
   const createLead = trpc.leads.create.useMutation({
-    onSuccess: () => {
-      toast.success("Lead created successfully");
-      setIsAddDialogOpen(false);
-      utils.leads.getAll.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Error: ${error.message}`);
-    }
+    onSuccess: () => { toast.success("Lead created"); setShowAdd(false); utils.leads.getAll.invalidate(); },
+    onError:   (e) => toast.error(e.message),
   });
-
   const deleteLead = trpc.leads.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Lead deleted successfully");
-      utils.leads.getAll.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Error: ${error.message}`);
-    }
+    onSuccess: () => { toast.success("Lead deleted"); utils.leads.getAll.invalidate(); },
+    onError:   (e) => toast.error(e.message),
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data = {
-      firstName: (formData.get("firstName") as string) || undefined,
-      lastName: (formData.get("lastName") as string) || undefined,
-      email: (formData.get("email") as string) || undefined,
-      phone: (formData.get("phone") as string) || undefined,
-      company: (formData.get("company") as string) || undefined,
-      source: "Manual",
-    };
-    createLead.mutate(data);
+  const filtered = useMemo(() => {
+    let rows = (leads as Lead[]).slice();
+    if (outcomeFilter.size) {
+      rows = rows.filter((l: Lead) => outcomeFilter.has(l.status) || outcomeFilter.size === 0);
+    }
+    rows.sort((a: Lead, b: Lead) => {
+      const av = a[sortBy.key] ?? "";
+      const bv = b[sortBy.key] ?? "";
+      const cmp = String(av).localeCompare(String(bv));
+      return sortBy.dir === "asc" ? cmp : -cmp;
+    });
+    return rows;
+  }, [leads, outcomeFilter, sortBy]);
+
+  const toggleOutcome = (s: string) => {
+    const next = new Set(outcomeFilter);
+    next.has(s) ? next.delete(s) : next.add(s);
+    setOutcomeFilter(next);
   };
 
+  const toggleSel = (id: string) => {
+    const n = new Set(selected);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setSelected(n);
+  };
+  const allSelected = filtered.length > 0 && filtered.every((l: Lead) => selected.has(l.id));
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(filtered.map((l: Lead) => l.id)));
+  };
+
+  const sortHeader = (label: string, key: keyof Lead) => {
+    const active = sortBy.key === key;
+    const Icon = active ? (sortBy.dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
+    return (
+      <th
+        onClick={() => setSortBy((s) => ({ key, dir: s.key === key && s.dir === "desc" ? "asc" : "desc" }))}
+      >
+        {label}
+        <span className="crm-sort"><Icon size={11} /></span>
+      </th>
+    );
+  };
 
   return (
-    <div className="space-y-4">
-      {selectedLead && (
-        <LeadDetailsModal
-          key={selectedLead.id}
-          lead={selectedLead}
-          isOpen={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
+    <>
+      {showAdd && (
+        <AddLeadForm
+          onCancel={() => setShowAdd(false)}
+          onSubmit={(data) => createLead.mutate({ ...data, source: "Manual" })}
         />
       )}
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input
-            placeholder="Search leads..."
-            className="pl-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {selectedLead && <LeadDrawer lead={selectedLead} onClose={() => setSelectedLead(null)} />}
+
+      <div className="crm-content">
+        <div className="crm-page-head">
+          <div>
+            <h1 className="crm-page-title">Leads</h1>
+            <div className="crm-page-sub">
+              {filtered.length} of {leads.length} leads · sorted by {sortBy.key}
+            </div>
+          </div>
+          <div className="crm-page-head-actions">
+            <ImportLeadsDialog onImported={() => utils.leads.getAll.invalidate()} />
+            <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
+              <Plus size={13} /> New lead
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <ImportLeadsDialog onImported={() => utils.leads.getAll.invalidate()} />
+        <div className="crm-card flush">
+          <div className="crm-leads-toolbar">
+            <div className="crm-search">
+              <Search size={14} />
+              <input
+                placeholder="Search name, company, email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div style={{ width: 1, height: 20, background: "var(--crm-border)" }} />
+            {OUTCOME_CHIPS.map((s) => (
+              <button
+                key={s} className="crm-chip"
+                aria-pressed={outcomeFilter.has(s)}
+                onClick={() => toggleOutcome(s)}
+              >
+                {s}
+                {outcomeFilter.has(s) && (
+                  <span style={{ color: "var(--crm-fg-faint)" }}>
+                    <X size={10} strokeWidth={2.4} />
+                  </span>
+                )}
+              </button>
+            ))}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              <button className="crm-btn ghost"><Filter size={14} /> More filters</button>
+              <button className="crm-btn ghost icon"><MoreVertical size={14} /></button>
+            </div>
+          </div>
 
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger render={<Button className="gap-2" />}>
-              <Plus size={16} />
-              Add Lead
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Lead</DialogTitle>
-                <DialogDescription>
-                  Fill in the details below to create a new lead.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company</Label>
-                  <Input id="company" name="company" autoFocus />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" name="firstName" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" name="lastName" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" name="phone" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" />
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createLead.isPending}>
-                    {createLead.isPending ? "Creating..." : "Create Lead"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <table className="crm-table leads">
+            <thead>
+              <tr>
+                <th className="checkbox-cell" onClick={(e) => e.stopPropagation()}>
+                  <span className="crm-checkbox" data-checked={allSelected} onClick={toggleAll}>
+                    {allSelected && <Check size={9} strokeWidth={2.6} />}
+                  </span>
+                </th>
+                {sortHeader("Lead", "firstName")}
+                {sortHeader("Company", "company")}
+                {sortHeader("Status", "status")}
+                {sortHeader("Source", "source")}
+                {sortHeader("Created", "createdAt")}
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
+                    Loading leads…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
+                    No leads found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((lead: Lead) => {
+                  const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
+                  const displayName = fullName || lead.company || "—";
+                  const checked = selected.has(lead.id);
+                  return (
+                    <tr
+                      key={lead.id}
+                      className={checked ? "selected" : ""}
+                      onClick={() => setSelectedLead(lead)}
+                    >
+                      <td className="checkbox-cell" onClick={(e) => { e.stopPropagation(); toggleSel(lead.id); }}>
+                        <span className="crm-checkbox" data-checked={checked}>
+                          {checked && <Check size={9} strokeWidth={2.6} />}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="crm-contact-cell">
+                          <div className={`crm-avatar sm ${avatarClass(displayName)}`}>
+                            {initials(displayName)}
+                          </div>
+                          <div className="crm-meta">
+                            <span className="crm-n">{displayName}</span>
+                            {lead.email && <span className="crm-c">{lead.email}</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{ color: "var(--crm-fg)" }}>{lead.company || "—"}</span>
+                      </td>
+                      <td><StageTag status={lead.status} /></td>
+                      <td><span className="crm-tag plain">{lead.source || "—"}</span></td>
+                      <td className="mono" style={{ color: "var(--crm-fg-faint)" }}>
+                        {new Date(lead.createdAt).toLocaleDateString()}
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="crm-btn ghost icon"
+                          style={{ height: 28, width: 28 }}
+                          title="Delete"
+                          onClick={() => {
+                            if (confirm("Delete this lead?")) deleteLead.mutate({ id: lead.id });
+                          }}
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
 
-      <div className="rounded-md border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Company</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Call Outcome</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Loading leads...
-                </TableCell>
-              </TableRow>
-            ) : leads?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  No leads found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              leads?.map((lead) => (
-                <TableRow
-                  key={lead.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSelectedLead(lead)}
-                >
-                  <TableCell className="font-medium">
-                    {lead.company || <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    {lead.firstName || lead.lastName
-                      ? `${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim()
-                      : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {lead.email && (
-                        <a
-                          href={`mailto:${lead.email}`}
-                          className="text-muted-foreground hover:text-primary"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Mail size={16} />
-                        </a>
-                      )}
-                      {lead.phone && (
-                        <a
-                          href={`tel:${lead.phone}`}
-                          className="text-muted-foreground hover:text-primary"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Phone size={16} />
-                        </a>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={getLeadStatusColor(lead.status)}>
-                      {lead.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {lead.callOutcome
-                      ? (CALL_OUTCOME_LABELS[lead.callOutcome] ?? lead.callOutcome)
-                      : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(lead.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 p-0" />}>
-                        <MoreHorizontal size={16} />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="gap-2 cursor-pointer"
-                          onClick={() => setSelectedLead(lead)}
-                        >
-                          <ExternalLink size={14} />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="gap-2 cursor-pointer"
-                          onClick={() => {
-                            if (lead.phone) {
-                              window.location.href = `tel:${lead.phone}`;
-                            } else {
-                              toast.error("No phone number for this lead");
-                            }
-                          }}
-                        >
-                          <Phone size={14} />
-                          Call Lead
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                          onClick={() => {
-                            if (confirm("Are you sure you want to delete this lead?")) {
-                              deleteLead.mutate({ id: lead.id });
-                            }
-                          }}
-                        >
-                          <Trash2 size={14} />
-                          Delete Lead
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+        {selected.size > 0 && (
+          <div className="crm-selbar">
+            <span>{selected.size} selected</span>
+            <button className="crm-pill-btn">Assign</button>
+            <button className="crm-pill-btn">Change status</button>
+            <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
