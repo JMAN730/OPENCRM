@@ -120,18 +120,18 @@ describe("Credentials provider authorize()", () => {
   });
 
   it("returns null when the user does not exist", async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.findFirst.mockResolvedValue(null);
     expect(await authorize({ email: "x@y.com", password: "p" })).toBeNull();
   });
 
   it("returns null when the user has no password (e.g. OAuth-only account)", async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: "u1", password: null });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: "u1", password: null });
     expect(await authorize({ email: "x@y.com", password: "p" })).toBeNull();
   });
 
   it("returns null when the password does not match", async () => {
     const hashed = await bcrypt.hash("right-password", 4);
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: "u1",
       email: "x@y.com",
       password: hashed,
@@ -149,7 +149,7 @@ describe("Credentials provider authorize()", () => {
       role: "ADMIN",
       organizationId: "org-1",
     };
-    mockPrisma.user.findUnique.mockResolvedValue(dbUser);
+    mockPrisma.user.findFirst.mockResolvedValue(dbUser);
 
     const result = await authorize({ email: "x@y.com", password: "right-password" });
     expect(result).toEqual(dbUser);
