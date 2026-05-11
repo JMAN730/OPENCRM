@@ -901,3 +901,9 @@
 .crm-kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px; font-size: 13px; }
 .crm-kv .crm-k { color: var(--crm-fg-faint); }
 .crm-kv .crm-v { color: var(--crm-fg); }
+
+/* ===== Animations ===== */
+@keyframes crm-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
