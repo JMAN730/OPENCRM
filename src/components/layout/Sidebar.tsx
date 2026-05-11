@@ -62,7 +62,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function Sidebar() {
+export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
@@ -95,7 +95,7 @@ export function Sidebar() {
   }, [menuOpen]);
 
   return (
-    <aside className="crm-sidebar">
+    <aside className={`crm-sidebar${isOpen ? " is-open" : ""}`}>
       <div className="crm-brand">
         <div className="crm-brand-mark">
           <span>O</span>
@@ -124,6 +124,7 @@ export function Sidebar() {
                 href={item.href}
                 className="crm-nav-item"
                 aria-current={isActive ? "page" : undefined}
+                onClick={onClose}
               >
                 <span className="crm-nav-icon">
                   <Icon size={16} />
