@@ -1202,4 +1202,50 @@
   color: var(--crm-fg-muted);
 }
 .crm-tl-row .body { color: var(--crm-fg); }
+
+/* ── Hamburger toggle (hidden on desktop) ─────────────────────────── */
+.crm-menu-toggle { display: none; }
+
+/* ── Backdrop (hidden by default; shown via JS on mobile) ────────── */
+.crm-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 99;
+}
+
+/* ── Mobile layout ───────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .crm-app {
+    grid-template-columns: 1fr;
+  }
+
+  .crm-sidebar {
+    position: fixed;
+    inset: 0;
+    width: 280px;
+    height: 100%;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+  }
+
+  .crm-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .crm-sidebar-backdrop {
+    display: block;
+  }
+
+  .crm-menu-toggle {
+    display: flex;
+  }
+
+  .crm-topbar {
+    padding: 0 16px;
+  }
+}
 .crm-tl-row .ts { color: var(--crm-fg-faint); font-family: var(--crm-font-mono); font-size: 11px; }

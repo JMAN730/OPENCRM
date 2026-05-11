@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Inbox, Sparkles, Plus, ChevronRight } from "lucide-react";
+import { Bell, Inbox, Sparkles, Plus, ChevronRight, Menu } from "lucide-react";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -14,12 +14,19 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const title = PAGE_TITLES[pathname] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).find((k) => pathname.startsWith(k)) ?? ""] ?? "Dashboard";
 
   return (
     <div className="crm-topbar">
+      <button
+        className="crm-btn ghost icon crm-menu-toggle"
+        onClick={onMenuClick}
+        aria-label="Toggle menu"
+      >
+        <Menu size={18} />
+      </button>
       <div className="crm-crumbs">
         <span>Sales</span>
         <span className="crm-sep">
