@@ -26,6 +26,70 @@ describe("authRouter.resetPassword", () => {
   });
 });
 
+describe("authRouter.updateProfile", () => {
+  it("rejects unauthenticated callers", async () => {
+    const { caller } = createTestCaller({ session: null });
+    await expect(caller.auth.updateProfile({ name: "New Name" })).rejects.toThrow();
+  });
+
+  it("rejects when neither name nor email is provided", async () => {
+    const { caller } = createTestCaller();
+    await expect(caller.auth.updateProfile({} as never)).rejects.toThrow();
+  });
+
+  it("updates name when only name is provided", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.update.mockResolvedValue({ id: "user-1" });
+
+    const result = await caller.auth.updateProfile({ name: "New Name" });
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { name: "New Name" },
+    });
+  });
+
+  it("normalizes email to lowercase and checks for conflicts", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.update.mockResolvedValue({ id: "user-1" });
+
+    await caller.auth.updateProfile({ email: "NEW@Example.COM" });
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "new@example.com", NOT: { id: "user-1" } },
+    });
+    expect(prisma.user.update.mock.calls[0][0].data.email).toBe("new@example.com");
+  });
+
+  it("throws CONFLICT when new email is already taken by another user", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.user.findFirst.mockResolvedValue({ id: "other-user", email: "taken@example.com" });
+
+    await expect(
+      caller.auth.updateProfile({ email: "taken@example.com" })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("trims whitespace from name", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.user.update.mockResolvedValue({ id: "user-1" });
+
+    await caller.auth.updateProfile({ name: "  Alice  " });
+
+    expect(prisma.user.update.mock.calls[0][0].data.name).toBe("Alice");
+  });
+
+  it("rejects malformed email", async () => {
+    const { caller } = createTestCaller();
+    await expect(caller.auth.updateProfile({ email: "not-an-email" })).rejects.toThrow();
+  });
+});
+
 describe("authRouter.register", () => {
   const validInput = {
     name: "Alice",
