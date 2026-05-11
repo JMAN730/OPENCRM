@@ -110,7 +110,7 @@ model Lead {
   company   String?
   title     String?
   website   String?
-  status    LeadStatus @default(NEW)
+  status    LeadStatus @default(NOT_CONTACTED)
   source    String?
   value     Float?
   callOutcome CallOutcome @default(NOT_CONTACTED)
@@ -139,12 +139,11 @@ model Lead {
 }
 
 enum LeadStatus {
-  NEW
-  CONTACTED
-  QUALIFIED
-  UNQUALIFIED
-  LOST
-  WON
+  NOT_CONTACTED
+  CONNECTED
+  AI_VOICEMAIL
+  NO_ANSWER
+  HUNG_UP
 }
 
 model LeadTag {
