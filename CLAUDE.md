@@ -2,17 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Heads-up from `AGENTS.md`:** this Next.js version has breaking changes from public docs. Before writing Next.js code, consult the in-tree docs at `node_modules/next/dist/docs/` and heed deprecation notices.
+
+Sibling docs at the repo root (`AGENTS.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `README.md`) may carry additional conventions not duplicated here.
+
 ## Commands
 
 ```bash
 npm run dev          # Start dev server at http://localhost:3000
 npm run build        # Production build
+npm run start        # Run production server (after build)
 npm run lint         # ESLint
 npm run seed         # Seed the database (npx prisma db seed)
 
-npx vitest           # Run all tests (watch mode)
-npx vitest run       # Run tests once (no watch)
+npm test             # Run all tests once (vitest run)
+npm run test:watch   # Run tests in watch mode
+npm run test:coverage  # Run tests with coverage
 npx vitest src/features/leads/components/LeadsList.test.tsx  # Run a single test file
+
+npm run tauri:dev    # Tauri desktop wrapper (WIP — see convention #9)
+npm run tauri:build  # Build Tauri desktop app
 
 npx prisma db push   # Sync schema to database (no migrations generated)
 npx prisma studio    # Open Prisma Studio GUI
@@ -76,12 +85,12 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 ```typescript
 // src/server/api/root.ts
 appRouter = {
-  auth:      authRouter,      // me query
   leads:     leadsRouter,     // full CRUD + bulk import
   calls:     callsRouter,     // call logging + retrieval
+  scraper:   scraperRouter,   // Google Maps lead scraper
   tasks:     tasksRouter,     // task CRUD + filtering
   dashboard: dashboardRouter, // KPI aggregations
-  scraper:   scraperRouter,   // Google Maps lead scraper
+  auth:      authRouter,      // me query
 }
 ```
 
@@ -102,7 +111,7 @@ appRouter = {
 
 ### Multi-tenancy
 
-Every organization-scoped model (`Lead`, `ScraperJob`, etc.) is filtered by `organizationId` taken from the session token. **New feature routers must apply this same filter.**
+Every organization-scoped model (`Lead`, `ScraperJob`, `LeadTag`, `Team`, `Pipeline`, etc.) is filtered by `organizationId` taken from the session token. **New feature routers must apply this same filter to every org-scoped read and write — no exceptions.**
 
 ```typescript
 // Pattern used in every protected query
@@ -143,9 +152,14 @@ Organization → User → Lead → CallLog
                            → Note
                            → Activity
                            → Task
+                           → LeadTag (m:n)
+Organization → Team → User
 Organization → Pipeline → PipelineStage
 Organization → ScraperJob
+Organization → LeadTag
 ```
+
+NextAuth tables (`Account`, `Session`, `VerificationToken`) also live in the schema but are managed by `@auth/prisma-adapter` — generally don't touch them.
 
 ### Enums
 
@@ -154,6 +168,7 @@ Organization → ScraperJob
 | `UserRole` | `ADMIN`, `MANAGER`, `USER` |
 | `LeadStatus` | `NEW`, `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `LOST`, `WON` |
 | `CallStatus` | `BUSY`, `NO_ANSWER`, `CONNECTED`, `FAILED`, `CANCELED` |
+| `CallOutcome` | `NOT_CONTACTED`, `ANSWERED`, `HUNG_UP`, `NO_ANSWER`, `AI_VOICEMAIL` (denormalized onto `Lead`) |
 | `ScraperJobStatus` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` |
 
 `Pipeline` / `PipelineStage` exist in the schema but are not yet surfaced in the UI.
@@ -186,11 +201,13 @@ The lead scraper (`/scraper`) generates leads from Google Maps.
 
 ## Testing
 
-Vitest + jsdom + React Testing Library. Setup file: `src/test/setup.ts`. Tests co-located with components (`*.test.tsx`). The `@` alias resolves to `src/`.
+Vitest + jsdom + React Testing Library. Setup file: `src/test/setup.ts`. The `@` alias resolves to `src/`.
 
-Existing tests:
-- `src/features/leads/components/LeadsList.test.tsx`
-- `src/server/scraper/sanitize.test.ts`
+Test files live in two patterns:
+- **Co-located**: `Foo.test.tsx` / `router.test.ts` next to the source (most tests, including every feature router under `src/features/*/server/` and several components).
+- **`__tests__/` subdirectory**: e.g. `src/app/auth/signin/__tests__/page.test.tsx` for page-level tests.
+
+Coverage spans auth (`src/lib/auth.test.ts`, `src/features/auth/server/router.test.ts`), each feature router (`leads`, `tasks`, `scraper`, `calls`, `dashboard`), key components (`LeadsList`, `LeadDetailsModal`, `TasksList`, `Dialer`), and scraper utilities (`src/server/scraper/sanitize.test.ts`).
 
 ---
 
