@@ -28,14 +28,14 @@ export const dashboardRouter = createTRPCRouter({
         where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
       }),
       ctx.prisma.lead.count({
-        where: { organizationId, status: { in: ["QUALIFIED", "WON"] } },
+        where: { organizationId, status: "CONNECTED" },
       }),
       ctx.prisma.task.count({
         where: { user: { organizationId }, completed: false, dueDate: { gte: today, lt: tomorrow } },
       }),
-      ctx.prisma.lead.count({ where: { organizationId, status: "QUALIFIED" } }),
+      ctx.prisma.lead.count({ where: { organizationId, status: "CONNECTED" } }),
       ctx.prisma.lead.aggregate({
-        where: { organizationId, status: "WON", createdAt: { gte: thirtyDaysAgo } },
+        where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
         _sum: { value: true },
       }),
       ctx.prisma.callLog.groupBy({

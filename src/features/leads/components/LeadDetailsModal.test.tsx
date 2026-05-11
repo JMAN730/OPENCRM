@@ -41,7 +41,7 @@ describe('LeadDetailsModal', () => {
     phone: '555-1234',
     company: 'Acme Corp',
     website: 'acme.com',
-    status: 'NEW',
+    status: 'NOT_CONTACTED',
     source: 'Website',
     callOutcome: 'NOT_CONTACTED',
     callNotes: '',

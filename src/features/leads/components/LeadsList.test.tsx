@@ -63,7 +63,7 @@ describe('LeadsList', () => {
           id: '1',
           firstName: 'John',
           lastName: 'Doe',
-          status: 'NEW',
+          status: 'NOT_CONTACTED',
           company: 'Acme Corp',
           email: 'john@example.com',
           phone: '123456789',
