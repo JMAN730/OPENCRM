@@ -151,6 +151,71 @@ function NextActionChip({ label, state }: { label?: string; state?: "due" | "tod
   );
 }
 
+/* ─── Log Note Dialog ───────────────────────────────────────────────── */
+
+function LogNoteDialog({ leadId, onClose }: { leadId: string; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const utils = trpc.useUtils();
+  const createNote = trpc.leads.createNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note saved");
+      utils.leads.getNotes.invalidate({ leadId });
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "oklch(15% 0.012 70 / 0.45)",
+        backdropFilter: "blur(2px)", zIndex: 70, display: "grid", placeItems: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "var(--crm-surface)", border: "1px solid var(--crm-border)",
+          borderRadius: "var(--crm-radius-lg)", padding: 24, width: 440,
+          boxShadow: "var(--crm-shadow-pop)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--crm-fg)" }}>
+          Log note
+        </h3>
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Write your note…"
+          rows={5}
+          style={{
+            width: "100%", padding: "10px 12px", border: "1px solid var(--crm-border)",
+            borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface-2)",
+            fontSize: 13, fontFamily: "var(--crm-font-sans)", color: "var(--crm-fg)",
+            outline: "none", resize: "vertical", boxSizing: "border-box",
+          }}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button type="button" className="crm-btn ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="crm-btn primary"
+            style={{ flex: 1, justifyContent: "center" }}
+            disabled={!text.trim() || createNote.isPending}
+            onClick={() => createNote.mutate({ leadId, content: text.trim() })}
+          >
+            {createNote.isPending ? "Saving…" : "Save note"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Centered Lead Modal ───────────────────────────────────────────── */
 
 function LeadModal({
@@ -167,7 +232,10 @@ function LeadModal({
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? lead.callOutcome : null);
+  const [noteOpen, setNoteOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
+
+  const { data: notes = [] } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
 
   const utils = trpc.useUtils();
   const updateOutcome = trpc.leads.updateCallOutcome.useMutation({
@@ -201,6 +269,8 @@ function LeadModal({
   const outcomeCfg = OUTCOMES.find((o) => o.id === outcome);
 
   return (
+    <>
+    {noteOpen && <LogNoteDialog leadId={lead.id} onClose={() => setNoteOpen(false)} />}
     <div className="crm-modal-backdrop" onClick={onClose}>
       <div className="crm-modal crm-app" onClick={(e) => e.stopPropagation()}>
         <div className="crm-modal-head">
@@ -230,7 +300,7 @@ function LeadModal({
               <Mail size={13} /> Email
             </a>
           )}
-          <button className="crm-btn"><NotebookPen size={13} /> Log note</button>
+          <button className="crm-btn" onClick={() => setNoteOpen(true)}><NotebookPen size={13} /> Log note</button>
 
           <div className="crm-outcome-wrap" ref={popRef}>
             <button
@@ -346,6 +416,13 @@ function LeadModal({
                 <span className="body">Lead created from {lead.source || "manual entry"}</span>
                 <span className="ts">{relativeTime(lead.createdAt)}</span>
               </div>
+              {notes.map((n) => (
+                <div key={n.id} className="crm-tl-row">
+                  <span className="ico"><NotebookPen size={11} /></span>
+                  <span className="body">{n.content}</span>
+                  <span className="ts">{relativeTime(n.createdAt as unknown as string)}</span>
+                </div>
+              ))}
               {lead.callNotes && (
                 <div className="crm-tl-row">
                   <span className="ico"><Phone size={11} /></span>
@@ -373,6 +450,7 @@ function LeadModal({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
