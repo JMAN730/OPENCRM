@@ -1,15 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { Toaster } from "@/components/ui/sonner";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="crm-app">
-      <Sidebar />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {sidebarOpen && (
+        <div
+          className="crm-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <div className="crm-main">
-        <Header />
+        <Header onMenuClick={() => setSidebarOpen((o) => !o)} />
         <main style={{ flex: 1, overflowY: "auto" }}>
           {children}
         </main>
