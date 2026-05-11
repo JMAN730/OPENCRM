@@ -55,7 +55,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.organizationId = token.organizationId;
-        session.user.teamId = token.teamId;
+        (session.user as any).teamId = (token as any).teamId ?? null;
       }
       return session;
     },
@@ -69,7 +69,7 @@ export const authOptions: NextAuthOptions = {
             token.id = dbUser.id;
             token.role = dbUser.role;
             token.organizationId = dbUser.organizationId;
-            token.teamId = dbUser.teamId;
+            (token as any).teamId = dbUser.teamId ?? null;
           }
         } catch (err) {
           console.error("[auth] jwt callback db error:", err);
