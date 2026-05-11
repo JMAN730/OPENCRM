@@ -124,8 +124,7 @@ export default function SignInPage() {
             image: session.user.image,
           });
         }
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
       }
     } catch {
       setError("Something went wrong. Please try again.");
