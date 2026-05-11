@@ -290,6 +290,46 @@ export const leadsRouter = createTRPCRouter({
       return { count: result.count };
     }),
 
+  createNote: organizationProcedure
+    .input(z.object({ leadId: z.string(), content: z.string().min(1).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      const note = await ctx.prisma.note.create({
+        data: { content: input.content, leadId: input.leadId, userId: ctx.session.user.id },
+      });
+      await logActivity(ctx.prisma, {
+        leadId: input.leadId,
+        userId: ctx.session.user.id,
+        type: "NOTE_ADDED",
+        description: "Added a note",
+      });
+      return note;
+    }),
+
+  getNotes: organizationProcedure
+    .input(z.object({ leadId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return ctx.prisma.note.findMany({
+        where: { leadId: input.leadId },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { user: { select: { id: true, name: true, email: true, image: true } } },
+      });
+    }),
+
   /** Returns activities for a single lead (scope-filtered). */
   getActivities: organizationProcedure
     .input(z.object({ leadId: z.string() }))
