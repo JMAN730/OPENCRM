@@ -29,6 +29,14 @@ vi.mock('@/app/_trpc/client', () => ({
       updateCallOutcome: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      assign: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    teams: {
+      myTeam: {
+        useQuery: vi.fn(() => ({ data: null })),
+      },
     },
   },
 }))

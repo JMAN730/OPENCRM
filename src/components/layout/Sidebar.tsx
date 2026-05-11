@@ -8,6 +8,7 @@ import {
   Phone,
   Calendar,
   MessageSquare,
+  Users2,
   Settings,
   BarChart3,
   Bot,
@@ -31,6 +32,7 @@ const NAV_GROUPS = [
     title: "Workspace",
     items: [
       { id: "leads",    label: "Leads",    href: "/leads",    icon: Users },
+      { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
       { id: "outreach", label: "Outreach", href: "/outreach", icon: MessageSquare },
       { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },

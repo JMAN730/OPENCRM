@@ -25,6 +25,8 @@ type Lead = {
   callOutcome?: string | null;
   callNotes?: string | null;
   createdAt: string;
+  assignedToId?: string | null;
+  assignedTo?: { id: string; name: string | null; email: string | null; image: string | null } | null;
 };
 
 const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
@@ -442,9 +444,25 @@ export function LeadsList() {
   const [sortBy, setSortBy] = useState<{ key: keyof Lead | "score"; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" });
   const [selected, setSelected] = useState(new Set<string>());
   const [showAdd, setShowAdd] = useState(false);
+  const [showAssign, setShowAssign] = useState(false);
 
   const utils = trpc.useUtils();
-  const { data: leads = [], isLoading } = trpc.leads.getAll.useQuery({ search: debouncedSearch });
+  const { data: leads = [], isLoading } = trpc.leads.getAll.useQuery({
+    search: debouncedSearch,
+  });
+  const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
+  const assignMutation = trpc.leads.assign.useMutation({
+    onSuccess: () => {
+      toast.success("Leads reassigned");
+      setSelected(new Set());
+      setShowAssign(false);
+      utils.leads.getAll.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const assignableUsers = myTeam?.users ?? [];
+  const canAssign = assignableUsers.length > 0;
 
   const createLead = trpc.leads.create.useMutation({
     onSuccess: () => { toast.success("Lead created"); setShowAdd(false); utils.leads.getAll.invalidate(); },
@@ -606,6 +624,7 @@ export function LeadsList() {
                 </th>
                 {sortHeader("Lead", "firstName")}
                 {sortHeader("Company", "company")}
+                <th>Owner</th>
                 {sortHeader("Stage", "status")}
                 {sortHeader("Score", "score")}
                 <th>Touches</th>
@@ -617,13 +636,13 @@ export function LeadsList() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
+                  <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
                     Loading leads…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
+                  <td colSpan={10} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
                     No leads found.
                   </td>
                 </tr>
@@ -664,6 +683,18 @@ export function LeadsList() {
                           )}
                         </div>
                       </td>
+                      <td>
+                        {lead.assignedTo ? (
+                          <div className="crm-contact" title={lead.assignedTo.name || lead.assignedTo.email || ""}>
+                            <div className={`crm-avatar xs ${avatarClass(lead.assignedTo.name || "?")}`}>
+                              {initials(lead.assignedTo.name || lead.assignedTo.email || "?")}
+                            </div>
+                            <span style={{ fontSize: 12 }}>{lead.assignedTo.name || lead.assignedTo.email || "—"}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--crm-fg-faint)", fontSize: 12 }}>Unassigned</span>
+                        )}
+                      </td>
                       <td><StageTag status={lead.status} /></td>
                       <td><ScoreBar score={score} temp={temp} /></td>
                       <td><Touches n={touches} /></td>
@@ -694,14 +725,68 @@ export function LeadsList() {
         </div>
 
         {selected.size > 0 && (
-          <div className="crm-selbar">
+          <div className="crm-selbar" style={{ position: "relative" }}>
             <span>{selected.size} selected</span>
-            <button className="crm-pill-btn">Assign</button>
+            <button
+              className="crm-pill-btn"
+              disabled={!canAssign}
+              title={canAssign ? "Reassign selected leads" : "Only team leaders or admins can reassign"}
+              onClick={() => setShowAssign((v) => !v)}
+            >
+              Assign
+            </button>
             <button className="crm-pill-btn">Change stage</button>
             <button className="crm-pill-btn">Sequence</button>
             <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
+
+            {showAssign && (
+              <div
+                className="crm-card"
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 8px)",
+                  left: 90,
+                  minWidth: 220,
+                  padding: 4,
+                  zIndex: 50,
+                  boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                  borderRadius: "var(--crm-radius-md)",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>
+                  Assign to
+                </div>
+                {assignableUsers.map((u) => (
+                  <button
+                    key={u.id}
+                    className="crm-nav-item"
+                    style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                    onClick={() =>
+                      assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: u.id })
+                    }
+                  >
+                    <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`}>
+                      {initials(u.name || u.email || "?")}
+                    </div>
+                    <span>{u.name || u.email}</span>
+                  </button>
+                ))}
+                <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
+                <button
+                  className="crm-nav-item"
+                  style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
+                  onClick={() =>
+                    assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: null })
+                  }
+                >
+                  Unassign
+                </button>
+              </div>
+            )}
           </div>
         )}
+
       </div>
     </>
   );
