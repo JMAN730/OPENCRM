@@ -54,6 +54,40 @@ export const authRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  updateProfile: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255).optional(),
+        email: z.string().email().max(255).optional(),
+      }).refine((d) => d.name !== undefined || d.email !== undefined, {
+        message: "At least one field must be provided",
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      if (input.email) {
+        const email = input.email.toLowerCase().trim();
+        const existing = await ctx.prisma.user.findFirst({
+          where: { email, NOT: { id: userId } },
+        });
+        if (existing) {
+          throw new TRPCError({ code: "CONFLICT", message: "An account with that email already exists." });
+        }
+        input.email = email;
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...(input.name !== undefined && { name: input.name.trim() }),
+          ...(input.email !== undefined && { email: input.email }),
+        },
+      });
+
+      return { ok: true };
+    }),
+
   deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
 
