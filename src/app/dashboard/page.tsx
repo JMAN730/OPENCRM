@@ -127,15 +127,14 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
 
 /* ── Pipeline Card ── */
 const LEAD_STATUS_LABEL: Record<string, string> = {
-  NEW:         "New",
-  CONTACTED:   "Contacted",
-  QUALIFIED:   "Qualified",
-  UNQUALIFIED: "Unqualified",
-  LOST:        "Lost",
-  WON:         "Won",
+  NOT_CONTACTED: "Not Contacted",
+  CONNECTED:     "Connected",
+  AI_VOICEMAIL:  "AI Voicemail",
+  NO_ANSWER:     "No Answer",
+  HUNG_UP:       "Hung Up",
 };
 
-const LEAD_STATUS_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "UNQUALIFIED", "LOST", "WON"];
+const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 
 function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; count: number }[] }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);

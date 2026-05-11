@@ -35,8 +35,8 @@ describe("dashboardRouter.getKpiStats", () => {
   it("computes conversionRate = qualified / total * 100", async () => {
     // Order of prisma.lead.count calls inside Promise.all:
     //   1) totalLeadsCount         = 200
-    //   2) appointmentsSetCount    = 50  (status in QUALIFIED|WON)
-    //   3) qualifiedLeadsCount     = 50  (status QUALIFIED)
+    //   2) appointmentsSetCount    = 50  (status CONNECTED)
+    //   3) qualifiedLeadsCount     = 50  (status CONNECTED)
     prisma.lead.count
       .mockResolvedValueOnce(200) // total
       .mockResolvedValueOnce(50) // appointments

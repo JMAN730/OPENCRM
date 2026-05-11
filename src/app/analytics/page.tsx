@@ -7,10 +7,10 @@ import type { AppRouter } from "@/server/api/root";
 
 type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"][number];
 
-const LEAD_STATUS_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "WON", "UNQUALIFIED", "LOST"];
+const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 const LEAD_STATUS_LABEL: Record<string, string> = {
-  NEW: "New", CONTACTED: "Contacted", QUALIFIED: "Qualified",
-  UNQUALIFIED: "Unqualified", WON: "Won", LOST: "Lost",
+  NOT_CONTACTED: "Not Contacted", NO_ANSWER: "No Answer", AI_VOICEMAIL: "AI Voicemail",
+  HUNG_UP: "Hung Up", CONNECTED: "Connected",
 };
 
 const CALL_STATUS_LABEL: Record<string, string> = {
