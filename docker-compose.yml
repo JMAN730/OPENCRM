@@ -36,6 +36,12 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       NODE_ENV: ${NODE_ENV}
+      SCRAPER_ENABLED: ${SCRAPER_ENABLED:-true}
+      SCRAPER_PYTHON_PATH: /opt/venv/bin/python3
+      SCRAPER_SCRIPT_PATH: /app/scraper/scraper.py
+      SCRAPER_OUTPUT_BASE_DIR: /app/scraper-output
+    volumes:
+      - scraper_output:/app/scraper-output
     depends_on:
       db:
         condition: service_healthy
@@ -44,3 +50,4 @@ services:
 
 volumes:
   postgres_data_v2:
+  scraper_output:
