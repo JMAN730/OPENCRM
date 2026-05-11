@@ -1,6 +1,7 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { logActivity } from "@/server/activity";
 
 export const callsRouter = createTRPCRouter({
   logCall: organizationProcedure
@@ -20,7 +21,7 @@ export const callsRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
-      return ctx.prisma.callLog.create({
+      const call = await ctx.prisma.callLog.create({
         data: {
           leadId: input.leadId,
           userId: ctx.session.user.id,
@@ -29,6 +30,15 @@ export const callsRouter = createTRPCRouter({
           disposition: input.disposition,
         },
       });
+      await logActivity(ctx.prisma, {
+        leadId: input.leadId,
+        userId: ctx.session.user.id,
+        type: "CALL_LOGGED",
+        description: `Logged call (${input.status.toLowerCase()}${
+          input.duration ? `, ${input.duration}s` : ""
+        })`,
+      });
+      return call;
     }),
 
   getForLead: organizationProcedure

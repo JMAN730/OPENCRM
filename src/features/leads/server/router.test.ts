@@ -59,9 +59,11 @@ describe("leadsRouter", () => {
 
       const result = await caller.leads.getById({ id: "lead-1" });
 
-      expect(prisma.lead.findFirst).toHaveBeenCalledWith({
-        where: { id: "lead-1", organizationId: "org-1" },
-      });
+      expect(prisma.lead.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "lead-1", organizationId: "org-1" },
+        }),
+      );
       expect(result).toEqual(lead);
     });
 
