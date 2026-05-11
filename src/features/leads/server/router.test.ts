@@ -107,14 +107,14 @@ describe("leadsRouter", () => {
       await caller.leads.create({
         firstName: "John",
         lastName: "Doe",
-        status: "NEW",
+        status: "NOT_CONTACTED",
       });
 
       expect(prisma.lead.create).toHaveBeenCalledWith({
         data: {
           firstName: "John",
           lastName: "Doe",
-          status: "NEW",
+          status: "NOT_CONTACTED",
           organizationId: "org-1",
           assignedToId: "user-1",
         },
@@ -126,7 +126,7 @@ describe("leadsRouter", () => {
         sessionOverrides: { organizationId: null },
       });
 
-      await expect(orphanCaller.leads.create({ status: "NEW" })).rejects.toMatchObject({
+      await expect(orphanCaller.leads.create({ status: "NOT_CONTACTED" })).rejects.toMatchObject({
         code: "INTERNAL_SERVER_ERROR",
       });
     });
@@ -144,14 +144,14 @@ describe("leadsRouter", () => {
       prisma.lead.createMany.mockResolvedValue({ count: 2 });
 
       const result = await caller.leads.bulkCreate([
-        { firstName: "A", status: "NEW" },
-        { firstName: "B", status: "NEW" },
+        { firstName: "A", status: "NOT_CONTACTED" },
+        { firstName: "B", status: "NOT_CONTACTED" },
       ]);
 
       expect(prisma.lead.createMany).toHaveBeenCalledWith({
         data: [
-          { firstName: "A", status: "NEW", organizationId: "org-1", assignedToId: "user-1" },
-          { firstName: "B", status: "NEW", organizationId: "org-1", assignedToId: "user-1" },
+          { firstName: "A", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
+          { firstName: "B", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
         ],
       });
       expect(result).toEqual({ count: 2 });
@@ -162,7 +162,7 @@ describe("leadsRouter", () => {
     });
 
     it("rejects payloads larger than 5000 rows", async () => {
-      const big = Array.from({ length: 5001 }, () => ({ status: "NEW" as const }));
+      const big = Array.from({ length: 5001 }, () => ({ status: "NOT_CONTACTED" as const }));
       await expect(caller.leads.bulkCreate(big)).rejects.toThrow();
     });
   });

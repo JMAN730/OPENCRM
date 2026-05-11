@@ -106,13 +106,12 @@ async function main() {
 
   // ── Build lead records ───────────────────────────────────────────────────
   // Distribution that totals 463:
-  //   18 WON  recent  ($7,862 revenue, last 30 days)
-  //   20 WON  older   (31-90 days ago)
-  //   60 QUALIFIED
-  //  110 CONTACTED
-  //  185 NEW
-  //   60 LOST
-  //   10 UNQUALIFIED
+  //   18 CONNECTED  recent  ($7,862 revenue, last 30 days)
+  //   20 CONNECTED  older   (31-90 days ago)
+  //   17 AI_VOICEMAIL
+  //  153 NO_ANSWER
+  //  195 NOT_CONTACTED  (185 + 10 merged)
+  //   60 HUNG_UP
 
   type LeadData = {
     firstName: string; lastName: string; company: string; phone: string; source: string;
@@ -134,20 +133,18 @@ async function main() {
     });
   };
 
-  // 18 WON recent
-  for (let k = 0; k < 18; k++) push("WON", WON_DAYS_AGO[k], WON_VALUES[k]);
-  // 20 WON older
-  for (let k = 0; k < 20; k++) push("WON", 31 + k * 3);
-  // 17 QUALIFIED  → 17/463 = 3.67% conversion rate
-  for (let k = 0; k < 17; k++) push("QUALIFIED", 3 + (k % 45));
-  // 153 CONTACTED
-  for (let k = 0; k < 153; k++) push("CONTACTED", 1 + (k % 60));
-  // 185 NEW
-  for (let k = 0; k < 185; k++) push("NEW", 1 + (k % 30));
-  // 60 LOST
-  for (let k = 0; k < 60; k++) push("LOST", 10 + (k % 90));
-  // 10 UNQUALIFIED
-  for (let k = 0; k < 10; k++) push("UNQUALIFIED", 5 + k * 3);
+  // 18 CONNECTED recent (with revenue value)
+  for (let k = 0; k < 18; k++) push("CONNECTED", WON_DAYS_AGO[k], WON_VALUES[k]);
+  // 20 CONNECTED older
+  for (let k = 0; k < 20; k++) push("CONNECTED", 31 + k * 3);
+  // 17 AI_VOICEMAIL
+  for (let k = 0; k < 17; k++) push("AI_VOICEMAIL", 3 + (k % 45));
+  // 153 NO_ANSWER
+  for (let k = 0; k < 153; k++) push("NO_ANSWER", 1 + (k % 60));
+  // 195 NOT_CONTACTED
+  for (let k = 0; k < 195; k++) push("NOT_CONTACTED", 1 + (k % 30));
+  // 60 HUNG_UP
+  for (let k = 0; k < 60; k++) push("HUNG_UP", 10 + (k % 90));
 
   // Create leads in batches of 50 to avoid hitting libsql limits
   const BATCH = 50;
@@ -210,8 +207,8 @@ async function main() {
     await prisma.task.create({ data: { title: taskTitles[k], userId: user.id, leadId: leadIds[13 + k], dueDate: subDays(new Date(), k + 1), completed: true } });
   }
 
-  // ── Notes on a few WON leads ─────────────────────────────────────────────
-  const wonIds = (await prisma.lead.findMany({ where: { organizationId: org.id, status: "WON" }, take: 5, select: { id: true } })).map(l => l.id);
+  // ── Notes on a few CONNECTED leads ──────────────────────────────────────
+  const wonIds = (await prisma.lead.findMany({ where: { organizationId: org.id, status: "CONNECTED" }, take: 5, select: { id: true } })).map(l => l.id);
   const noteTexts = [
     "Great client — responded quickly and signed same day.",
     "Needed two follow-ups before closing. Good fit for upsell next quarter.",
