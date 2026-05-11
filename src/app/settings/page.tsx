@@ -9,12 +9,25 @@ import { toast } from "sonner";
 const NAV = ["Profile", "Workspace", "Members", "Integrations", "Billing", "API", "Audit log"];
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const [active, setActive] = useState("Profile");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const userName = session?.user?.name ?? "—";
   const userEmail = session?.user?.email ?? "—";
+
+  const updateProfile = trpc.auth.updateProfile.useMutation({
+    onSuccess: async () => {
+      await updateSession();
+      toast.success("Profile updated");
+      setEditing(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to update profile");
+    },
+  });
 
   const deleteAccount = trpc.auth.deleteAccount.useMutation({
     onSuccess: async () => {
@@ -26,6 +39,17 @@ export default function SettingsPage() {
       setConfirmDelete(false);
     },
   });
+
+  const handleEdit = (key: string, current: string) => {
+    setEditing(key);
+    setEditValue(current === "—" ? "" : current);
+  };
+
+  const handleSave = (key: string) => {
+    if (!editValue.trim()) return;
+    if (key === "Name") updateProfile.mutate({ name: editValue.trim() });
+    else if (key === "Email") updateProfile.mutate({ email: editValue.trim() });
+  };
 
   const profileRows: [string, string][] = [
     ["Name",  userName],
@@ -54,6 +78,8 @@ export default function SettingsPage() {
     "Audit log":  "A history of actions taken in this workspace.",
   };
 
+  const editableKeys = new Set(["Name", "Email"]);
+
   return (
     <DashboardLayout>
       <div className="crm-content">
@@ -71,7 +97,7 @@ export default function SettingsPage() {
                 key={s}
                 className="crm-nav-item"
                 aria-current={active === s ? "page" : undefined}
-                onClick={() => setActive(s)}
+                onClick={() => { setActive(s); setEditing(null); }}
                 style={{ textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
               >
                 {s}
@@ -96,10 +122,54 @@ export default function SettingsPage() {
                   >
                     <div style={{ color: "var(--crm-fg-muted)" }}>{k}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ color: "var(--crm-fg)" }}>{v}</span>
-                      <button className="crm-btn" style={{ height: 24, padding: "0 10px", fontSize: 12, marginLeft: "auto" }}>
-                        Edit
-                      </button>
+                      {editing === k ? (
+                        <>
+                          <input
+                            autoFocus
+                            type={k === "Email" ? "email" : "text"}
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSave(k);
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            style={{
+                              flex: 1, padding: "4px 8px", fontSize: 13,
+                              border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+                              background: "var(--crm-surface)", color: "var(--crm-fg)",
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            className="crm-btn primary"
+                            style={{ height: 24, padding: "0 10px", fontSize: 12 }}
+                            disabled={updateProfile.isPending || !editValue.trim()}
+                            onClick={() => handleSave(k)}
+                          >
+                            {updateProfile.isPending ? "Saving…" : "Save"}
+                          </button>
+                          <button
+                            className="crm-btn"
+                            style={{ height: 24, padding: "0 10px", fontSize: 12 }}
+                            onClick={() => setEditing(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ color: "var(--crm-fg)" }}>{v}</span>
+                          {editableKeys.has(k) && (
+                            <button
+                              className="crm-btn"
+                              style={{ height: 24, padding: "0 10px", fontSize: 12, marginLeft: "auto" }}
+                              onClick={() => handleEdit(k, v)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
