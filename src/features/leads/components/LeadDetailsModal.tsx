@@ -43,7 +43,7 @@ type Lead = {
 
 const CALL_OUTCOME_OPTIONS = [
   { value: "NOT_CONTACTED", label: "Not Contacted" },
-  { value: "ANSWERED", label: "Answered" },
+  { value: "ANSWERED", label: "Connected" },
   { value: "HUNG_UP", label: "Hung Up" },
   { value: "NO_ANSWER", label: "No Answer" },
   { value: "AI_VOICEMAIL", label: "AI Voicemail" },
