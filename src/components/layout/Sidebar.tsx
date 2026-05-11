@@ -63,8 +63,8 @@ function initials(name: string) {
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const userName = session?.user?.name || "Jordan Mehta";
-  const userRole = (session?.user as { role?: string })?.role || "Account Executive";
+  const userName = session?.user?.name ?? "";
+  const userRole = (session?.user as { role?: string })?.role ?? "";
 
   const { data: counts } = trpc.dashboard.sidebarCounts.useQuery(
     undefined,
