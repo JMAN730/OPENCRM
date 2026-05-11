@@ -5,6 +5,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
+  // Explicitly control secure cookies based on actual protocol.
+  // When running behind a reverse proxy on HTTP, the __Secure- prefix
+  // would cause browsers to silently drop the cookie.
+  useSecureCookies: (process.env.NEXTAUTH_URL ?? "").startsWith("https://"),
   providers: [
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
