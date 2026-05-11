@@ -1,0 +1,289 @@
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+
+function isAdmin(role: string) {
+  return role === "ADMIN";
+}
+
+async function findLedTeam(prisma: any, userId: string, orgId: string, teamId: string) {
+  return prisma.team.findFirst({
+    where: { id: teamId, organizationId: orgId, leaderId: userId },
+    select: { id: true },
+  });
+}
+
+export const teamsRouter = createTRPCRouter({
+  /** All teams in the org, with members and leader. */
+  list: organizationProcedure.query(({ ctx }) => {
+    return ctx.prisma.team.findMany({
+      where: { organizationId: ctx.organizationId },
+      include: {
+        leader: { select: { id: true, name: true, email: true, image: true } },
+        users: { select: { id: true, name: true, email: true, image: true, role: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+  }),
+
+  /** All users in the org — used by admin UIs to populate team membership pickers. */
+  organizationMembers: organizationProcedure.query(({ ctx }) => {
+    return ctx.prisma.user.findMany({
+      where: { organizationId: ctx.organizationId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        role: true,
+        teamId: true,
+        team: { select: { id: true, name: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+  }),
+
+  /**
+   * The team the current user belongs to (or leads), with members.
+   * Returns null if the user is not on a team and leads none.
+   */
+  myTeam: organizationProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const team = await ctx.prisma.team.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        OR: [{ users: { some: { id: userId } } }, { leaderId: userId }],
+      },
+      include: {
+        leader: { select: { id: true, name: true, email: true, image: true } },
+        users: {
+          select: { id: true, name: true, email: true, image: true, role: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    });
+    return team;
+  }),
+
+  /** Recent activities by everyone on the same team as the caller. */
+  activityFeed: organizationProcedure
+    .input(
+      z
+        .object({
+          teamId: z.string().optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+        })
+        .optional()
+        .default(() => ({})),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const role = (ctx.session.user as any).role as string;
+
+      const team = input.teamId
+        ? await ctx.prisma.team.findFirst({
+            where: { id: input.teamId, organizationId: ctx.organizationId },
+            include: { users: { select: { id: true } } },
+          })
+        : await ctx.prisma.team.findFirst({
+            where: {
+              organizationId: ctx.organizationId,
+              OR: [{ users: { some: { id: userId } } }, { leaderId: userId }],
+            },
+            include: { users: { select: { id: true } } },
+          });
+
+      if (!team) return [];
+
+      // Authorization: must be on the team, lead the team, or be ADMIN.
+      const memberIds = team.users.map((u) => u.id);
+      const isMember = memberIds.includes(userId);
+      const isLeader =
+        (await ctx.prisma.team.findFirst({
+          where: { id: team.id, leaderId: userId },
+          select: { id: true },
+        })) !== null;
+      if (!isAdmin(role) && !isMember && !isLeader) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      return ctx.prisma.activity.findMany({
+        where: { userId: { in: memberIds } },
+        orderBy: { createdAt: "desc" },
+        take: input.limit ?? 50,
+        include: {
+          user: { select: { id: true, name: true, email: true, image: true } },
+          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
+        },
+      });
+    }),
+
+  /**
+   * Snapshot of a single team member's account — leads + recent activity + counters.
+   * Accessible to ADMINs, the user themselves, or the leader of one of their teams.
+   */
+  memberDetail: organizationProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      const callerId = ctx.session.user.id;
+
+      const target = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, organizationId: ctx.organizationId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          role: true,
+          teamId: true,
+          team: { select: { id: true, name: true, leaderId: true } },
+        },
+      });
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const allowed =
+        isAdmin(role) ||
+        callerId === target.id ||
+        (target.team?.leaderId && target.team.leaderId === callerId);
+
+      if (!allowed) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const [leads, recentCalls, openTasks, leadCount, callCount] = await Promise.all([
+        ctx.prisma.lead.findMany({
+          where: {
+            organizationId: ctx.organizationId,
+            assignedToId: target.id,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        ctx.prisma.callLog.findMany({
+          where: { userId: target.id, lead: { organizationId: ctx.organizationId } },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: { lead: { select: { id: true, firstName: true, lastName: true, company: true } } },
+        }),
+        ctx.prisma.task.findMany({
+          where: { userId: target.id, completed: false },
+          orderBy: { dueDate: "asc" },
+          take: 20,
+        }),
+        ctx.prisma.lead.count({
+          where: { organizationId: ctx.organizationId, assignedToId: target.id },
+        }),
+        ctx.prisma.callLog.count({
+          where: { userId: target.id, lead: { organizationId: ctx.organizationId } },
+        }),
+      ]);
+
+      return { user: target, leads, recentCalls, openTasks, leadCount, callCount };
+    }),
+
+  // ── Admin/leader management ────────────────────────────────────────────────
+
+  create: organizationProcedure
+    .input(z.object({ name: z.string().min(1).max(80), leaderId: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      if (input.leaderId) {
+        const leader = await ctx.prisma.user.findFirst({
+          where: { id: input.leaderId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!leader) throw new TRPCError({ code: "BAD_REQUEST", message: "Leader not in organization." });
+      }
+      return ctx.prisma.team.create({
+        data: {
+          name: input.name,
+          organizationId: ctx.organizationId,
+          leaderId: input.leaderId,
+        },
+      });
+    }),
+
+  update: organizationProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().min(1).max(80).optional(),
+        leaderId: z.string().nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      const team = await ctx.prisma.team.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+      });
+      if (!team) throw new TRPCError({ code: "NOT_FOUND" });
+      if (input.leaderId) {
+        const leader = await ctx.prisma.user.findFirst({
+          where: { id: input.leaderId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!leader) throw new TRPCError({ code: "BAD_REQUEST", message: "Leader not in organization." });
+      }
+      return ctx.prisma.team.update({
+        where: { id: input.id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.leaderId !== undefined ? { leaderId: input.leaderId } : {}),
+        },
+      });
+    }),
+
+  delete: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      const team = await ctx.prisma.team.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+      });
+      if (!team) throw new TRPCError({ code: "NOT_FOUND" });
+      // Detach members first (User.teamId is nullable).
+      await ctx.prisma.user.updateMany({
+        where: { teamId: input.id },
+        data: { teamId: null },
+      });
+      return ctx.prisma.team.delete({ where: { id: input.id } });
+    }),
+
+  /**
+   * Add or move a user into a team.
+   * Admins can manage any team; team leaders can manage only the teams they lead.
+   */
+  setMembership: organizationProcedure
+    .input(z.object({ userId: z.string(), teamId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = (ctx.session.user as any).role as string;
+      const callerId = ctx.session.user.id;
+
+      const user = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, organizationId: ctx.organizationId },
+        select: { id: true, teamId: true },
+      });
+      if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+
+      if (!isAdmin(role)) {
+        // Leader can only move members into/out of a team they lead.
+        const targetTeamId = input.teamId ?? user.teamId;
+        if (!targetTeamId) throw new TRPCError({ code: "FORBIDDEN" });
+        const led = await findLedTeam(ctx.prisma, callerId, ctx.organizationId, targetTeamId);
+        if (!led) throw new TRPCError({ code: "FORBIDDEN" });
+      } else if (input.teamId) {
+        const team = await ctx.prisma.team.findFirst({
+          where: { id: input.teamId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!team) throw new TRPCError({ code: "BAD_REQUEST", message: "Team not in org." });
+      }
+
+      return ctx.prisma.user.update({
+        where: { id: input.userId },
+        data: { teamId: input.teamId },
+      });
+    }),
+});

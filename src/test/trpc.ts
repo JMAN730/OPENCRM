@@ -62,10 +62,24 @@ export function createMockPrisma() {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
     },
     organization: {
       create: vi.fn(),
+    },
+    team: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    activity: {
+      create: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
     },
   };
 }
