@@ -43,7 +43,7 @@ type ParsedLead = {
   company?: string;
   website?: string;
   source?: string;
-  status?: "NEW" | "CONTACTED" | "QUALIFIED" | "UNQUALIFIED" | "LOST" | "WON";
+  status?: "NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP";
 };
 
 // Normalizes a cell value to a clean string, handling Excel numeric types
@@ -94,13 +94,13 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
     else delete lead.website;
   }
 
-  const validStatuses = ["NEW","CONTACTED","QUALIFIED","UNQUALIFIED","LOST","WON"] as const;
+  const validStatuses = ["NOT_CONTACTED","CONNECTED","AI_VOICEMAIL","NO_ANSWER","HUNG_UP"] as const;
   const rawStatus = lead.status?.toUpperCase();
   return {
     ...lead,
     status: validStatuses.includes(rawStatus as typeof validStatuses[number])
       ? (rawStatus as typeof validStatuses[number])
-      : "NEW",
+      : "NOT_CONTACTED",
   };
 }
 

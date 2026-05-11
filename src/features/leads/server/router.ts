@@ -19,8 +19,8 @@ const leadInputSchema = z.object({
   company: optionalShortString(200),
   website: optionalUrl,
   status: z
-    .enum(["NEW", "CONTACTED", "QUALIFIED", "UNQUALIFIED", "LOST", "WON"])
-    .default("NEW"),
+    .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
+    .default("NOT_CONTACTED"),
   source: optionalShortString(100),
 });
 
@@ -182,11 +182,19 @@ export const leadsRouter = createTRPCRouter({
         where: { id: input.id, ...leadWhereFromScope(scope) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      const outcomeToStatus: Record<string, string> = {
+        ANSWERED:      "CONNECTED",
+        AI_VOICEMAIL:  "AI_VOICEMAIL",
+        NO_ANSWER:     "NO_ANSWER",
+        HUNG_UP:       "HUNG_UP",
+        NOT_CONTACTED: "NOT_CONTACTED",
+      };
       const updated = await ctx.prisma.lead.update({
         where: { id: input.id },
         data: {
           callOutcome: input.callOutcome,
           callNotes: input.callNotes,
+          status: outcomeToStatus[input.callOutcome] as any,
         },
       });
       await logActivity(ctx.prisma, {

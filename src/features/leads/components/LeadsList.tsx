@@ -30,15 +30,14 @@ type Lead = {
 };
 
 const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
-  NEW:         { cls: "plain",  label: "New" },
-  CONTACTED:   { cls: "accent", label: "Contacted" },
-  QUALIFIED:   { cls: "warn",   label: "Qualified" },
-  UNQUALIFIED: { cls: "neg",    label: "Unqualified" },
-  LOST:        { cls: "neg",    label: "Lost" },
-  WON:         { cls: "pos",    label: "Won" },
+  NOT_CONTACTED: { cls: "plain", label: "Not Contacted" },
+  CONNECTED:     { cls: "pos",   label: "Connected" },
+  AI_VOICEMAIL:  { cls: "warn",  label: "AI Voicemail" },
+  NO_ANSWER:     { cls: "cool",  label: "No Answer" },
+  HUNG_UP:       { cls: "neg",   label: "Hung Up" },
 };
 
-const STAGE_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "WON"];
+const STAGE_ORDER = ["CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP", "NOT_CONTACTED"];
 
 const OUTCOMES = [
   { id: "ANSWERED",      label: "Connected",     tone: "pos",  hint: "Reached the lead, had a conversation" },
@@ -63,18 +62,14 @@ function avatarClass(seed: string) {
 // so the refined table has the at-a-glance signal from the design without
 // needing schema changes.
 function scoreOf(l: Lead): number {
-  let s = 30;
   switch (l.status) {
-    case "WON":       s = 96; break;
-    case "QUALIFIED": s = 76; break;
-    case "CONTACTED": s = 58; break;
-    case "NEW":       s = 38; break;
-    case "UNQUALIFIED":
-    case "LOST":      s = 18; break;
+    case "CONNECTED":     return 90;
+    case "AI_VOICEMAIL":  return 65;
+    case "NO_ANSWER":     return 45;
+    case "NOT_CONTACTED": return 30;
+    case "HUNG_UP":       return 15;
+    default:              return 30;
   }
-  if (l.callOutcome === "ANSWERED") s += 6;
-  if (l.callOutcome === "HUNG_UP") s -= 4;
-  return Math.max(0, Math.min(100, s));
 }
 function tempOf(score: number): "hot" | "warm" | "cool" {
   if (score >= 70) return "hot";
@@ -778,7 +773,7 @@ export function LeadsList() {
                       <td>
                         <NextActionChip
                           label={lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? "Follow up" : "First outreach"}
-                          state={lead.status === "QUALIFIED" ? "today" : "upcoming"}
+                          state={lead.status === "CONNECTED" ? "today" : "upcoming"}
                         />
                       </td>
                       <td className="mono">{relativeTime(lead.createdAt)}</td>
