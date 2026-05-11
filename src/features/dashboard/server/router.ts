@@ -101,4 +101,18 @@ export const dashboardRouter = createTRPCRouter({
       },
     };
   }),
+
+  sidebarCounts: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
+    const [leads, tasks, scraperActive] = await Promise.all([
+      ctx.prisma.lead.count({ where: { organizationId } }),
+      ctx.prisma.task.count({
+        where: { user: { organizationId }, completed: false },
+      }),
+      ctx.prisma.scraperJob.count({
+        where: { organizationId, status: { in: ["PENDING", "RUNNING"] } },
+      }),
+    ]);
+    return { leads, tasks, scraperActive };
+  }),
 });
