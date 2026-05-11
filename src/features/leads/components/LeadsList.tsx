@@ -42,11 +42,10 @@ const STAGE_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "WON"];
 
 const OUTCOMES = [
   { id: "ANSWERED",      label: "Connected",     tone: "pos",  hint: "Reached the lead, had a conversation" },
-  { id: "VOICEMAIL",     label: "Voicemail",     tone: "warn", hint: "Left a voicemail" },
-  { id: "AI_VOICEMAIL",  label: "AI voicemail",  tone: "warn", hint: "AI voicemail screen, message left" },
-  { id: "NO_ANSWER",     label: "No answer",     tone: "cool", hint: "Ringed out, no pickup" },
-  { id: "HUNG_UP",       label: "Hung up",       tone: "neg",  hint: "Picked up but ended the call" },
-  { id: "NOT_CONTACTED", label: "Not contacted", tone: "cool", hint: "Hasn't been reached yet" },
+  { id: "AI_VOICEMAIL",  label: "AI Voicemail",  tone: "warn", hint: "AI voicemail screen, message left" },
+  { id: "NO_ANSWER",     label: "No Answer",     tone: "cool", hint: "Ringed out, no pickup" },
+  { id: "HUNG_UP",       label: "Hung Up",       tone: "neg",  hint: "Picked up but ended the call" },
+  { id: "NOT_CONTACTED", label: "Not Contacted", tone: "cool", hint: "Hasn't been reached yet" },
 ] as const;
 
 function fullNameOf(l: Lead) {
