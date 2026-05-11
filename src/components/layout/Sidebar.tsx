@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
+import { trpc } from "@/app/_trpc/client";
 
 const NAV_GROUPS = [
   {
@@ -29,10 +30,10 @@ const NAV_GROUPS = [
   {
     title: "Workspace",
     items: [
-      { id: "leads",    label: "Leads",    href: "/leads",    icon: Users,          count: 1248 },
-      { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot,            count: 28 },
-      { id: "outreach", label: "Outreach", href: "/outreach", icon: MessageSquare,  count: 6 },
-      { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar,       count: 6 },
+      { id: "leads",    label: "Leads",    href: "/leads",    icon: Users },
+      { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
+      { id: "outreach", label: "Outreach", href: "/outreach", icon: MessageSquare },
+      { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },
       { id: "dialer",   label: "Dialer",   href: "/dialer",   icon: Phone },
     ],
   },
@@ -62,8 +63,18 @@ function initials(name: string) {
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const userName = session?.user?.name || "Jordan Mehta";
-  const userRole = (session?.user as { role?: string })?.role || "Account Executive";
+  const userName = session?.user?.name ?? "";
+  const userRole = (session?.user as { role?: string })?.role ?? "";
+
+  const { data: counts } = trpc.dashboard.sidebarCounts.useQuery(
+    undefined,
+    { enabled: !!session, staleTime: 30_000 },
+  );
+  const countById: Record<string, number | undefined> = {
+    leads: counts?.leads,
+    tasks: counts?.tasks,
+    scraper: counts?.scraperActive,
+  };
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -116,8 +127,8 @@ export function Sidebar() {
                   <Icon size={16} />
                 </span>
                 <span>{item.label}</span>
-                {"count" in item && item.count != null && (
-                  <span className="crm-nav-count">{item.count}</span>
+                {countById[item.id] != null && (
+                  <span className="crm-nav-count">{countById[item.id]}</span>
                 )}
               </Link>
             );
