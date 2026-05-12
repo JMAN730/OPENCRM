@@ -609,8 +609,8 @@ export function LeadsList() {
     if (!selectedLead) return;
     const h = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSelectedLead(null);
-      else if (e.key === "ArrowDown" || e.key === "j") next();
-      else if (e.key === "ArrowUp" || e.key === "k") prev();
+      else if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); next(); }
+      else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); prev(); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
