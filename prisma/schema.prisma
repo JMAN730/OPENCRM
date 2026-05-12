@@ -55,6 +55,8 @@ model User {
 
   ledTeams Team[] @relation("TeamLeader")
 
+  passwordResetTokens PasswordResetToken[]
+
   leads       Lead[]       @relation("AssignedTo")
   calls       CallLog[]
   notes       Note[]
@@ -266,6 +268,17 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

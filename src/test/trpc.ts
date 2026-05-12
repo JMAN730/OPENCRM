@@ -70,6 +70,12 @@ export function createMockPrisma() {
     organization: {
       create: vi.fn(),
     },
+    passwordResetToken: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     team: {
       findFirst: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
