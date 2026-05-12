@@ -166,7 +166,7 @@ NextAuth tables (`Account`, `Session`, `VerificationToken`) also live in the sch
 | Enum | Values |
 |------|--------|
 | `UserRole` | `ADMIN`, `MANAGER`, `USER` |
-| `LeadStatus` | `NEW`, `CONTACTED`, `QUALIFIED`, `UNQUALIFIED`, `LOST`, `WON` |
+| `LeadStatus` | `NOT_CONTACTED`, `CONNECTED`, `AI_VOICEMAIL`, `NO_ANSWER`, `HUNG_UP` |
 | `CallStatus` | `BUSY`, `NO_ANSWER`, `CONNECTED`, `FAILED`, `CANCELED` |
 | `CallOutcome` | `NOT_CONTACTED`, `ANSWERED`, `HUNG_UP`, `NO_ANSWER`, `AI_VOICEMAIL` (denormalized onto `Lead`) |
 | `ScraperJobStatus` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` |
