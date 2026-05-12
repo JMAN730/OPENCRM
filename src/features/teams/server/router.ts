@@ -1,6 +1,7 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import bcrypt from "bcryptjs";
 
 function isAdmin(role: string) {
   return role === "ADMIN";
@@ -249,6 +250,62 @@ export const teamsRouter = createTRPCRouter({
         data: { teamId: null },
       });
       return ctx.prisma.team.delete({ where: { id: input.id } });
+    }),
+
+  /**
+   * Create a new user account inside the caller's organization (admin only).
+   * If the email already exists with no org assigned, that account is claimed
+   * into this org instead of creating a duplicate.
+   */
+  inviteUser: organizationProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        email: z.string().email().max(255),
+        password: z.string().min(8).max(255),
+        role: z.enum(["USER", "MANAGER", "ADMIN"]).default("USER"),
+        teamId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isAdmin((ctx.session.user as any).role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const email = input.email.toLowerCase().trim();
+      const existing = await ctx.prisma.user.findUnique({ where: { email } });
+
+      if (existing) {
+        if (existing.organizationId === ctx.organizationId) {
+          throw new TRPCError({ code: "CONFLICT", message: "User already in your organization." });
+        }
+        if (existing.organizationId) {
+          throw new TRPCError({ code: "CONFLICT", message: "User already belongs to another organization." });
+        }
+        // Unaffiliated account — assign it to this org
+        return ctx.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            organizationId: ctx.organizationId,
+            role: input.role,
+            ...(input.teamId ? { teamId: input.teamId } : {}),
+          },
+          select: { id: true, name: true, email: true, role: true },
+        });
+      }
+
+      const hashed = await bcrypt.hash(input.password, 12);
+      return ctx.prisma.user.create({
+        data: {
+          name: input.name,
+          email,
+          password: hashed,
+          role: input.role,
+          organizationId: ctx.organizationId,
+          ...(input.teamId ? { teamId: input.teamId } : {}),
+        },
+        select: { id: true, name: true, email: true, role: true },
+      });
     }),
 
   /**
