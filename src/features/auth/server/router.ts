@@ -1,15 +1,63 @@
+import crypto from "crypto";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/trpc";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 export const authRouter = createTRPCRouter({
-  // Stub — email-based reset is not yet implemented. Returns success so the UI
-  // can show a confirmation without exposing account existence or resetting passwords.
   resetPassword: publicProcedure
     .input(z.object({ email: z.string().email() }))
-    .mutation(async () => {
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase().trim();
+      const user = await ctx.prisma.user.findUnique({ where: { email } });
+
+      if (user?.email) {
+        // Remove any existing tokens for this user before creating a new one
+        await ctx.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+        const token = crypto.randomBytes(32).toString("hex");
+        const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await ctx.prisma.passwordResetToken.create({
+          data: { token, userId: user.id, expires },
+        });
+
+        const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${token}`;
+        await sendPasswordResetEmail(user.email, resetUrl);
+      }
+
+      // Always return success to prevent email enumeration
       return { success: true };
+    }),
+
+  confirmResetPassword: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      password: z.string().min(8).max(255),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const resetToken = await ctx.prisma.passwordResetToken.findUnique({
+        where: { token: input.token },
+      });
+
+      if (!resetToken || resetToken.expires < new Date()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This reset link is invalid or has expired.",
+        });
+      }
+
+      const hashed = await bcrypt.hash(input.password, 12);
+
+      await ctx.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashed },
+      });
+
+      await ctx.prisma.passwordResetToken.delete({ where: { token: input.token } });
+
+      return { ok: true };
     }),
 
   register: publicProcedure
