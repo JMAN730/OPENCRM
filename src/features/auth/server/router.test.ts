@@ -1,16 +1,52 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
+
+vi.mock("@/lib/email", () => ({ sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined) }));
 
 describe("authRouter.resetPassword", () => {
   it("always returns success without revealing whether the email exists", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
 
-    // Should NOT touch the database — never queries the user table
     const result = await caller.auth.resetPassword({ email: "anyone@example.com" });
 
     expect(result).toEqual({ success: true });
-    expect(prisma.user.findUnique).not.toHaveBeenCalled();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("returns success even when the user exists (no enumeration)", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue({ id: "u-1", email: "user@example.com" });
+    prisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.passwordResetToken.create.mockResolvedValue({});
+
+    const result = await caller.auth.resetPassword({ email: "user@example.com" });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("creates a reset token when the user exists", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue({ id: "u-1", email: "user@example.com" });
+    prisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.passwordResetToken.create.mockResolvedValue({});
+
+    await caller.auth.resetPassword({ email: "user@example.com" });
+
+    expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "u-1" } });
+    expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: "u-1", token: expect.any(String) }),
+      })
+    );
+  });
+
+  it("does not create a token when the user does not exist", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await caller.auth.resetPassword({ email: "ghost@example.com" });
+
+    expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
   });
 
   it("rejects malformed emails (zod validation)", async () => {
@@ -19,10 +55,81 @@ describe("authRouter.resetPassword", () => {
   });
 
   it("works without an authenticated session (publicProcedure)", async () => {
-    const { caller } = createTestCaller({ session: null });
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
     await expect(caller.auth.resetPassword({ email: "x@y.com" })).resolves.toEqual({
       success: true,
     });
+  });
+});
+
+describe("authRouter.confirmResetPassword", () => {
+  it("rejects an invalid token", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+    await expect(
+      caller.auth.confirmResetPassword({ token: "bad-token", password: "newpassword" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired token", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.passwordResetToken.findUnique.mockResolvedValue({
+      token: "tok",
+      userId: "u-1",
+      expires: new Date(Date.now() - 1000), // already expired
+    });
+
+    await expect(
+      caller.auth.confirmResetPassword({ token: "tok", password: "newpassword" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("updates the password and deletes the token on success", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.passwordResetToken.findUnique.mockResolvedValue({
+      token: "valid-token",
+      userId: "u-1",
+      expires: new Date(Date.now() + 60_000),
+    });
+    prisma.user.update.mockResolvedValue({ id: "u-1" });
+    prisma.passwordResetToken.delete.mockResolvedValue({});
+
+    const result = await caller.auth.confirmResetPassword({
+      token: "valid-token",
+      password: "newpassword",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "u-1" } })
+    );
+    // Password should be hashed, not stored in plain text
+    const storedPassword = prisma.user.update.mock.calls[0][0].data.password;
+    expect(storedPassword).not.toBe("newpassword");
+    expect(storedPassword).toMatch(/^\$2[aby]\$/);
+    expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
+      where: { token: "valid-token" },
+    });
+  });
+
+  it("rejects passwords shorter than 8 chars", async () => {
+    const { caller } = createTestCaller({ session: null });
+    await expect(
+      caller.auth.confirmResetPassword({ token: "tok", password: "short" })
+    ).rejects.toThrow();
+  });
+
+  it("works without an authenticated session (publicProcedure)", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+    await expect(
+      caller.auth.confirmResetPassword({ token: "x", password: "password123" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
 
