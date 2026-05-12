@@ -32,7 +32,7 @@ export default function SettingsPage() {
   const deleteAccount = trpc.auth.deleteAccount.useMutation({
     onSuccess: async () => {
       toast.success("Account deleted");
-      await signOut({ callbackUrl: "/login" });
+      await signOut({ callbackUrl: "/auth/signin" });
     },
     onError: (err) => {
       toast.error(err.message || "Failed to delete account");
