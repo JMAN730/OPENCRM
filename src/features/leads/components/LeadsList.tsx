@@ -8,6 +8,7 @@ import {
   NotebookPen, Globe,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -227,14 +228,38 @@ function LeadModal({
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? lead.callOutcome : null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
+  const assignRef = useRef<HTMLDivElement | null>(null);
+
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role as string | undefined;
+  const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const { data: notes = [] } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
+  const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
+    enabled: isAdminOrManager,
+    staleTime: 60_000,
+  });
+
+  const assignableUsers = isAdminOrManager
+    ? (orgMembers ?? [])
+    : (myTeam?.users ?? []);
+  const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const utils = trpc.useUtils();
   const updateOutcome = trpc.leads.updateCallOutcome.useMutation({
     onSuccess: () => {
       toast.success("Outcome saved");
+      utils.leads.getAll.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const assignMutation = trpc.leads.assign.useMutation({
+    onSuccess: () => {
+      toast.success("Lead reassigned");
+      setAssignOpen(false);
       utils.leads.getAll.invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -253,6 +278,15 @@ function LeadModal({
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [outcomeOpen]);
+
+  useEffect(() => {
+    if (!assignOpen) return;
+    const h = (e: MouseEvent) => {
+      if (assignRef.current && !assignRef.current.contains(e.target as Node)) setAssignOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [assignOpen]);
 
   const chooseOutcome = (id: string | null) => {
     setOutcome(id);
@@ -356,6 +390,77 @@ function LeadModal({
               <div className="crm-kv">
                 <span className="crm-k">Stage</span>
                 <span className="crm-v"><StageTag status={lead.status} /></span>
+                <span className="crm-k">Owner</span>
+                <span className="crm-v">
+                  {canAssign ? (
+                    <div ref={assignRef} style={{ position: "relative", display: "inline-block" }}>
+                      <button
+                        type="button"
+                        className="crm-btn ghost sm"
+                        style={{ height: 22, padding: "0 7px", fontSize: 12, gap: 5 }}
+                        onClick={() => setAssignOpen((o) => !o)}
+                      >
+                        {lead.assignedTo ? (
+                          <>
+                            <div className={`crm-avatar xs ${avatarClass(lead.assignedTo.name || "?")}`} style={{ width: 16, height: 16, fontSize: 8 }}>
+                              {initials(lead.assignedTo.name || lead.assignedTo.email || "?")}
+                            </div>
+                            {lead.assignedTo.name || lead.assignedTo.email}
+                          </>
+                        ) : (
+                          <span style={{ color: "var(--crm-fg-faint)" }}>Unassigned</span>
+                        )}
+                        <ArrowDown size={9} />
+                      </button>
+                      {assignOpen && (
+                        <div
+                          className="crm-card"
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 4px)",
+                            left: 0,
+                            minWidth: 180,
+                            padding: 4,
+                            zIndex: 80,
+                            boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                            borderRadius: "var(--crm-radius-md)",
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {assignableUsers.map((u) => (
+                            <button
+                              key={u.id}
+                              className="crm-nav-item"
+                              style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 12, width: "100%", textAlign: "left" }}
+                              onClick={() => assignMutation.mutate({ leadIds: [lead.id], assigneeId: u.id })}
+                            >
+                              <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`} style={{ width: 18, height: 18, fontSize: 9 }}>
+                                {initials(u.name || u.email || "?")}
+                              </div>
+                              <span>{u.name || u.email}</span>
+                            </button>
+                          ))}
+                          {lead.assignedToId && (
+                            <>
+                              <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
+                              <button
+                                className="crm-nav-item"
+                                style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 12, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
+                                onClick={() => assignMutation.mutate({ leadIds: [lead.id], assigneeId: null })}
+                              >
+                                Unassign
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    lead.assignedTo
+                      ? (lead.assignedTo.name || lead.assignedTo.email)
+                      : <span style={{ color: "var(--crm-fg-faint)" }}>Unassigned</span>
+                  )}
+                </span>
                 <span className="crm-k">Source</span>
                 <span className="crm-v">{lead.source || "—"}</span>
                 {lead.email && (
@@ -518,11 +623,19 @@ export function LeadsList() {
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
 
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role as string | undefined;
+  const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
+
   const utils = trpc.useUtils();
   const { data: leads = [], isLoading } = trpc.leads.getAll.useQuery({
     search: debouncedSearch,
   });
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
+  const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
+    enabled: isAdminOrManager,
+    staleTime: 60_000,
+  });
   const assignMutation = trpc.leads.assign.useMutation({
     onSuccess: () => {
       toast.success("Leads reassigned");
@@ -533,8 +646,10 @@ export function LeadsList() {
     onError: (e) => toast.error(e.message),
   });
 
-  const assignableUsers = myTeam?.users ?? [];
-  const canAssign = assignableUsers.length > 0;
+  const assignableUsers = isAdminOrManager
+    ? (orgMembers ?? [])
+    : (myTeam?.users ?? []);
+  const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const createLead = trpc.leads.create.useMutation({
     onSuccess: () => { toast.success("Lead created"); setShowAdd(false); utils.leads.getAll.invalidate(); },
