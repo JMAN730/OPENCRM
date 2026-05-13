@@ -53,6 +53,9 @@ vi.mock('@/app/_trpc/client', () => ({
       assign: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      bulkDelete: {
+        useMutation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+      },
     },
     teams: {
       myTeam: {
