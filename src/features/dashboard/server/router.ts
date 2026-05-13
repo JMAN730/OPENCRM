@@ -63,6 +63,22 @@ export const dashboardRouter = createTRPCRouter({
       }),
     ]);
 
+    type CountByStatus<TStatus extends string = string> = {
+      status: TStatus;
+      _count: { id: number };
+    };
+
+    // Promise.all tuple destructuring erases Prisma result types; re-assert the shapes we use.
+    const statusDistributionRows = statusDistribution as CountByStatus[];
+    const leadsByStatusRows = leadsByStatusResult as CountByStatus[];
+    const recentCallRows = recentCalls as Array<{
+      id: string;
+      status: string;
+      duration: number | null;
+      createdAt: Date;
+      lead: { phone: string | null };
+    }>;
+
     const callsPerDay = dayOffsets.map((i, idx) => ({
       date: subDays(today, i).toISOString().split("T")[0],
       count: callsPerDayCounts[idx],
@@ -79,11 +95,11 @@ export const dashboardRouter = createTRPCRouter({
       followupsDue: followupsDueCount,
       conversionRate: `${conversionRate}%`,
       monthlyRevenue: revenueResult._sum.value ?? 0,
-      leadsByStatus: leadsByStatusResult.map((s) => ({
+      leadsByStatus: leadsByStatusRows.map((s) => ({
         status: s.status,
         count: s._count.id,
       })),
-      recentCalls: recentCalls.map((c) => ({
+      recentCalls: recentCallRows.map((c) => ({
         id: c.id,
         status: c.status,
         duration: c.duration,
@@ -92,7 +108,7 @@ export const dashboardRouter = createTRPCRouter({
       })),
       charts: {
         callsPerDay,
-        statusDistribution: statusDistribution.map((item) => ({
+        statusDistribution: statusDistributionRows.map((item) => ({
           status: item.status,
           count: item._count.id,
         })),

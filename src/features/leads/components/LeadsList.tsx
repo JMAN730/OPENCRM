@@ -236,16 +236,25 @@ function LeadModal({
   const userRole = (session?.user as any)?.role as string | undefined;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
-  const { data: notes = [] } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  type LeadNote = { id: string; content: string; createdAt: string | Date };
+  const notes: LeadNote[] = (notesRaw ?? []) as LeadNote[];
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
 
-  const assignableUsers = isAdminOrManager
+  type AssignableUser = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image?: string | null;
+  };
+
+  const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
-    : (myTeam?.users ?? []);
+    : (myTeam?.users ?? [])) as AssignableUser[];
   const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const utils = trpc.useUtils();
@@ -646,9 +655,16 @@ export function LeadsList() {
     onError: (e) => toast.error(e.message),
   });
 
-  const assignableUsers = isAdminOrManager
+  type AssignableUser = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image?: string | null;
+  };
+
+  const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
-    : (myTeam?.users ?? []);
+    : (myTeam?.users ?? [])) as AssignableUser[];
   const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const createLead = trpc.leads.create.useMutation({

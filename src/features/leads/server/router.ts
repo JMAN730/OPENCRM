@@ -348,7 +348,7 @@ export const leadsRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
         }
         if (!isAdmin(role)) {
-          const leaderTeamIds = ledTeams.map((t) => t.id);
+          const leaderTeamIds = ledTeams.map((t: { id: string }) => t.id);
           if (!assignee.teamId || !leaderTeamIds.includes(assignee.teamId)) {
             throw new TRPCError({
               code: "FORBIDDEN",
@@ -384,7 +384,7 @@ export const leadsRouter = createTRPCRouter({
         : "unassigned";
 
       await Promise.all(
-        leads.map((l) =>
+        leads.map((l: { id: string }) =>
           logActivity(ctx.prisma, {
             leadId: l.id,
             userId,
