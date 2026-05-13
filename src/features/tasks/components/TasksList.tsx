@@ -21,7 +21,8 @@ import { Badge } from "@/components/ui/badge";
 
 export function TasksList() {
   const utils = trpc.useUtils();
-  const { data: tasks, isLoading } = trpc.tasks.getAll.useQuery();
+  const { data, isLoading } = trpc.tasks.getAll.useQuery({ limit: 100 });
+  const tasks = data?.items;
   
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => {

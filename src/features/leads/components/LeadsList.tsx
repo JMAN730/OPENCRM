@@ -628,9 +628,21 @@ export function LeadsList() {
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const utils = trpc.useUtils();
-  const { data: leads = [], isLoading } = trpc.leads.getAll.useQuery({
-    search: debouncedSearch,
-  });
+  // Server-side cursor pagination. Each page fetches 50 leads keyed off
+  // the previous page's nextCursor. Without this an org with 50K leads
+  // would ship every row to the browser at first paint.
+  const {
+    data: leadsPages,
+    isLoading,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = trpc.leads.getAll.useInfiniteQuery(
+    { search: debouncedSearch, limit: 50 },
+    {
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    },
+  );
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
@@ -660,7 +672,32 @@ export function LeadsList() {
     onError:   (e) => toast.error(e.message),
   });
 
-  const allLeads = leads as Lead[];
+  // Flatten paged results into the single array the existing UI was written
+  // against. Note: stage counts reflect *loaded* pages only — server-side
+  // counts can be added in Phase 4 if we surface per-stage chips with real
+  // totals. The infinite-scroll sentinel below auto-fetches as the user
+  // scrolls; until it triggers we work with whatever's loaded.
+  const allLeads = useMemo<Lead[]>(
+    () => (leadsPages?.pages.flatMap((p) => p.items as Lead[]) ?? []),
+    [leadsPages],
+  );
+
+  // Auto-fetch the next page when the sentinel row scrolls into view.
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const stageCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -909,6 +946,27 @@ export function LeadsList() {
               )}
             </tbody>
           </table>
+          {(hasNextPage || isFetchingNextPage) && (
+            <div
+              ref={loadMoreRef}
+              style={{
+                padding: "16px",
+                textAlign: "center",
+                color: "var(--crm-fg-faint)",
+                fontSize: 12,
+              }}
+            >
+              {isFetchingNextPage ? "Loading more leads…" : (
+                <button
+                  className="crm-btn ghost sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={!hasNextPage}
+                >
+                  Load more
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {selected.size > 0 && (
