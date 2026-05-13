@@ -138,6 +138,11 @@ model Lead {
 
   @@index([organizationId, createdAt])
   @@index([organizationId, status])
+  // Importer uses (organizationId, company, phone) to dedup incoming CSV
+  // rows against existing leads with a single bounded query.
+  @@index([organizationId, company, phone])
+  // Lead scope filtering for non-admins (assignedToId IN (...)).
+  @@index([organizationId, assignedToId])
 }
 
 enum LeadStatus {
@@ -197,6 +202,9 @@ model CallLog {
 
   @@index([leadId])
   @@index([userId])
+  // Dashboard "calls today by user" and per-day rollups.
+  @@index([userId, createdAt])
+  @@index([leadId, createdAt])
 }
 
 enum CallStatus {

@@ -37,22 +37,25 @@ describe("TasksList", () => {
   });
 
   it("renders the empty state when there are no tasks", () => {
-    useQuery.mockReturnValue({ data: [], isLoading: false });
+    useQuery.mockReturnValue({ data: { items: [], nextCursor: null }, isLoading: false });
     render(<TasksList />);
     expect(screen.getByText(/No tasks yet/i)).toBeInTheDocument();
   });
 
   it("renders tasks with their lead info", () => {
     useQuery.mockReturnValue({
-      data: [
-        {
-          id: "t1",
-          title: "Call back John",
-          completed: false,
-          dueDate: null,
-          lead: { firstName: "John", lastName: "Doe", company: "Acme" },
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: "t1",
+            title: "Call back John",
+            completed: false,
+            dueDate: null,
+            lead: { firstName: "John", lastName: "Doe", company: "Acme" },
+          },
+        ],
+        nextCursor: null,
+      },
       isLoading: false,
     });
 
@@ -63,7 +66,10 @@ describe("TasksList", () => {
 
   it("calls update mutation when checkbox is toggled", () => {
     useQuery.mockReturnValue({
-      data: [{ id: "t1", title: "x", completed: false, dueDate: null, lead: null }],
+      data: {
+        items: [{ id: "t1", title: "x", completed: false, dueDate: null, lead: null }],
+        nextCursor: null,
+      },
       isLoading: false,
     });
 
@@ -77,15 +83,18 @@ describe("TasksList", () => {
   it("shows an Overdue badge for incomplete tasks past their due date", () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     useQuery.mockReturnValue({
-      data: [
-        {
-          id: "t1",
-          title: "Late task",
-          completed: false,
-          dueDate: yesterday.toISOString(),
-          lead: null,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: "t1",
+            title: "Late task",
+            completed: false,
+            dueDate: yesterday.toISOString(),
+            lead: null,
+          },
+        ],
+        nextCursor: null,
+      },
       isLoading: false,
     });
 
@@ -96,15 +105,18 @@ describe("TasksList", () => {
   it("shows a Completed badge for completed tasks (not Overdue, even if past due)", () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     useQuery.mockReturnValue({
-      data: [
-        {
-          id: "t1",
-          title: "Done task",
-          completed: true,
-          dueDate: yesterday.toISOString(),
-          lead: null,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: "t1",
+            title: "Done task",
+            completed: true,
+            dueDate: yesterday.toISOString(),
+            lead: null,
+          },
+        ],
+        nextCursor: null,
+      },
       isLoading: false,
     });
 
