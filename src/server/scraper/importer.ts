@@ -17,6 +17,10 @@ export type ImportFilter = {
   excludeMissingPhone?: boolean;
 };
 
+// Chunk size for the bounded existing-lookup query. Keeps the IN(...) list
+// from blowing up Postgres' query planner on very large CSVs.
+const DEDUP_CHUNK = 1000;
+
 export async function readScrapedCsv(jobOutputDir: string): Promise<ScrapedRow[]> {
   const csvPath = path.join(jobOutputDir, "leads.csv");
   let raw: string;
@@ -46,6 +50,45 @@ export function applyFilter(rows: ScrapedRow[], filter?: ImportFilter): ScrapedR
   });
 }
 
+function normalizePhone(phone: string | null | undefined): string {
+  return (phone ?? "").replace(/\D/g, "");
+}
+
+function dedupKey(company: string, phone: string | null): string {
+  return `${company.toLowerCase()}|${normalizePhone(phone)}`;
+}
+
+/**
+ * Build the set of existing (company, phone) keys that overlap with the
+ * incoming batch. The previous implementation loaded **every** lead in the
+ * organization into memory; this version issues one indexed query bounded
+ * by the size of the incoming batch.
+ *
+ * Index used: @@index([organizationId, company, phone])
+ */
+async function loadExistingKeys(
+  organizationId: string,
+  companies: string[],
+): Promise<Set<string>> {
+  if (companies.length === 0) return new Set();
+
+  const seen = new Set<string>();
+  for (let i = 0; i < companies.length; i += DEDUP_CHUNK) {
+    const slice = companies.slice(i, i + DEDUP_CHUNK);
+    const rows = await prisma.lead.findMany({
+      where: {
+        organizationId,
+        company: { in: slice, mode: "insensitive" },
+      },
+      select: { company: true, phone: true },
+    });
+    for (const r of rows) {
+      seen.add(dedupKey(r.company ?? "", r.phone ?? null));
+    }
+  }
+  return seen;
+}
+
 export async function importRowsToLeads(opts: {
   rows: ScrapedRow[];
   organizationId: string;
@@ -55,13 +98,16 @@ export async function importRowsToLeads(opts: {
   const { rows, organizationId, assignedToId, jobId } = opts;
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
 
-  const existing = await prisma.lead.findMany({
-    where: { organizationId },
-    select: { company: true, phone: true },
-  });
-  const existingKeys = new Set(
-    existing.map((l) => `${(l.company ?? "").toLowerCase()}|${(l.phone ?? "").replace(/\D/g, "")}`)
-  );
+  // Distinct companies in the incoming batch — keeps the lookup bounded by
+  // the request size rather than the org's total lead count.
+  const companiesSet = new Set<string>();
+  for (const row of rows) {
+    const c = (row.Name ?? "").trim();
+    if (c) companiesSet.add(c);
+  }
+  const companies = Array.from(companiesSet);
+
+  const existingKeys = await loadExistingKeys(organizationId, companies);
 
   const toInsert: Array<{
     company: string;
@@ -81,7 +127,7 @@ export async function importRowsToLeads(opts: {
     }
     const phone = (row.Phone ?? "").trim() || null;
     const website = (row.Website ?? "").trim() || null;
-    const key = `${company.toLowerCase()}|${(phone ?? "").replace(/\D/g, "")}`;
+    const key = dedupKey(company, phone);
     if (existingKeys.has(key)) {
       skipped++;
       continue;

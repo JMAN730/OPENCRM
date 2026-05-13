@@ -5,7 +5,7 @@ import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
 
-type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"][number];
+type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"]["items"][number];
 
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 const LEAD_STATUS_LABEL: Record<string, string> = {
@@ -34,8 +34,8 @@ function KPICard({ label, value, note }: { label: string; value: string | number
 
 export default function AnalyticsPage() {
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
-  const { data: leadsRaw } = trpc.leads.getAll.useQuery();
-  const leads: Lead[] = leadsRaw ?? [];
+  const { data: leadsRaw } = trpc.leads.getAll.useQuery({ limit: 100 });
+  const leads: Lead[] = leadsRaw?.items ?? [];
 
   const revenue = stats?.monthlyRevenue
     ? "$" + (stats.monthlyRevenue >= 1000 ? (stats.monthlyRevenue / 1000).toFixed(1) + "K" : stats.monthlyRevenue.toFixed(0))
