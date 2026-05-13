@@ -109,14 +109,45 @@ export const tasksRouter = createTRPCRouter({
     });
   }),
 
-  getAll: organizationProcedure.query(({ ctx }) => {
-    return ctx.prisma.task.findMany({
-      where: { user: { organizationId: ctx.organizationId } },
-      orderBy: [{ completed: "asc" }, { dueDate: "asc" }],
-      include: {
-        lead: { select: { firstName: true, lastName: true, company: true } },
-        user: { select: { name: true, image: true } },
-      },
-    });
-  }),
+  getAll: organizationProcedure
+    .input(
+      z
+        .object({
+          completed: z.boolean().optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+          cursor: z.string().optional(),
+        })
+        .optional()
+        .default(() => ({ limit: 50 })),
+    )
+    .query(async ({ ctx, input }) => {
+      const limit = input.limit ?? 50;
+      const where: Record<string, unknown> = {
+        user: { organizationId: ctx.organizationId },
+      };
+      if (typeof input.completed === "boolean") {
+        where.completed = input.completed;
+      }
+      const rows = await ctx.prisma.task.findMany({
+        where,
+        // Primary order is "incomplete first, then by due date". `id` is the
+        // tie-breaker so Prisma's cursor pagination is deterministic; without
+        // it pages can skip or repeat rows.
+        orderBy: [{ completed: "asc" }, { dueDate: "asc" }, { id: "asc" }],
+        include: {
+          lead: { select: { firstName: true, lastName: true, company: true } },
+          user: { select: { name: true, image: true } },
+        },
+        take: limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      });
+
+      let nextCursor: string | null = null;
+      if (rows.length > limit) {
+        const next = rows.pop();
+        nextCursor = next?.id ?? null;
+      }
+
+      return { items: rows, nextCursor };
+    }),
 });

@@ -236,8 +236,29 @@ describe("importRowsToLeads", () => {
     });
 
     expect(mockPrisma.lead.findMany).toHaveBeenCalledWith({
-      where: { organizationId: "org-X" },
+      where: {
+        organizationId: "org-X",
+        company: { in: ["Acme"], mode: "insensitive" },
+      },
       select: { company: true, phone: true },
     });
+  });
+
+  it("scopes the existing-key lookup to the incoming batch (no full-table scan)", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 2 });
+
+    await importRowsToLeads({
+      rows: [{ Name: "Acme" }, { Name: "Beta" }, { Name: "Acme" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    // Only the distinct companies from the batch should be queried.
+    const call = mockPrisma.lead.findMany.mock.calls[0][0];
+    expect(call.where.organizationId).toBe("org-1");
+    expect(new Set(call.where.company.in)).toEqual(new Set(["Acme", "Beta"]));
+    expect(call.where.company.mode).toBe("insensitive");
   });
 });

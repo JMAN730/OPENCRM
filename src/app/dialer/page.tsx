@@ -8,7 +8,7 @@ import { Phone, PhoneOff, Delete, Mic, MicOff } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"][number];
+type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"]["items"][number];
 
 function initials(name: string) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -27,8 +27,8 @@ export default function DialerPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [queueIdx, setQueueIdx] = useState(0);
 
-  const { data: leadsRaw, isLoading } = trpc.leads.getAll.useQuery();
-  const leads: Lead[] = leadsRaw ?? [];
+  const { data: leadsRaw, isLoading } = trpc.leads.getAll.useQuery({ limit: 100 });
+  const leads: Lead[] = leadsRaw?.items ?? [];
   const logCall = trpc.calls.logCall.useMutation();
   const utils = trpc.useUtils();
 

@@ -1,7 +1,7 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { resolveLeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin } from "@/server/authz";
 
@@ -44,21 +44,25 @@ export const leadsRouter = createTRPCRouter({
           assignedToId: z.string().optional(),
           // "mine" (default scope), "team" (force team scope if leader/admin), "all" (admin only)
           scope: z.enum(["default", "mine", "team", "all"]).optional(),
+          status: z
+            .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
+            .optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+          // Cursor encodes the last seen lead's id (the primary sort key
+          // tie-breaker). Prisma's native cursor pagination handles the
+          // composite order against (createdAt DESC, id DESC).
+          cursor: z.string().optional(),
         })
         .optional()
-        .default({}),
+        .default(() => ({ limit: 50 })),
     )
     .query(async ({ ctx, input }) => {
       const search = input.search?.trim();
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
+      const limit = input.limit ?? 50;
 
-      const baseScope = await resolveLeadScope(
-        ctx.prisma,
-        userId,
-        ctx.organizationId,
-        role,
-      );
+      const baseScope = await getLeadScope(ctx, userId, role);
 
       let where: Record<string, unknown> = leadWhereFromScope(baseScope);
 
@@ -80,7 +84,11 @@ export const leadsRouter = createTRPCRouter({
         where.assignedToId = input.assignedToId;
       }
 
-      const finalWhere: any = {
+      if (input.status) {
+        where.status = input.status;
+      }
+
+      const finalWhere: Record<string, unknown> = {
         ...where,
         ...(search
           ? {
@@ -95,23 +103,32 @@ export const leadsRouter = createTRPCRouter({
           : {}),
       };
 
-      return ctx.prisma.lead.findMany({
+      // take = limit + 1 so we can detect whether another page exists
+      // without a second count() round-trip.
+      const rows = await ctx.prisma.lead.findMany({
         where: finalWhere,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         include: includeAssignee,
+        take: limit + 1,
+        ...(input.cursor
+          ? { cursor: { id: input.cursor }, skip: 1 }
+          : {}),
       });
+
+      let nextCursor: string | null = null;
+      if (rows.length > limit) {
+        const next = rows.pop();
+        nextCursor = next?.id ?? null;
+      }
+
+      return { items: rows, nextCursor };
     }),
 
   getById: organizationProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(
-        ctx.prisma,
-        ctx.session.user.id,
-        ctx.organizationId,
-        role,
-      );
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.id, ...leadWhereFromScope(scope) },
         include: includeAssignee,
@@ -124,12 +141,7 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(
-        ctx.prisma,
-        ctx.session.user.id,
-        ctx.organizationId,
-        role,
-      );
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.id, ...leadWhereFromScope(scope) },
       });
@@ -173,12 +185,7 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ id: z.string(), ...callOutcomeSchema.shape }))
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(
-        ctx.prisma,
-        ctx.session.user.id,
-        ctx.organizationId,
-        role,
-      );
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.id, ...leadWhereFromScope(scope) },
       });
@@ -259,7 +266,7 @@ export const leadsRouter = createTRPCRouter({
       }
 
       // Restrict which leads the caller can reassign
-      const scope = await resolveLeadScope(ctx.prisma, userId, orgId, role);
+      const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
         where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
         select: { id: true },
@@ -283,18 +290,17 @@ export const leadsRouter = createTRPCRouter({
           }))?.name ?? "user"
         : "unassigned";
 
-      await Promise.all(
-        leads.map((l) =>
-          logActivity(ctx.prisma, {
-            leadId: l.id,
-            userId,
-            type: "LEAD_ASSIGNED",
-            description: input.assigneeId
-              ? `Reassigned to ${assigneeName}`
-              : `Unassigned`,
-          }),
-        ),
-      );
+      // Replaces N per-lead activity.create round-trips with one batch insert.
+      await ctx.prisma.activity.createMany({
+        data: leads.map((l) => ({
+          leadId: l.id,
+          userId,
+          type: "LEAD_ASSIGNED",
+          description: input.assigneeId
+            ? `Reassigned to ${assigneeName}`
+            : `Unassigned`,
+        })),
+      });
 
       return { count: result.count };
     }),
@@ -303,7 +309,7 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string(), content: z.string().min(1).max(5000) }))
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, ...leadWhereFromScope(scope) },
         select: { id: true },
@@ -325,7 +331,7 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, ...leadWhereFromScope(scope) },
         select: { id: true },
@@ -350,12 +356,7 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
-      const scope = await resolveLeadScope(
-        ctx.prisma,
-        ctx.session.user.id,
-        ctx.organizationId,
-        role,
-      );
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, ...leadWhereFromScope(scope) },
         select: { id: true },
