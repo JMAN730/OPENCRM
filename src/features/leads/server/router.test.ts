@@ -148,13 +148,46 @@ describe("leadsRouter", () => {
         { firstName: "B", status: "NOT_CONTACTED" },
       ]);
 
+      expect(prisma.lead.findMany).not.toHaveBeenCalled();
       expect(prisma.lead.createMany).toHaveBeenCalledWith({
         data: [
           { firstName: "A", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
           { firstName: "B", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
         ],
       });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ count: 2 });
+    });
+
+    it("updates an existing lead (matched by email) instead of duplicating", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        { id: "lead-1", email: "a@example.com", phone: null, status: "CONNECTED" },
+      ]);
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+      prisma.$transaction.mockResolvedValue([{}, { id: "lead-1" }] as any);
+
+      const result = await caller.leads.bulkCreate([
+        { email: "A@EXAMPLE.COM", phone: "", company: "Acme", status: "NOT_CONTACTED" },
+      ]);
+
+      expect(prisma.lead.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: "org-1",
+            OR: [{ email: { in: ["a@example.com"] } }],
+          }),
+        }),
+      );
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: expect.objectContaining({
+          email: "a@example.com",
+          company: "Acme",
+        }),
+      });
+      // Status should not be downgraded back to NOT_CONTACTED
+      expect(prisma.lead.update.mock.calls[0]?.[0]?.data?.status).toBeUndefined();
+      expect(result).toEqual({ count: 1 });
     });
 
     it("rejects empty arrays", async () => {
