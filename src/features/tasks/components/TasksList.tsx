@@ -41,7 +41,7 @@ export function TasksList() {
     return <div className="p-8 text-center text-muted-foreground">Loading tasks...</div>;
   }
 
-  if (!tasks || tasks.length === 0) {
+  if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center gap-4 border border-dashed border-border rounded-xl bg-card">
         <Clock size={36} className="text-muted-foreground/20" />

@@ -149,6 +149,42 @@ export const leadsRouter = createTRPCRouter({
       return ctx.prisma.lead.delete({ where: { id: input.id } });
     }),
 
+  bulkDelete: organizationProcedure
+    .input(z.object({ leadIds: z.array(z.string()).min(1).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+
+      const scope = await getLeadScope(ctx, userId, role);
+      const leads = await ctx.prisma.lead.findMany({
+        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (leads.length !== input.leadIds.length) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "One or more leads are outside your scope.",
+        });
+      }
+
+      const result = await ctx.prisma.lead.deleteMany({
+        where: { id: { in: input.leadIds } },
+      });
+
+      await Promise.all(
+        input.leadIds.map((leadId) =>
+          logActivity(ctx.prisma, {
+            leadId,
+            userId,
+            type: "LEAD_DELETED",
+            description: "Deleted lead",
+          }),
+        ),
+      );
+
+      return { count: result.count };
+    }),
+
   create: organizationProcedure
     .input(leadInputSchema)
     .mutation(async ({ ctx, input }) => {
@@ -171,14 +207,114 @@ export const leadsRouter = createTRPCRouter({
   bulkCreate: organizationProcedure
     .input(z.array(leadInputSchema).min(1).max(5000))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.prisma.lead.createMany({
-        data: input.map((lead) => ({
-          ...lead,
-          organizationId: ctx.organizationId,
-          assignedToId: ctx.session.user.id,
-        })),
+      const normalizeEmail = (email?: string) => (email ?? "").trim().toLowerCase();
+      const normalizePhone = (phone?: string) => (phone ?? "").replace(/\D/g, "");
+
+      const cleaned = input.map((l) => {
+        const email = normalizeEmail(l.email);
+        const phone = normalizePhone(l.phone);
+        return {
+          ...l,
+          email: email || undefined,
+          phone: phone || undefined,
+        };
       });
-      return { count: result.count };
+
+      // De-dupe within the payload first so we don't create duplicates from a single import.
+      const seenKeys = new Set<string>();
+      const deduped = cleaned.filter((l) => {
+        const email = normalizeEmail(l.email);
+        const phone = normalizePhone(l.phone);
+        const key =
+          email ? `email:${email}` :
+          phone ? `phone:${phone}` :
+          `name:${(l.company ?? "").trim().toLowerCase()}|${(l.firstName ?? "").trim().toLowerCase()}|${(l.lastName ?? "").trim().toLowerCase()}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+
+      const emails = Array.from(
+        new Set(deduped.map((l) => normalizeEmail(l.email)).filter(Boolean)),
+      );
+      const phones = Array.from(
+        new Set(deduped.map((l) => normalizePhone(l.phone)).filter(Boolean)),
+      );
+
+      const existing =
+        emails.length === 0 && phones.length === 0
+          ? []
+          : await ctx.prisma.lead.findMany({
+              where: {
+                organizationId: ctx.organizationId,
+                OR: [
+                  ...(emails.length ? [{ email: { in: emails } }] : []),
+                  ...(phones.length ? [{ phone: { in: phones } }] : []),
+                ],
+              },
+              select: { id: true, email: true, phone: true, status: true },
+            });
+
+      const byEmail = new Map<string, (typeof existing)[number]>();
+      const byPhone = new Map<string, (typeof existing)[number]>();
+      for (const lead of existing) {
+        const e = normalizeEmail(lead.email ?? undefined);
+        const p = normalizePhone(lead.phone ?? undefined);
+        if (e && !byEmail.has(e)) byEmail.set(e, lead);
+        if (p && !byPhone.has(p)) byPhone.set(p, lead);
+      }
+
+      const toCreate: Array<z.infer<typeof leadInputSchema> & { organizationId: string; assignedToId: string }> = [];
+      const toUpdate: Array<{ id: string; data: Record<string, unknown> }> = [];
+
+      for (const row of deduped) {
+        const email = normalizeEmail(row.email);
+        const phone = normalizePhone(row.phone);
+        const match = (email && byEmail.get(email)) || (phone && byPhone.get(phone));
+
+        if (!match) {
+          toCreate.push({
+            ...row,
+            organizationId: ctx.organizationId,
+            assignedToId: ctx.session.user.id,
+          });
+          continue;
+        }
+
+        const data: Record<string, unknown> = {};
+
+        // Only fill in missing fields; don't wipe existing data.
+        if (row.firstName) data.firstName = row.firstName;
+        if (row.lastName) data.lastName = row.lastName;
+        if (row.company) data.company = row.company;
+        if (row.website) data.website = row.website;
+        if (row.source) data.source = row.source;
+        if (email) data.email = email;
+        if (phone) data.phone = phone;
+
+        // Status: preserve existing progress unless the import explicitly advances it.
+        if (row.status && match.status === "NOT_CONTACTED" && row.status !== "NOT_CONTACTED") {
+          data.status = row.status;
+        }
+
+        if (Object.keys(data).length > 0) {
+          toUpdate.push({ id: match.id, data });
+        }
+      }
+
+      const ops: any[] = [];
+      if (toCreate.length) {
+        ops.push(ctx.prisma.lead.createMany({ data: toCreate }) as never);
+      }
+      for (const u of toUpdate) {
+        ops.push(ctx.prisma.lead.update({ where: { id: u.id }, data: u.data }) as never);
+      }
+
+      const results = ops.length ? await ctx.prisma.$transaction(ops as never) : [];
+      const created = toCreate.length ? (results[0] as { count: number }).count : 0;
+      const updated = toUpdate.length;
+
+      return { count: created + updated };
     }),
 
   updateCallOutcome: organizationProcedure
@@ -255,7 +391,7 @@ export const leadsRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
         }
         if (!isAdmin(role)) {
-          const leaderTeamIds = ledTeams.map((t) => t.id);
+          const leaderTeamIds = ledTeams.map((t: { id: string }) => t.id);
           if (!assignee.teamId || !leaderTeamIds.includes(assignee.teamId)) {
             throw new TRPCError({
               code: "FORBIDDEN",
