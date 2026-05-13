@@ -177,5 +177,49 @@ describe("tasksRouter", () => {
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.where).toEqual({ user: { organizationId: "org-1" } });
     });
+
+    it("returns paginated shape { items, nextCursor }", async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+      const result = await caller.tasks.getAll();
+      expect(result).toEqual({ items: [], nextCursor: null });
+    });
+
+    it("orders by (completed asc, dueDate asc, id asc) for stable cursor paging", async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+      await caller.tasks.getAll();
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.orderBy).toEqual([
+        { completed: "asc" },
+        { dueDate: "asc" },
+        { id: "asc" },
+      ]);
+    });
+
+    it("takes (limit + 1) and reports nextCursor when more rows exist", async () => {
+      const rows = Array.from({ length: 51 }, (_, i) => ({ id: `t-${i}` }));
+      prisma.task.findMany.mockResolvedValue(rows);
+
+      const result = await caller.tasks.getAll({ limit: 50 });
+
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.take).toBe(51);
+      expect(result.items).toHaveLength(50);
+      expect(result.nextCursor).toBe("t-50");
+    });
+
+    it("filters by completed flag when supplied", async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+      await caller.tasks.getAll({ completed: false });
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.where.completed).toBe(false);
+    });
+
+    it("passes the cursor to Prisma with skip-1 on subsequent pages", async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+      await caller.tasks.getAll({ cursor: "t-99" });
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.cursor).toEqual({ id: "t-99" });
+      expect(args.skip).toBe(1);
+    });
   });
 });

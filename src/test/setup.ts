@@ -1,6 +1,25 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// jsdom doesn't ship IntersectionObserver, but the infinite-scroll sentinel
+// in LeadsList wires one up on mount. A no-op stub keeps render() happy and
+// lets tests assert on the surrounding UI without needing real visibility.
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  class IntersectionObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return []
+    }
+    readonly root: Element | Document | null = null
+    readonly rootMargin: string = ''
+    readonly thresholds: ReadonlyArray<number> = []
+  }
+  ;(globalThis as { IntersectionObserver: typeof IntersectionObserver }).IntersectionObserver =
+    IntersectionObserverStub as unknown as typeof IntersectionObserver
+}
+
 // jsdom doesn't ship PointerEvent, but @base-ui/react components fire one on
 // click/keypress. Polyfill it to a MouseEvent-shaped class so click handlers run.
 if (typeof globalThis.PointerEvent === 'undefined') {
