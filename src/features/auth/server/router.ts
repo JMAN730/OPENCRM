@@ -4,26 +4,47 @@ import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/trpc";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
+import { invalidateAuthSnapshot } from "@/lib/auth";
+
+function hashToken(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
 
 export const authRouter = createTRPCRouter({
   resetPassword: publicProcedure
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase().trim();
+      const ip = getClientIp(ctx.headers);
+
+      // Two-tier rate limit: protect the user from spam reset emails AND
+      // protect the system from anyone iterating addresses.
+      await assertWithinRateLimit({
+        key: `auth:reset:email:${email}`,
+        limit: 3,
+        windowSeconds: 60 * 60,
+      });
+      await assertWithinRateLimit({
+        key: `auth:reset:ip:${ip}`,
+        limit: 10,
+        windowSeconds: 60 * 60,
+      });
+
       const user = await ctx.prisma.user.findUnique({ where: { email } });
 
       if (user?.email) {
-        // Remove any existing tokens for this user before creating a new one
         await ctx.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
 
-        const token = crypto.randomBytes(32).toString("hex");
+        const raw = crypto.randomBytes(32).toString("base64url");
+        const tokenHash = hashToken(raw);
         const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
         await ctx.prisma.passwordResetToken.create({
-          data: { token, userId: user.id, expires },
+          data: { tokenHash, userId: user.id, expires },
         });
 
-        const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${token}`;
+        const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${raw}`;
         await sendPasswordResetEmail(user.email, resetUrl);
       }
 
@@ -37,8 +58,16 @@ export const authRouter = createTRPCRouter({
       password: z.string().min(8).max(255),
     }))
     .mutation(async ({ ctx, input }) => {
+      const ip = getClientIp(ctx.headers);
+      await assertWithinRateLimit({
+        key: `auth:reset-confirm:ip:${ip}`,
+        limit: 20,
+        windowSeconds: 60 * 60,
+      });
+
+      const tokenHash = hashToken(input.token);
       const resetToken = await ctx.prisma.passwordResetToken.findUnique({
-        where: { token: input.token },
+        where: { tokenHash },
       });
 
       if (!resetToken || resetToken.expires < new Date()) {
@@ -50,12 +79,19 @@ export const authRouter = createTRPCRouter({
 
       const hashed = await bcrypt.hash(input.password, 12);
 
-      await ctx.prisma.user.update({
-        where: { id: resetToken.userId },
-        data: { password: hashed },
-      });
+      // Atomically update password and consume the token so a leaked link
+      // can't be replayed even if the email is read multiple times.
+      await ctx.prisma.$transaction([
+        ctx.prisma.user.update({
+          where: { id: resetToken.userId },
+          data: { password: hashed },
+        }),
+        ctx.prisma.passwordResetToken.delete({ where: { tokenHash } }),
+      ]);
 
-      await ctx.prisma.passwordResetToken.delete({ where: { token: input.token } });
+      // Force the auth snapshot cache to refresh on next request so a
+      // freshly-set password takes effect immediately.
+      await invalidateAuthSnapshot(resetToken.userId);
 
       return { ok: true };
     }),
@@ -70,6 +106,13 @@ export const authRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const ip = getClientIp(ctx.headers);
+      await assertWithinRateLimit({
+        key: `auth:register:ip:${ip}`,
+        limit: 10,
+        windowSeconds: 60 * 60,
+      });
+
       const email = input.email.toLowerCase().trim();
 
       const existing = await ctx.prisma.user.findUnique({ where: { email } });
@@ -133,6 +176,8 @@ export const authRouter = createTRPCRouter({
         },
       });
 
+      await invalidateAuthSnapshot(userId);
+
       return { ok: true };
     }),
 
@@ -142,6 +187,9 @@ export const authRouter = createTRPCRouter({
     // ScraperJob.userId is required with no cascade, must be deleted first
     await ctx.prisma.scraperJob.deleteMany({ where: { userId } });
     await ctx.prisma.user.delete({ where: { id: userId } });
+
+    // Drop the cache immediately so this user's JWT can't ride for up to 60s.
+    await invalidateAuthSnapshot(userId);
 
     return { ok: true };
   }),

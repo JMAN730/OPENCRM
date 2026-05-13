@@ -3,6 +3,27 @@ import { describe, it, expect, vi } from 'vitest'
 import { LeadsList } from './LeadsList'
 import { trpc } from '@/app/_trpc/client'
 
+// The component uses useSession() at module load. Mock it so tests don't
+// need a <SessionProvider /> wrapper.
+vi.mock('next-auth/react', () => ({
+  useSession: vi.fn(() => ({
+    data: {
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        role: 'ADMIN',
+        organizationId: 'org-1',
+        teamId: null,
+      },
+      expires: new Date(Date.now() + 1000 * 60 * 60).toISOString(),
+    },
+    status: 'authenticated',
+  })),
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+}))
+
 // Mock tRPC
 vi.mock('@/app/_trpc/client', () => ({
   trpc: {

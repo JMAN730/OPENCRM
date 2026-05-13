@@ -34,8 +34,10 @@ export function createMockPrisma() {
       createMany: vi.fn(),
       delete: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       count: vi.fn(),
       aggregate: vi.fn(),
+      groupBy: vi.fn(),
     },
     callLog: {
       findMany: vi.fn(),
@@ -45,6 +47,7 @@ export function createMockPrisma() {
     },
     task: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -87,6 +90,15 @@ export function createMockPrisma() {
       create: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
+      // Support both the array form (used by the auth router's reset
+      // confirmation) and the function form (callback-style transactions).
+      if (Array.isArray(arg)) return Promise.all(arg);
+      if (typeof arg === "function") {
+        return (arg as (tx: unknown) => unknown)(createMockPrisma());
+      }
+      return undefined;
+    }),
   };
 }
 
