@@ -33,6 +33,7 @@ export function createMockPrisma() {
       create: vi.fn(),
       createMany: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
       count: vi.fn(),
