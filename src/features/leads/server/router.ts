@@ -3,6 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { resolveLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
+import { isAdmin } from "@/server/authz";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -49,7 +50,7 @@ export const leadsRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const search = input.search?.trim();
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
 
       const baseScope = await resolveLeadScope(
@@ -64,9 +65,9 @@ export const leadsRouter = createTRPCRouter({
       // Allow narrowing
       if (input.scope === "mine") {
         where = { organizationId: ctx.organizationId, assignedToId: userId };
-      } else if (input.scope === "all" && role !== "ADMIN") {
+      } else if (input.scope === "all" && !isAdmin(role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
-      } else if (input.scope === "all" && role === "ADMIN") {
+      } else if (input.scope === "all" && isAdmin(role)) {
         where = { organizationId: ctx.organizationId };
       }
 
@@ -104,7 +105,7 @@ export const leadsRouter = createTRPCRouter({
   getById: organizationProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(
         ctx.prisma,
         ctx.session.user.id,
@@ -122,7 +123,7 @@ export const leadsRouter = createTRPCRouter({
   delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(
         ctx.prisma,
         ctx.session.user.id,
@@ -171,7 +172,7 @@ export const leadsRouter = createTRPCRouter({
   updateCallOutcome: organizationProcedure
     .input(z.object({ id: z.string(), ...callOutcomeSchema.shape }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(
         ctx.prisma,
         ctx.session.user.id,
@@ -220,7 +221,7 @@ export const leadsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const orgId = ctx.organizationId;
       const userId = ctx.session.user.id;
 
@@ -230,7 +231,7 @@ export const leadsRouter = createTRPCRouter({
         select: { id: true, users: { select: { id: true } } },
       });
 
-      if (role !== "ADMIN" && ledTeams.length === 0) {
+      if (!isAdmin(role) && ledTeams.length === 0) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Only admins or team leaders can reassign leads.",
@@ -246,7 +247,7 @@ export const leadsRouter = createTRPCRouter({
         if (!assignee) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
         }
-        if (role !== "ADMIN") {
+        if (!isAdmin(role)) {
           const leaderTeamIds = ledTeams.map((t) => t.id);
           if (!assignee.teamId || !leaderTeamIds.includes(assignee.teamId)) {
             throw new TRPCError({
@@ -301,7 +302,7 @@ export const leadsRouter = createTRPCRouter({
   createNote: organizationProcedure
     .input(z.object({ leadId: z.string(), content: z.string().min(1).max(5000) }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, ...leadWhereFromScope(scope) },
@@ -323,15 +324,21 @@ export const leadsRouter = createTRPCRouter({
   getNotes: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(ctx.prisma, ctx.session.user.id, ctx.organizationId, role);
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, ...leadWhereFromScope(scope) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      // Defense-in-depth: filter Notes by the lead's organization in addition
+      // to leadId, so a leaked Note relation can't escape the org boundary
+      // even if the upstream scope check is ever bypassed.
       return ctx.prisma.note.findMany({
-        where: { leadId: input.leadId },
+        where: {
+          leadId: input.leadId,
+          lead: { organizationId: ctx.organizationId },
+        },
         orderBy: { createdAt: "desc" },
         take: 50,
         include: { user: { select: { id: true, name: true, email: true, image: true } } },
@@ -342,7 +349,7 @@ export const leadsRouter = createTRPCRouter({
   getActivities: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const scope = await resolveLeadScope(
         ctx.prisma,
         ctx.session.user.id,
@@ -354,8 +361,12 @@ export const leadsRouter = createTRPCRouter({
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
+      // Defense-in-depth: same org join filter as getNotes.
       return ctx.prisma.activity.findMany({
-        where: { leadId: input.leadId },
+        where: {
+          leadId: input.leadId,
+          lead: { organizationId: ctx.organizationId },
+        },
         orderBy: { createdAt: "desc" },
         take: 100,
         include: { user: { select: { id: true, name: true, email: true, image: true } } },

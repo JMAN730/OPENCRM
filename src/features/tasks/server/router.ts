@@ -1,6 +1,7 @@
-import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { isManagerOrAdmin } from "@/server/authz";
 
 export const tasksRouter = createTRPCRouter({
   create: organizationProcedure
@@ -32,7 +33,7 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
-  update: protectedProcedure
+  update: organizationProcedure
     .input(z.object({
       taskId: z.string(),
       completed: z.boolean().optional(),
@@ -40,17 +41,30 @@ export const tasksRouter = createTRPCRouter({
       dueDate: z.coerce.date().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const task = await ctx.prisma.task.findUnique({
-        where: { id: input.taskId },
-        select: { userId: true },
+      // Org-scoped lookup: the task must belong to a user inside the
+      // caller's organization. This is the multi-tenant gate.
+      const task = await ctx.prisma.task.findFirst({
+        where: {
+          id: input.taskId,
+          user: { organizationId: ctx.organizationId },
+        },
+        select: { id: true, userId: true },
       });
 
-      if (!task || task.userId !== ctx.session.user.id) {
+      if (!task) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
       }
 
+      // Within the org, only the task owner can edit it unless the caller
+      // is a manager/admin (who can manage their team's tasks).
+      const callerId = ctx.session.user.id;
+      const callerRole = ctx.session.user.role;
+      if (task.userId !== callerId && !isManagerOrAdmin(callerRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
+      }
+
       return ctx.prisma.task.update({
-        where: { id: input.taskId },
+        where: { id: task.id },
         data: {
           completed: input.completed,
           title: input.title,
