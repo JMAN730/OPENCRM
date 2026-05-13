@@ -16,7 +16,6 @@ export const dashboardRouter = createTRPCRouter({
       callsTodayCount,
       appointmentsSetCount,
       followupsDueCount,
-      qualifiedLeadsCount,
       revenueResult,
       statusDistribution,
       leadsByStatusResult,
@@ -33,7 +32,6 @@ export const dashboardRouter = createTRPCRouter({
       ctx.prisma.task.count({
         where: { user: { organizationId }, completed: false, dueDate: { gte: today, lt: tomorrow } },
       }),
-      ctx.prisma.lead.count({ where: { organizationId, status: "CONNECTED" } }),
       ctx.prisma.lead.aggregate({
         where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
         _sum: { value: true },
@@ -71,7 +69,7 @@ export const dashboardRouter = createTRPCRouter({
     }));
 
     const conversionRate = totalLeadsCount > 0
-      ? ((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)
+      ? ((appointmentsSetCount / totalLeadsCount) * 100).toFixed(1)
       : "0.0";
 
     return {
