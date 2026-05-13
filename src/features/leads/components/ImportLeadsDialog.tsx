@@ -77,7 +77,9 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
     const normalized = rawKey.trim().toLowerCase();
     const field = FIELD_MAP[normalized];
     const str = cellToString(value);
-    if (field && str) lead[field] = str;
+    // If multiple columns map to the same field (common in messy spreadsheets),
+    // keep the first non-empty value rather than overwriting.
+    if (field && str && !lead[field]) lead[field] = str;
   }
 
   // If the "email" value is actually a URL, move it to website
@@ -113,6 +115,9 @@ export function ImportLeadsDialog({ onImported }: Props) {
   const [rows, setRows] = useState<ParsedLead[]>([]);
   const [fileName, setFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [sheetName, setSheetName] = useState<string>("");
+  const [xlsxBytes, setXlsxBytes] = useState<Uint8Array | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = trpc.leads.bulkCreate.useMutation({
@@ -126,22 +131,56 @@ export function ImportLeadsDialog({ onImported }: Props) {
     onError: (err) => toast.error(err.message),
   });
 
-  const parseXlsx = (file: File) => {
+  const parseWorkbook = (wb: XLSX.WorkBook, requestedSheetName?: string) => {
+    const names = wb.SheetNames ?? [];
+    setSheetNames(names);
+
+    // If no sheet was explicitly chosen, pick the sheet with the most rows.
+    let activeSheet =
+      requestedSheetName && wb.Sheets[requestedSheetName]
+        ? requestedSheetName
+        : "";
+    if (!activeSheet) {
+      let bestName = names[0] ?? "";
+      let bestCount = -1;
+      for (const name of names) {
+        const ws = wb.Sheets[name];
+        if (!ws) continue;
+        const count = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws).length;
+        if (count > bestCount) {
+          bestCount = count;
+          bestName = name;
+        }
+      }
+      activeSheet = bestName;
+    }
+
+    setSheetName(activeSheet);
+
+    const ws = wb.Sheets[activeSheet];
+    if (!ws) {
+      toast.error("Failed to find a worksheet in this file.");
+      return;
+    }
+    const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+    const parsed = jsonRows.map(normalizeRow).filter(
+      (r) => r.company || r.firstName || r.lastName || r.email || r.phone
+    );
+    if (parsed.length === 0) {
+      toast.error("No valid leads found. Check your column headers.");
+      return;
+    }
+    setRows(parsed);
+  };
+
+  const parseXlsx = (file: File, requestedSheetName?: string) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
+        setXlsxBytes(data);
         const wb = XLSX.read(data, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
-        const parsed = jsonRows.map(normalizeRow).filter(
-          (r) => r.company || r.firstName || r.lastName || r.email || r.phone
-        );
-        if (parsed.length === 0) {
-          toast.error("No valid leads found. Check your column headers.");
-          return;
-        }
-        setRows(parsed);
+        parseWorkbook(wb, requestedSheetName);
       } catch {
         toast.error("Failed to parse Excel file. Please check the file format.");
       }
@@ -192,7 +231,13 @@ export function ImportLeadsDialog({ onImported }: Props) {
 
   const handleImport = () => bulkCreate.mutate(rows);
 
-  const reset = () => { setRows([]); setFileName(""); };
+  const reset = () => {
+    setRows([]);
+    setFileName("");
+    setSheetNames([]);
+    setSheetName("");
+    setXlsxBytes(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
@@ -205,7 +250,7 @@ export function ImportLeadsDialog({ onImported }: Props) {
         <DialogHeader>
           <DialogTitle>Import leads</DialogTitle>
           <DialogDescription>
-            Supports .csv and .xlsx files. Columns: first name, last name, email, phone, company, website, source / category.
+            Supports .csv and .xlsx files. Existing leads are updated (matched by email/phone) instead of duplicated.
           </DialogDescription>
         </DialogHeader>
 
@@ -237,12 +282,41 @@ export function ImportLeadsDialog({ onImported }: Props) {
               <FileText size={18} className="text-primary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{fileName}</p>
-                <p className="text-xs text-muted-foreground">{rows.length} leads ready to import</p>
+                <p className="text-xs text-muted-foreground">
+                  {rows.length} leads ready to import
+                  {sheetName ? ` · Sheet: ${sheetName}` : ""}
+                </p>
               </div>
               <Button variant="ghost" size="sm" onClick={reset} className="shrink-0 text-xs">
                 Change
               </Button>
             </div>
+
+            {sheetNames.length > 1 && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Worksheet</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Choose which sheet to import from this workbook.
+                  </p>
+                </div>
+                <select
+                  className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+                  value={sheetName}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSheetName(next);
+                    if (!xlsxBytes) return;
+                    const wb = XLSX.read(xlsxBytes, { type: "array" });
+                    parseWorkbook(wb, next);
+                  }}
+                >
+                  {sheetNames.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Preview table */}
             <div className="rounded-md border border-border overflow-hidden">

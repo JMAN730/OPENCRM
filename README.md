@@ -91,6 +91,7 @@ AWS_SECRET_ACCESS_KEY="..."
 AWS_REGION="..."
 AWS_S3_BUCKET="..."
 REDIS_URL="redis://localhost:6379"
+SCRAPER_ENABLED="false"
 ```
 
 ```bash

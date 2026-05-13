@@ -144,6 +144,36 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("bulkDelete", () => {
+    it("deletes multiple leads after scope check", async () => {
+      prisma.team.findMany.mockResolvedValue([]);
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }, { id: "lead-2" }]);
+      prisma.lead.deleteMany.mockResolvedValue({ count: 2 });
+
+      const result = await caller.leads.bulkDelete({ leadIds: ["lead-1", "lead-2"] });
+
+      expect(prisma.lead.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1", "lead-2"] }, organizationId: "org-1" },
+        select: { id: true },
+      });
+      expect(prisma.lead.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1", "lead-2"] } },
+      });
+      expect(result).toEqual({ count: 2 });
+    });
+
+    it("refuses when any lead is outside scope", async () => {
+      prisma.team.findMany.mockResolvedValue([]);
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }]); // missing lead-2
+
+      await expect(
+        caller.leads.bulkDelete({ leadIds: ["lead-1", "lead-2"] })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.lead.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe("create", () => {
     it("attaches organizationId and assignedToId from the session", async () => {
       prisma.lead.create.mockResolvedValue({ id: "lead-1" });
@@ -192,13 +222,46 @@ describe("leadsRouter", () => {
         { firstName: "B", status: "NOT_CONTACTED" },
       ]);
 
+      expect(prisma.lead.findMany).not.toHaveBeenCalled();
       expect(prisma.lead.createMany).toHaveBeenCalledWith({
         data: [
           { firstName: "A", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
           { firstName: "B", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
         ],
       });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ count: 2 });
+    });
+
+    it("updates an existing lead (matched by email) instead of duplicating", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        { id: "lead-1", email: "a@example.com", phone: null, status: "CONNECTED" },
+      ]);
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+      prisma.$transaction.mockResolvedValue([{}, { id: "lead-1" }] as any);
+
+      const result = await caller.leads.bulkCreate([
+        { email: "A@EXAMPLE.COM", phone: "", company: "Acme", status: "NOT_CONTACTED" },
+      ]);
+
+      expect(prisma.lead.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: "org-1",
+            OR: [{ email: { in: ["a@example.com"] } }],
+          }),
+        }),
+      );
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: expect.objectContaining({
+          email: "a@example.com",
+          company: "Acme",
+        }),
+      });
+      // Status should not be downgraded back to NOT_CONTACTED
+      expect(prisma.lead.update.mock.calls[0]?.[0]?.data?.status).toBeUndefined();
+      expect(result).toEqual({ count: 1 });
     });
 
     it("rejects empty arrays", async () => {

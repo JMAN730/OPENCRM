@@ -29,7 +29,13 @@ function parseArray(val: string): string[] {
 function deserializeJob<T extends { locations: string; categories: string }>(
   job: T
 ): Omit<T, "locations" | "categories"> & { locations: string[]; categories: string[] } {
-  return { ...job, locations: parseArray(job.locations), categories: parseArray(job.categories) };
+  // Preserve the full job shape (status, ids, timestamps, etc.) while converting
+  // the JSON-string array fields into string[] for the client.
+  return {
+    ...(job as Omit<T, "locations" | "categories">),
+    locations: parseArray(job.locations),
+    categories: parseArray(job.categories),
+  };
 }
 
 
@@ -90,7 +96,23 @@ export const scraperRouter = createTRPCRouter({
         where: { id: input.id, organizationId: ctx.organizationId },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
-      return { ...deserializeJob(job), isRunning: isJobRunning(job.id) };
+
+      // Be explicit about the shape returned to the client so callers can rely on
+      // fields like `status`, even if Prisma typings are unavailable in some build contexts.
+      return {
+        id: job.id,
+        status: (job as any).status,
+        locations: parseArray(job.locations),
+        categories: parseArray(job.categories),
+        limit: (job as any).limit,
+        concurrency: (job as any).concurrency,
+        totalScraped: (job as any).totalScraped,
+        importedCount: (job as any).importedCount,
+        logs: (job as any).logs,
+        error: (job as any).error,
+        completedAt: (job as any).completedAt,
+        isRunning: isJobRunning(job.id),
+      };
     }),
 
   start: organizationProcedure

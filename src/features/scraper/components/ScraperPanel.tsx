@@ -13,7 +13,9 @@ export function ScraperPanel() {
   const jobs = trpc.scraper.list.useQuery(undefined, {
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data?.some((j) => j.status === "RUNNING" || j.status === "PENDING")
+      return (data as Array<{ status: string }> | undefined)?.some(
+        (j) => j.status === "RUNNING" || j.status === "PENDING",
+      )
         ? 2000
         : 10_000;
     },
