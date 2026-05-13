@@ -1,18 +1,23 @@
 import { initTRPC, TRPCError } from "@trpc/server";
-import { getServerSession } from "next-auth";
+import { getServerSession, type Session } from "next-auth";
 import { getToken } from "next-auth/jwt";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
+import { isUserRole, type UserRole } from "@/server/authz";
 
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-  // Primary: try getServerSession (uses next/headers cookies() under the hood)
-  let session = await getServerSession(authOptions);
+  // Primary: try getServerSession (uses next/headers cookies() under the hood).
+  // The jwt callback in authOptions revalidates the user against the DB so
+  // deleted accounts get rejected here.
+  let session: Session | null = await getServerSession(authOptions);
 
   // Fallback: if getServerSession returned null but a valid JWT cookie exists,
   // decode it directly. This handles cases where getServerSession fails due to
   // NEXTAUTH_URL mismatch, cookie‐prefix issues, or internal fetch failures
-  // that don't affect direct JWT decoding.
+  // that don't affect direct JWT decoding. We still revalidate the user
+  // against the database before trusting the token, otherwise a deleted
+  // user's JWT could bypass the primary path's check.
   if (!session) {
     try {
       const { cookies, headers } = await import("next/headers");
@@ -30,29 +35,32 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       });
 
       const token = await getToken({
-        req: { headers: headerObj, cookies: cookieObj } as any,
+        req: { headers: headerObj, cookies: cookieObj } as never,
         secret: process.env.NEXTAUTH_SECRET,
       });
 
-      if (token?.id && token?.email) {
-        session = {
-          user: {
-            id: token.id as string,
-            email: token.email,
-            name: token.name as string | undefined,
-            role: (token.role as string) ?? "USER",
-            organizationId: (token.organizationId as string) ?? null,
-          },
-          expires: new Date(
-            (token.exp as number) * 1000
-          ).toISOString(),
-        } as any;
-        console.info("[trpc] Session recovered from JWT fallback for:", token.email);
-      } else {
-        console.warn(
-          "[trpc] No valid session or JWT token found.",
-          "NEXTAUTH_URL:", process.env.NEXTAUTH_URL ?? "(unset)",
-        );
+      if (token?.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: String(token.id) },
+          select: { id: true, email: true, name: true, image: true, role: true, organizationId: true, teamId: true },
+        });
+        if (dbUser) {
+          const role: UserRole = isUserRole(dbUser.role) ? dbUser.role : "USER";
+          session = {
+            user: {
+              id: dbUser.id,
+              email: dbUser.email ?? undefined,
+              name: dbUser.name ?? undefined,
+              image: dbUser.image ?? undefined,
+              role,
+              organizationId: dbUser.organizationId,
+              teamId: dbUser.teamId,
+            },
+            expires: new Date(
+              ((token.exp as number) ?? Math.floor(Date.now() / 1000) + 60 * 60) * 1000
+            ).toISOString(),
+          } as Session;
+        }
       }
     } catch (err) {
       console.error("[trpc] JWT fallback error:", err);

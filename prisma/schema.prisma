@@ -272,7 +272,9 @@ model VerificationToken {
 
 model PasswordResetToken {
   id        String   @id @default(cuid())
-  token     String   @unique
+  // SHA-256 hex of the raw token. The raw value is only ever emailed to the
+  // user; a DB leak yields hashes that can't be reused.
+  tokenHash String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expires   DateTime
