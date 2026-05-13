@@ -631,6 +631,7 @@ export function LeadsList() {
   const [selected, setSelected] = useState(new Set<string>());
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role as string | undefined;
@@ -675,14 +676,13 @@ export function LeadsList() {
     onSuccess: () => { toast.success("Lead deleted"); utils.leads.getAll.invalidate(); },
     onError:   (e) => toast.error(e.message),
   });
-  const bulkDelete = trpc.leads.bulkDelete.useMutation({
-    onSuccess: (res) => {
-      toast.success(`Deleted ${res.count} lead${res.count === 1 ? "" : "s"}`);
-      setSelected(new Set());
-      utils.leads.getAll.invalidate();
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  const bulkDelete = trpc.leads.bulkDelete.useMutation();
+
+  const chunk = <T,>(arr: T[], size: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
 
   const allLeads = leads as Lead[];
 
@@ -955,12 +955,30 @@ export function LeadsList() {
                   const ids = Array.from(selected);
                   if (ids.length === 0) return;
                   if (!confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"}?`)) return;
-                  bulkDelete.mutate({ leadIds: ids });
+                  setIsBulkDeleting(true);
+                  (async () => {
+                    try {
+                      // Server caps each request at 500 ids; batch large deletions.
+                      const batches = chunk(ids, 500);
+                      let total = 0;
+                      for (const leadIds of batches) {
+                        const res = await bulkDelete.mutateAsync({ leadIds });
+                        total += res.count ?? 0;
+                      }
+                      toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
+                      setSelected(new Set());
+                      utils.leads.getAll.invalidate();
+                    } catch (e: any) {
+                      toast.error(e?.message ?? "Failed to delete selected leads.");
+                    } finally {
+                      setIsBulkDeleting(false);
+                    }
+                  })();
                 }}
-                disabled={bulkDelete.isPending}
+                disabled={isBulkDeleting || bulkDelete.isPending}
                 title="Delete selected leads"
               >
-                {bulkDelete.isPending ? "Deleting..." : "Delete"}
+                {isBulkDeleting || bulkDelete.isPending ? "Deleting..." : "Delete"}
               </button>
               <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
 
