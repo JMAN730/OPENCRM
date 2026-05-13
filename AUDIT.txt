@@ -1,0 +1,1213 @@
+================================================================================
+  OpenCRM — Principal-Engineer Codebase Audit
+================================================================================
+Date:     2026-05-12
+Auditor:  Claude Code (claude-sonnet-4-6)
+Scope:    Full recursive codebase review
+================================================================================
+
+
+================================================================================
+  1. EXECUTIVE SUMMARY
+================================================================================
+
+WHAT THE APP DOES
+-----------------
+OpenCRM is a B2B sales-team CRM targeting high-volume outbound callers. Core
+capabilities: lead management, a simulated click-to-call dialer, task
+management, a team/member hierarchy, an automated Google Maps lead scraper,
+and dashboard analytics.
+
+CORE BUSINESS MODEL
+-------------------
+Multi-tenant SaaS: each company (Organization) owns isolated data. Currently
+no billing layer.
+
+MAIN ARCHITECTURE DECISIONS
+----------------------------
+  - Next.js 16 App Router with tRPC for type-safe API
+  - PostgreSQL via Prisma 7 + @prisma/adapter-pg
+  - NextAuth v4 with JWT strategy
+  - Feature-based modularization (src/features/<name>/)
+  - Docker Compose for full-stack deployment
+
+OVERALL CODEBASE HEALTH SCORE: 6.5 / 10
+
+The structural skeleton is solid and shows real engineering thought. However,
+there is an incomplete SQLite->PostgreSQL migration leaking dead dependencies
+into production, several stub/empty features shipped as UI placeholders,
+missing route-level middleware, no pagination on the primary data table, and a
+TODO.txt that still references unfixed UX issues.
+
+BIGGEST STRENGTHS
+-----------------
+  - Clean feature-based modularization that scales to more engineers
+  - Proper organizationId isolation on every query — no obvious tenant-escape bugs
+  - End-to-end type safety via tRPC + Zod + TypeScript
+  - JWT fallback context recovery is a thoughtful operational resilience pattern
+  - Role-scoped lead access (resolveLeadScope) is well-factored and reusable
+  - Test coverage exists for every major router and several components
+
+BIGGEST WEAKNESSES
+------------------
+  1. No route-level middleware active — proxy.ts is never wired as middleware.ts
+  2. Incomplete SQLite->PostgreSQL migration — dead @libsql/client +
+     @prisma/adapter-libsql dependencies still installed and referenced in
+     next.config.ts
+  3. No pagination on leads.getAll — will OOM or time out at scale
+  4. importRowsToLeads loads all org leads into memory for deduplication
+  5. Dashboard fires 14+ parallel DB queries per load with no caching
+  6. Multiple stub features (Outreach, partially Analytics) shipped as permanent
+     UI placeholders
+  7. tasks.update uses protectedProcedure (not organizationProcedure) —
+     org-scope isolation gap
+  8. inviteUser sets password directly — no email invitation flow, no way for
+     invited users to know their credentials
+
+HIGHEST-RISK TECHNICAL PROBLEMS
+--------------------------------
+  1. Missing route middleware (unauthenticated page loads possible)
+  2. Lead importer memory explosion at scale
+  3. No rate limiting on auth endpoints
+  4. deleteAccount doesn't invalidate JWT — ghost sessions persist 30 days
+  5. Hardcoded SQLite comment in PostgreSQL schema misleads future developers
+
+
+================================================================================
+  2. PRODUCT OVERVIEW
+================================================================================
+
+2.1 Dashboard (/dashboard)
+--------------------------
+  Purpose:         KPI overview and activity summary
+  User Flow:       Load page -> tRPC dashboard.getKpiStats -> render KPI cards,
+                   call chart, recent calls, upcoming tasks
+  Frontend:        src/app/dashboard/page.tsx (inline, ~280 lines)
+  Backend:         src/features/dashboard/server/router.ts -> getKpiStats,
+                   sidebarCounts
+  DB Models:       Lead, CallLog, Task
+  Production-ready? Mostly — BUT appointmentsSet and qualifiedLeadsCount are
+                   both status="CONNECTED" counts (duplicate KPIs)
+  Missing:         Filtering by date range; per-user breakdown; revenue input
+                   mechanism
+  Scalability:     14 parallel DB queries per load; no caching; will become
+                   slow at 10K+ leads
+
+  SPECIFIC BUG: appointmentsSet and qualifiedLeadsCount are identical
+  (status: "CONNECTED" count) — two separate Promise.all slots compute the
+  same number (router.ts:30 and router.ts:35).
+
+2.2 Leads (/leads)
+------------------
+  Purpose:         Primary CRM data — view, create, import, assign,
+                   call-outcome leads
+  User Flow:       List -> search/filter -> click lead -> modal (edit outcome,
+                   add note, view activity/calls/tasks)
+  Frontend:        LeadsList.tsx (980 lines), LeadDetailsModal.tsx (204 lines),
+                   ImportLeadsDialog.tsx
+  Backend:         leadsRouter — getAll, getById, create, bulkCreate,
+                   updateCallOutcome, assign, createNote, getNotes, getActivities
+  DB Models:       Lead, Note, Activity, CallLog, Task
+  Production-ready? PARTIALLY — TODO.txt confirms search may be client-side
+                   only and dropdown actions may be broken
+  Missing:         Pagination; bulk delete; lead editing (separate from
+                   outcome); lead value input
+  Scalability:     getAll returns unlimited rows with no take/skip; will cause
+                   client-side rendering crash at 10K+
+
+2.3 Dialer (/dialer)
+--------------------
+  Purpose:         Click-to-call interface using Twilio
+  Frontend:        src/features/calls/components/Dialer.tsx
+  Backend:         callsRouter.logCall
+  Production-ready? PARTIAL — Twilio SDK installed (@twilio/voice-sdk), Dialer
+                   component exists, but actual Twilio integration requires
+                   server-side token generation (no /api/twilio-token route
+                   exists)
+  Missing:         Twilio device token endpoint; Twilio webhook signature
+                   validation; recording storage
+
+2.4 Tasks (/tasks)
+------------------
+  Purpose:         Personal task management, optionally linked to leads
+  Frontend:        TasksList.tsx
+  Backend:         tasksRouter — create, update, getAllForLead, getDueToday,
+                   getAll
+  Security Gap:    tasks.update uses protectedProcedure (not
+                   organizationProcedure) — org scope not enforced, only user
+                   ownership
+  Production-ready? Yes, functional
+  Missing:         Task deletion; task filtering/search; task assignment to
+                   other users
+
+2.5 Scraper (/scraper)
+----------------------
+  Purpose:         Launch Google Maps scraping jobs to generate leads
+  User Flow:       Configure locations/categories/limit -> start job -> monitor
+                   logs -> auto-import results
+  Frontend:        ScraperPanel.tsx, StartJobForm.tsx, JobsTable.tsx,
+                   JobDetailDialog.tsx
+  Backend:         scraperRouter + src/server/scraper/ (runner, importer,
+                   config, sanitize)
+  DB Models:       ScraperJob
+  Python Dependency: Requires external Python venv + scraper.py at configured
+                   paths
+  Production-ready? YES — most complete feature in the codebase
+  Issues:          --categories CLI flag sending verified (runner.ts:162-164 —
+                   TODO.txt item is outdated); importRowsToLeads loads all org
+                   leads into memory for dedup
+
+2.6 Teams (/team)
+-----------------
+  Purpose:         Org member management, team hierarchy, activity feed
+  Frontend:        TeamPage.tsx (716 lines), TeamMemberDetail.tsx
+  Backend:         teamsRouter — list, organizationMembers, myTeam,
+                   activityFeed, memberDetail, create, update, delete,
+                   inviteUser, setMembership
+  Production-ready? PARTIALLY — core CRUD works but invite flow creates user
+                   with known password (UX gap)
+  Missing:         Real email invitations; ownership transfer; user removal
+                   from org; role-change audit trail
+
+2.7 Outreach (/outreach)
+------------------------
+  STATUS: NON-FUNCTIONAL PLACEHOLDER.
+
+  UI renders empty-state cards with hardcoded zeros. No backend router
+  registered. No tRPC calls. No data model. The tab system in the UI is purely
+  cosmetic. Do not advertise as a feature.
+
+2.8 Analytics (/analytics)
+---------------------------
+  STATUS: PARTIALLY FUNCTIONAL.
+
+  Calls dashboard.getKpiStats and leads.getAll to render bar charts and
+  pipeline tables with real data. However, it loads ALL leads client-side to
+  compute breakdowns — same pagination problem as Leads.
+
+2.9 Settings (/settings)
+-------------------------
+  STATUS: FUNCTIONAL — profile name/email update, password reset. Auth router
+  handles it correctly. No org-level settings exposed (billing, SMTP, etc.).
+
+2.10 Auth (/auth/signin, /auth/register, /auth/reset-password)
+--------------------------------------------------------------
+  STATUS: FUNCTIONAL. Registration creates Org + Admin user atomically.
+  Password reset uses crypto tokens with 1-hour expiry. Email is sent if SMTP
+  configured, logs to console otherwise (no failure).
+
+  KNOWN ISSUE: Login allows name field as username (not just email) —
+  auth.ts:31-34 — collision risk with non-unique display names.
+
+
+================================================================================
+  3. ARCHITECTURE BREAKDOWN
+================================================================================
+
+3.1 Frontend Architecture
+--------------------------
+Next.js 16 App Router. All authenticated pages are "use client" and wrapped in
+<DashboardLayout>. Feature components live in src/features/<name>/components/.
+There is no server-side rendering of user data — all fetching is client-side
+via React Query/tRPC hooks.
+
+ISSUE: Because all pages are client-rendered, an unauthenticated user who
+reaches /leads will see a loading spinner or empty state — not a 401. Route
+protection relies entirely on the missing middleware (see Section 8).
+
+3.2 Backend Architecture
+-------------------------
+Pure tRPC over HTTP POST. No REST endpoints except NextAuth's /api/auth/*.
+All business logic is in src/features/<name>/server/router.ts files merged
+into appRouter at src/server/api/root.ts.
+
+3.3 Auth Flow
+--------------
+  Sign-in form -> NextAuth CredentialsProvider.authorize()
+    -> DB lookup (email OR name) -> bcrypt.compare()
+    -> JWT issued with { id, email, role, organizationId, teamId }
+    -> 30-day JWT stored in cookie
+    -> tRPC context reads via getServerSession() or JWT fallback
+
+CRITICAL GAP: After deleteAccount, the JWT is not invalidated. User can
+continue making tRPC calls for up to 30 days. The protectedProcedure would
+succeed (session exists) but DB operations would fail with FK errors (user
+deleted). This is an unhandled error path that would return confusing 500s.
+
+3.4 Database Structure
+-----------------------
+See Section 4 for full analysis. Summary: PostgreSQL 16, Prisma 7, schema push
+(no migrations). 13 models. The schema is clean but retains SQLite-era
+artifacts.
+
+3.5 API Structure
+------------------
+Single tRPC endpoint at /api/trpc/[trpc]. Supports GET (query) and POST
+(mutation). Batch requests via httpBatchLink. Root router has 7 namespaces:
+leads, calls, scraper, tasks, dashboard, auth, teams.
+
+3.6 State Management
+---------------------
+React Query (via tRPC). No global state store (no Zustand/Redux).
+Component-local state via useState. This is appropriate for the app's current
+complexity.
+
+3.7 Caching Strategy
+---------------------
+  - Client: React Query default staleTime (0 — refetches on mount). Sidebar
+    counts set staleTime: 30_000.
+  - Server: NONE. No Redis cache wired despite ioredis being installed and
+    src/lib/redis.ts existing.
+  - Dashboard KPIs are recomputed on every page load.
+
+3.8 File Organization
+----------------------
+  src/
+    app/                  # Next.js App Router (pages + API routes)
+    features/             # Feature modules (self-contained)
+      <name>/
+        components/       # React components
+        server/router.ts  # tRPC router
+    server/               # Shared server utilities
+      api/root.ts         # Root router
+      trpc.ts             # Context + procedures
+      activity.ts         # Activity logging helper
+      teams/scope.ts      # Lead scope resolution
+      scraper/            # Scraper subsystem
+    components/           # Shared layout + shadcn/ui
+    lib/                  # Singletons (auth, prisma, email, redis, utils)
+    hooks/                # React hooks
+    types/                # Type augmentation
+    test/                 # Test utilities
+    proxy.ts              # Route guard (ORPHANED — see Section 8)
+
+3.9 Deployment Setup
+---------------------
+Docker Compose with three services: db (PostgreSQL 16), migrate (one-shot
+prisma db push), app (Next.js standalone). depends_on with health checks is
+correctly configured. Volume scraper_output is shared between host and
+container.
+
+3.10 Real-time Systems
+-----------------------
+NONE. No WebSockets, SSE, or polling. Scraper job status is polled by the UI
+via useQuery with a refetchInterval. This is simple and correct for current
+scale.
+
+3.11 Background Job Systems
+----------------------------
+Scraper jobs run as OS child processes via child_process.spawn. No queue. No
+persistent worker. State is tracked in-memory (globalForScraper.__scraperRunning).
+A PM2 restart or container restart will mark all running jobs as FAILED
+(handled by reconcileOrphanedJobs — good), but in-progress scraping work is
+lost.
+
+3.12 Permissions/Roles System
+------------------------------
+Three roles: ADMIN, MANAGER, USER.
+
+  - ADMIN:       Full org access, team CRUD, member management, all leads
+  - MANAGER:     Role exists in enum but has NO SPECIAL BEHAVIOR in any router
+                 — treated identically to USER for all non-admin checks
+  - USER:        Sees only assigned leads (or team leads if a team leader)
+  - Team Leader: User with leaderId in a team — gets team-scope lead visibility
+
+GAP: MANAGER role has no distinct privileges, making it a dead value in the
+enum. Either define permissions for it or remove it.
+
+
+================================================================================
+  4. DATABASE + PRISMA AUDIT
+================================================================================
+
+4.1 Schema Quality: Good with Issues
+--------------------------------------
+
+STRENGTHS:
+  - Proper organizationId on all tenant-scoped models
+  - createdAt/updatedAt on all models
+  - Selective indexes on hot query paths
+  - onDelete: Cascade for owned rows, SetNull for optional relations
+  - cuid() PKs (sortable, URL-safe, no UUID collision overhead)
+
+PROBLEMS:
+
+P1 — ScraperJob.locations/categories as JSON strings (schema.prisma:294)
+-------------------------------------------------------------------------
+  locations  String @default("[]")
+  categories String @default("[]")
+
+The inline comment says "SQLite does not support native array columns" but the
+schema is now PostgreSQL. These should be String[]:
+
+  locations  String[] @default([])
+  categories String[] @default([])
+
+This removes the serialization/deserialization boilerplate throughout runner.ts
+and scraperRouter.
+
+P2 — LeadTag has no FK to Organization (schema.prisma:151)
+----------------------------------------------------------
+  model LeadTag {
+    organizationId String   # raw string, no @relation
+  }
+
+No Prisma relation, no @@index, no cascade. The organizationId field is
+orphaned — there's no way to enforce org-scoping or cascade deletes. This
+model is entirely unused in any router.
+
+P3 — ScraperJob missing onDelete: Cascade on Organization relation
+  (schema.prisma:311)
+------------------------------------------------------------------
+  organization Organization @relation(...)  # no onDelete
+  userId       String                        # no onDelete
+
+Deleting an Organization with existing scraper jobs will throw a FK constraint
+error. The auth.deleteAccount procedure manually deletes scraper jobs first —
+a workaround for a missing cascade.
+
+P4 — CallLog.userId cascades on User delete (schema.prisma:187)
+---------------------------------------------------------------
+  user User @relation(... onDelete: Cascade)
+
+If a user is deleted, all their call logs are deleted too. This destroys
+historical call data. Should be SetNull with userId String?.
+
+P5 — Activity.userId cascades on User delete (schema.prisma:238)
+----------------------------------------------------------------
+Same as P4 — audit trail is destroyed when a user account is deleted. Should
+be SetNull.
+
+P6 — No index on Task.userId alone (schema.prisma:261)
+------------------------------------------------------
+  @@index([userId, dueDate])
+
+getAll queries where: { user: { organizationId } } — this hits a relational
+join, not an index on Task directly. A @@index([userId]) or direct
+organizationId field on Task would be faster.
+
+P7 — Duplicate KPI computation in dashboardRouter
+-------------------------------------------------
+  appointmentsSetCount:  prisma.lead.count({ where: { organizationId, status: "CONNECTED" } })
+  qualifiedLeadsCount:   prisma.lead.count({ where: { organizationId, status: "CONNECTED" } })
+
+Exact same query runs twice in the same Promise.all (lines 30 and 35 of
+router.ts).
+
+P8 — No index on Lead.assignedToId
+-----------------------------------
+The scope resolution queries where: { assignedToId: { in: [...] } } but there
+is no @@index([organizationId, assignedToId]). At 100K leads, scope queries
+will full-scan.
+
+4.2 Unused Models
+------------------
+  - LeadTag       — defined, never queried
+  - Pipeline      — defined, never queried (FK on Lead exists)
+  - PipelineStage — defined, never queried
+
+4.3 Naming Consistency
+-----------------------
+  - CallLog vs calls (router/table name mismatch — cosmetic)
+  - Activity.type is a String not an enum — "LEAD_CREATED", "NOTE_ADDED" etc.
+    are stringly typed. Should be a Prisma enum.
+
+
+================================================================================
+  5. FEATURE VALIDATION AUDIT
+================================================================================
+
+5.1 Lead Search — BROKEN
+-------------------------
+TODO.txt confirms: "Search bar is UI-only — implement filtering."
+
+leadsRouter.getAll does accept search input and runs an OR query on multiple
+fields (router.ts:85-95) — so the backend filtering IS implemented. The issue
+is likely that the LeadsList.tsx component's search input isn't wired to pass
+the search parameter to the tRPC query. The backend works; the frontend
+wire-up is missing.
+
+5.2 Lead Dropdown Actions — BROKEN
+------------------------------------
+TODO.txt: "Dropdown actions (View Details, Delete Lead) currently do nothing."
+
+Given LeadsList.tsx is 980 lines, it's likely these handlers exist as stubs or
+the component was AI-generated with placeholder onClick handlers that don't
+fire mutations.
+
+5.3 Scraper Category CLI Passing — FIXED (TODO outdated)
+---------------------------------------------------------
+runner.ts:162-164:
+  if (categoryList.length > 0) {
+    args.push("--categories", categoryList.join(","));
+  }
+
+This is implemented. The TODO.txt item is stale.
+
+5.4 Dashboard Stats — Status Unclear
+--------------------------------------
+TODO.txt says stats aren't wired. The dashboard page imports
+trpc.dashboard.getKpiStats.useQuery() — the wire-up appears to exist. The
+TODO may be stale for KPIs but some specific stats (hardcoded zeros in Outreach
+stats) remain unfixed.
+
+5.5 Twilio Voice Integration — INCOMPLETE
+------------------------------------------
+@twilio/voice-sdk and twilio SDK are installed. The callsRouter.logCall stores
+call records. But there is no /api/twilio-token endpoint that generates a
+device token for the browser SDK. Without this, the Dialer can simulate calls
+but cannot make real phone calls. This is a silent partial implementation.
+
+5.6 Password Reset Email — SILENT FAIL
+---------------------------------------
+  // email.ts:22
+  console.log(`[Password Reset] No SMTP configured — reset link for ${to}: ${resetUrl}`)
+
+If SMTP is not configured, password reset silently logs to console and returns
+{ success: true } to the user. The user sees "Check your email" but receives
+nothing. This is a broken user flow with no visible error.
+
+5.7 inviteUser — UX BROKEN
+----------------------------
+An admin provides name, email, and password for a new user. The new user is
+created. But:
+  1. The password is set by the admin, not the user
+  2. There is no email sent to the new user with their credentials
+  3. The admin must manually communicate credentials out-of-band
+  4. The password field is required in the UI form
+
+This is a functional but deeply broken UX pattern.
+
+5.8 Route Protection Middleware — MISSING
+------------------------------------------
+src/proxy.ts contains a correctly-written Next.js middleware guard with the
+right config.matcher. But this file is named proxy.ts and exports a named
+function proxy, NOT export default. Next.js requires middleware to be in
+middleware.ts (or middleware.js) at the project root or src/ with
+export default. There is NO middleware.ts file in the project.
+
+IMPACT: Unauthenticated users can navigate to /leads, /dashboard, /tasks, etc.
+and receive the page HTML. They see no data (tRPC is protected) but the page
+renders without redirect. This leaks page structure and routes.
+
+FIX: Rename proxy.ts to middleware.ts and change the export:
+  // src/middleware.ts
+  export { proxy as default } from "./proxy";
+
+5.9 tasks.update Org Isolation — GAP
+--------------------------------------
+  // tasks router
+  update: protectedProcedure  // <- not organizationProcedure
+    .input(...)
+    .mutation(async ({ ctx, input }) => {
+      const task = await ctx.prisma.task.findUnique({ where: { id: input.taskId } });
+      if (!task || task.userId !== ctx.session.user.id) throw NOT_FOUND;
+      // No organizationId check
+
+A user can update/complete any task owned by themselves, regardless of org.
+The current check task.userId === ctx.session.user.id prevents cross-user
+access but not cross-org access, and violates the design contract that all
+mutations go through organizationProcedure.
+
+
+================================================================================
+  6. TEAM SYSTEM AUDIT
+================================================================================
+
+6.1 What Works
+---------------
+  - ADMIN creates teams, sets leader, adds members (inviteUser + setMembership)
+  - Team leaders see all leads assigned to their team members via
+    resolveLeadScope
+  - activityFeed filters by team membership with proper authorization
+  - memberDetail returns leads, calls, open tasks, and counts for any visible
+    member
+
+6.2 What's Broken
+------------------
+
+INVITE FLOW (Critical UX Bug):
+The inviteUser procedure creates a user with a provided password. There's no
+email sent. Admin creates account -> must call/message/email the new user
+out-of-band with their credentials. This is not acceptable for a production
+SaaS.
+
+NO USER REMOVAL:
+There's no procedure to remove a user from the organization. setMembership can
+remove from a team (set teamId: null) but there's no way to set
+user.organizationId = null or delete a user account as an admin.
+
+MANAGER ROLE IS INERT:
+Every RBAC check in teams is isAdmin(role) (string === "ADMIN"). MANAGER gets
+no special access. This means the role is a dead enum value.
+
+ACTIVITY FEED AUTHORIZATION BUG:
+Activities are filtered by userId: { in: memberIds } — only members, not the
+leader. If the leader is not in the users relation (only set via leaderId),
+the activity feed may miss the leader's own activities.
+
+N+1 IN activityFeed:
+Each call without a teamId runs two team queries (find team, then check
+leader) before the activity query.
+
+6.3 Database Concern
+---------------------
+Team.leaderId is SetNull on user delete. If the leader is deleted, the team
+has no leader and no indication of this. A soft-delete or
+leadership-transfer requirement would be safer.
+
+
+================================================================================
+  7. TECHNICAL DEBT + BLOAT AUDIT
+================================================================================
+
+7.1 Dead Code from SQLite->PostgreSQL Migration
+------------------------------------------------
+THIS IS THE SINGLE BIGGEST TECHNICAL DEBT ITEM.
+
+The app was clearly migrated from SQLite (libsql) to PostgreSQL. Evidence:
+
+  1. package.json still has @libsql/client: "^0.14" and
+     @prisma/adapter-libsql: "^7" as production dependencies
+
+  2. next.config.ts lists both in serverExternalPackages:
+       serverExternalPackages: [
+         "@libsql/client",
+         "@prisma/adapter-libsql",
+         "@prisma/client"
+       ]
+
+  3. ScraperJob.locations/categories stored as JSON strings with comment:
+     "SQLite does not support native array columns" — but schema provider
+     is postgresql
+
+  4. src/lib/prisma.ts uses @prisma/adapter-pg but next.config.ts still
+     externalizes the old libsql packages
+
+IMPACT: ~2MB of dead packages in production Docker image. Confusion for
+new developers. The next.config.ts serverExternalPackages entry for libsql
+packages forces Next.js to not bundle them, which is unnecessary overhead.
+
+7.2 Orphaned Files
+-------------------
+  File                           Status     Reason
+  -----------------------------------------------------------------------
+  src/proxy.ts                   Orphaned   Not imported; not wired as middleware
+  src/lib/redis.ts               Unused     Imported nowhere in production code
+  prisma/prisma.config.ts        Redundant  Duplicate of repo-root prisma.config.ts
+  gemini.md.txt                  Dead       AI assistant context leaked into repo
+  GITHUB_PUBLISH_CHECKLIST.md    Noise      Internal checklist committed to repo
+  PUBLICATION_SUMMARY.md         Noise      Internal doc committed to repo
+  skills-lock.json               Noise      Claude Code artifact committed to repo
+
+7.3 Large Components
+---------------------
+  File                            Lines   Problem
+  -----------------------------------------------------------------------
+  LeadsList.tsx                   980     Table, filters, bulk actions, modal
+                                          trigger, import dialog all in one file
+  TeamPage.tsx                    716     Team list, member management, invite
+                                          form, activity feed all in one file
+  dashboard/page.tsx              ~280    Inline — could be componentized
+  analytics/page.tsx              ~230    Inline — loads all leads for
+                                          client-side computation
+
+7.4 Duplicate Logic
+--------------------
+  - appointmentsSet and qualifiedLeadsCount in dashboardRouter — identical query
+  - leads.getAll in analytics/page.tsx loads ALL leads client-side for stage
+    breakdown — duplicates dashboard logic
+  - isAdmin(role) helper duplicated in teamsRouter.ts (local function) vs.
+    inline role !== "ADMIN" checks in leadsRouter.ts
+
+7.5 Dead Dependencies
+----------------------
+  Package                    Status
+  -----------------------------------------------------------------------
+  @libsql/client             Dead — SQLite era, unused
+  @prisma/adapter-libsql     Dead — SQLite era, unused
+  @auth/prisma-adapter       Dead — JWT strategy doesn't use DB adapter
+  @base-ui/react             Dead — installed, never imported in source
+  openai                     Dead — installed, never called in source
+  @aws-sdk/client-s3         Dead — installed, never called in source
+
+7.6 What Should Be Deleted
+---------------------------
+  1. @libsql/client + @prisma/adapter-libsql from package.json and next.config.ts
+  2. @auth/prisma-adapter (unused with JWT strategy)
+  3. @base-ui/react (unused)
+  4. src/lib/redis.ts (or wire it to cache dashboard stats)
+  5. gemini.md.txt, GITHUB_PUBLISH_CHECKLIST.md, PUBLICATION_SUMMARY.md
+  6. Pipeline + PipelineStage + LeadTag models from schema (or implement them)
+  7. MANAGER role from UserRole enum (or define its permissions)
+
+7.7 What Should Be Merged/Rewritten
+-------------------------------------
+  1. proxy.ts -> middleware.ts with export default
+  2. ScraperJob.locations/categories -> native String[] PostgreSQL arrays
+  3. Activity.type -> Prisma enum instead of raw string
+  4. Split LeadsList.tsx into LeadsTable + LeadFilters + BulkActions +
+     LeadImportDialog
+  5. Extract shared isAdmin/isManager helpers to src/lib/roles.ts
+
+
+================================================================================
+  8. SECURITY AUDIT
+================================================================================
+
+8.1 Missing Route Middleware (CRITICAL)
+----------------------------------------
+As documented in Section 5.8, proxy.ts is never activated as Next.js
+middleware. Protected routes are not redirected at the edge/server level. Only
+tRPC procedures enforce auth.
+
+SEVERITY: Medium-High. Data is protected (tRPC enforces auth), but page
+structure is visible to unauthenticated users.
+
+8.2 Ghost Sessions After Account Deletion
+------------------------------------------
+  // authRouter.deleteAccount
+  await ctx.prisma.user.delete({ where: { id: userId } });
+  return { ok: true };
+  // JWT is still valid for 30 days
+
+After calling deleteAccount, subsequent tRPC calls with the old JWT will pass
+enforceUserIsAuthed (session exists) but fail at DB level with confusing
+errors.
+
+FIX: Implement a JWT denylist (Redis SET), or force re-auth by reducing
+maxAge.
+
+8.3 Login Allows Name as Username
+-----------------------------------
+  // auth.ts:31-34
+  where: {
+    OR: [
+      { email: credentials.email },
+      { name: credentials.email },  // name is not unique
+    ]
+  }
+
+User.name is not unique in the schema. Two users can have the same name. The
+lookup is non-deterministic. bcrypt.compare will still fail for the wrong
+user, but this is an avoidable ambiguity and potential subtle auth bug.
+
+FIX: Remove the name OR clause; query by email only.
+
+8.4 No Rate Limiting
+---------------------
+No rate limiting on:
+  - auth/signin (NextAuth) — brute-forceable
+  - auth.register — account enumeration + spam
+  - auth.resetPassword — email bombing
+  - Any tRPC mutation
+
+FIX: Implement Upstash Ratelimit or rate-limiter-flexible in middleware and
+auth procedures.
+
+8.5 Password Reset Token Stored Raw
+-------------------------------------
+  const token = crypto.randomBytes(32).toString("hex");
+  await ctx.prisma.passwordResetToken.create({ data: { token, userId, expires } });
+  const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${token}`;
+
+The raw token appears in both the DB and the URL. If server logs are shipped
+externally, the token is exposed. Industry best practice: store hash(token),
+compare hash(input).
+
+8.6 calls.logCall Missing Scope Check
+---------------------------------------
+callsRouter.logCall confirms the lead is in the caller's org but does NOT
+check if the lead is assigned to the calling user. A regular user can log a
+call against any lead in their org — bypassing resolveLeadScope which all
+other lead operations use.
+
+8.7 Input Validation: Good
+---------------------------
+All tRPC inputs are Zod-validated. String length limits enforced. Enum
+validation on status fields. No SQL injection vectors through Prisma
+(parameterized queries).
+
+8.8 Multi-tenant Isolation: Good
+----------------------------------
+Every organizationProcedure query filters by ctx.organizationId. The
+resolveLeadScope pattern correctly narrows by role. No observed cross-tenant
+data leak vectors.
+
+
+================================================================================
+  9. PERFORMANCE + SCALE AUDIT
+================================================================================
+
+9.1 N+1 and Inefficient Queries
+---------------------------------
+
+leadsRouter.getAll — No Pagination
+  return ctx.prisma.lead.findMany({ where: finalWhere, orderBy: ... });
+  // No take/skip
+
+Returns every lead in scope. At 10K leads, sends 10K rows to client on every
+page load. At 50K, will OOM the browser tab.
+
+importRowsToLeads — Full Table Scan for Dedup
+  const existing = await prisma.lead.findMany({
+    where: { organizationId },
+    select: { company: true, phone: true },
+  });
+
+Loads all org leads into Node.js memory. At 100K leads, ~50MB per import
+operation. Should use batch-check with indexed compound key or a composite
+unique constraint.
+
+dashboardRouter.getKpiStats — 14 Parallel Queries
+14 queries fired on every dashboard load with no caching. The 7-day
+callsPerDay loop runs 7 identical count queries that could be a single
+groupBy(createdAt).
+
+resolveLeadScope — Uncached
+Called once per leads query. Fetches team membership from DB every time.
+Should be cached in the JWT token or Redis.
+
+activityFeed — Multiple Queries Before Main Query
+Each call without a teamId runs two team queries (find team, then check
+leader) before the activity query.
+
+9.2 Bundle Size Issues
+-----------------------
+  Package              Size          Status
+  -----------------------------------------------------------------------
+  xlsx (SheetJS)       ~600KB min.   Should be dynamically imported
+  framer-motion        ~150KB        Used sparingly
+  @aws-sdk/client-s3   ~200KB        Unused, installed
+  openai               ~200KB        Unused, installed
+  @libsql/client       ~2MB          Dead, from SQLite era
+
+9.3 Render Performance
+-----------------------
+  - LeadsList.tsx renders a full DOM table of all leads — no virtualization.
+    At 1K+ rows, scrolling will be janky.
+  - Dashboard fires all tRPC queries on mount with no suspense boundaries —
+    cascading loading waterfalls.
+
+9.4 Scaling Bottlenecks by User Count
+---------------------------------------
+
+100 USERS:
+Functional. Lead tables under 10K per org. Dashboard queries fast. Scraper
+jobs manageable.
+
+1,000 USERS / ~50 ORGS:
+Dashboard stats start to slow (no caching). Lead imports hit memory pressure
+if any org has 50K+ leads. resolveLeadScope DB round-trips become noticeable
+latency.
+
+10,000 USERS / ~500 ORGS:
+leadsRouter.getAll causes client browser OOM for large accounts.
+importRowsToLeads dedup scan becomes a minutes-long operation. Dashboard
+14-query pattern saturates DB connection pool. Scraper job log writes (every
+1.5s per job) create write contention at dozens of concurrent jobs.
+
+100,000 USERS / ~5,000 ORGS:
+PostgreSQL needs read replicas. The scraper in-memory registry doesn't work
+across multiple Node processes — horizontal scaling is impossible without
+Redis/queue. ScraperJob.logs TEXT field with 200K char limit creates large row
+updates. Need dedicated logging service (S3, Loki).
+
+
+================================================================================
+  10. REFACTOR ROADMAP
+================================================================================
+
+IMMEDIATE FIXES (< 1 day each)
+--------------------------------
+  Priority  Fix                                                  File
+  -----------------------------------------------------------------------
+  P0        Rename proxy.ts -> middleware.ts, add               src/proxy.ts
+            export default
+  P0        Remove @libsql/client, @prisma/adapter-libsql,      package.json,
+            @auth/prisma-adapter, @base-ui/react from           next.config.ts
+            package.json and next.config.ts
+  P1        Fix duplicate appointmentsSet/qualifiedLeadsCount    dashboard/router.ts
+            query                                                :30,35
+  P1        Remove name from auth.ts login OR clause             lib/auth.ts:31-34
+  P1        Add onDelete: Cascade to ScraperJob.organization;    schema.prisma
+            SetNull to CallLog.user, Activity.user
+  P1        Fix tasks.update to use organizationProcedure        tasks/server/router.ts
+  P1        Delete gemini.md.txt, GITHUB_PUBLISH_CHECKLIST.md,   repo root
+            PUBLICATION_SUMMARY.md
+
+SHORT-TERM (1–3 days each)
+---------------------------
+  Priority  Fix                                                  Impact
+  -----------------------------------------------------------------------
+  P1        Add take/skip pagination to leadsRouter.getAll       Prevents client OOM
+  P1        Replace importRowsToLeads full-table dedup with      Prevents server OOM
+            indexed lookup
+  P1        Fix LeadsList search wire-up to pass search to       Core feature works
+            tRPC query
+  P1        Fix lead dropdown actions (View Details, Delete)     Core feature works
+  P2        Wire inviteUser to send email with temp credentials   UX
+  P2        Add @@index([organizationId, assignedToId]) to       Query performance
+            Lead model
+  P2        Migrate ScraperJob.locations/categories to String[]  Schema correctness
+  P2        Add Activity.type as Prisma enum                     Type safety
+
+MEDIUM-TERM (sprint-sized)
+---------------------------
+  Priority  Work                                                 Impact
+  -----------------------------------------------------------------------
+  P1        Add rate limiting middleware (Upstash or             Security
+            rate-limiter-flexible)
+  P1        Implement real email invitation flow (generate        UX/Security
+            temp link, user sets own password)
+  P2        Cache dashboard KPIs in Redis (5-minute TTL)         Performance
+  P2        Replace 7-query day-loop in dashboard with single    DB efficiency
+            groupBy
+  P2        Split LeadsList.tsx into LeadsTable + LeadFilters    Maintainability
+            + BulkActions
+  P2        Define MANAGER role permissions or remove enum value  Correctness
+  P2        Add token hash storage for password reset tokens     Security
+  P3        Implement virtual list/windowing in LeadsList         Render performance
+  P3        Dynamic import xlsx                                   Bundle size
+  P3        Implement or remove Pipeline/PipelineStage/LeadTag   Schema hygiene
+
+LONG-TERM SCALABILITY ROADMAP
+-------------------------------
+  1. HORIZONTAL SCALING: Move scraper job registry from in-memory
+     globalForScraper to Redis pub/sub. Job spawning needs a proper queue
+     (BullMQ over Redis).
+
+  2. DATABASE: Add read replica for dashboard/analytics queries. Implement
+     connection pooling via PgBouncer.
+
+  3. SCRAPER LOGS: Move from ScraperJob.logs TEXT field to S3/object storage.
+     Stream logs via SSE instead of polling.
+
+  4. AUTH: Implement JWT denylist (Redis SET) for token invalidation on
+     logout/delete. Shorten maxAge to 24h with refresh tokens.
+
+  5. BILLING: Stripe integration needed before monetization. Organization model
+     needs plan, seats, billingId.
+
+  6. API RATE LIMITING: Implement per-org API quotas for tRPC endpoints.
+
+  7. GDPR: Implement data export (leads.exportCsv) and right-to-deletion
+     guarantees.
+
+
+================================================================================
+  11. FINAL VERDICT
+================================================================================
+
+IS THIS APP STRUCTURALLY SOLID?
+---------------------------------
+Yes, with serious caveats. The core request pipeline (Client -> tRPC -> Router
+-> Prisma -> PostgreSQL) is well-structured and type-safe. Multi-tenancy is
+properly enforced. The feature-based module system is clean and would support a
+team of 5-8 engineers without major collisions.
+
+The caveats are real: a missing middleware file leaves routes unprotected at
+the Next.js layer; an incomplete database migration creates a false mental
+model; and several advertised features are UI-only placeholders.
+
+WHAT WOULD WORRY A SENIOR ENGINEER MOST?
+------------------------------------------
+  1. The proxy.ts that was never wired as middleware. This is the kind of bug
+     that gets missed in code review, ships to production, and gets exploited.
+
+  2. importRowsToLeads loading all org leads for deduplication. One large org
+     doing a bulk scraper import would OOM the Node.js process, taking down the
+     entire app for all tenants.
+
+  3. No rate limiting. Auth endpoints are trivially brutable.
+
+  4. Stub features with real UI shipped. Outreach has zero backend. A customer
+     clicking "New Sequence" gets a dead button. This destroys trust.
+
+WHAT SHOULD BE FIXED BEFORE SCALING?
+--------------------------------------
+In strict order:
+  1. Wire middleware.ts (30 minutes)
+  2. Paginate leadsRouter.getAll (2 hours)
+  3. Fix importRowsToLeads dedup (4 hours)
+  4. Remove dead libsql packages (30 minutes)
+  5. Add rate limiting to auth (1 day)
+
+IS THE ARCHITECTURE CAPABLE OF BECOMING A SERIOUS SAAS?
+---------------------------------------------------------
+Yes — the foundation is right. tRPC + Prisma + Next.js is a proven stack. The
+feature-based organization scales to a larger team. The multi-tenant design is
+correct. The main architectural work needed for scale is: a job queue for the
+scraper, Redis caching for dashboard queries, read replicas, and proper
+pagination.
+
+TOP 5 CRITICAL ACTIONS TO TAKE IMMEDIATELY
+--------------------------------------------
+  1. Create src/middleware.ts — fix the orphaned proxy.ts
+  2. Add take/skip to leadsRouter.getAll and add LeadsList pagination UI
+  3. Fix importRowsToLeads dedup — use prisma.lead.count with indexed lookup,
+     not full table load
+  4. Remove dead SQLite packages — @libsql/client, @prisma/adapter-libsql,
+     @auth/prisma-adapter from package.json and next.config.ts
+  5. Fix the lead dropdown actions and search wire-up — the most visible
+     broken features
+
+
+================================================================================
+  APPENDIX A — DEPENDENCY GRAPH (MAJOR SYSTEMS)
+================================================================================
+
+  Browser
+    └── Next.js App Router (src/app/)
+          ├── tRPC Client (httpBatchLink -> /api/trpc)
+          │     └── All feature components
+          └── NextAuth Client (session hooks)
+
+  Next.js Server
+    ├── tRPC Handler (/api/trpc/[trpc])
+    │     └── appRouter
+    │           ├── leadsRouter -> resolveLeadScope -> Prisma.lead
+    │           ├── callsRouter -> Prisma.callLog
+    │           ├── tasksRouter -> Prisma.task
+    │           ├── dashboardRouter -> Prisma (multi-query)
+    │           ├── scraperRouter -> runner.ts -> child_process.spawn(Python)
+    │           ├── teamsRouter -> Prisma.team / Prisma.user
+    │           └── authRouter -> bcrypt / email.ts
+    ├── NextAuth Handler (/api/auth/*)
+    │     └── lib/auth.ts -> Prisma.user
+    └── [NO MIDDLEWARE — proxy.ts not wired]
+
+  External
+    ├── PostgreSQL 16 (via Prisma 7 + @prisma/adapter-pg)
+    ├── Python scraper process (child_process.spawn)
+    ├── SMTP (optional, nodemailer)
+    ├── Twilio (optional, partial)
+    ├── Google OAuth (optional)
+    └── Redis (optional, ioredis installed, NOT used)
+
+
+================================================================================
+  APPENDIX B — FEATURE INVENTORY
+================================================================================
+
+  Feature    Route         Router       Status
+  -----------------------------------------------------------------------
+  Dashboard  /dashboard    dashboard    Functional (duplicate KPI bug)
+  Leads      /leads        leads        Partial (search/actions broken)
+  Dialer     /dialer       calls        Partial (no Twilio token endpoint)
+  Tasks      /tasks        tasks        Functional
+  Scraper    /scraper      scraper      Functional (best feature)
+  Teams      /team         teams        Partial (invite UX broken)
+  Analytics  /analytics    dashboard    Functional (no pagination)
+  Outreach   /outreach     —            NON-FUNCTIONAL PLACEHOLDER
+  Settings   /settings     auth         Functional
+  Auth       /auth/*       auth         Functional (minor bugs)
+
+
+================================================================================
+  APPENDIX C — ROUTE INVENTORY
+================================================================================
+
+  GET/POST /api/trpc/[trpc]        — tRPC batch endpoint
+  GET/POST /api/auth/[...nextauth] — NextAuth
+
+  /                                -> redirect /auth/signin
+  /auth/signin                     — Public
+  /auth/register                   — Public
+  /auth/reset-password             — Public
+  /dashboard                       — Protected (middleware MISSING)
+  /leads                           — Protected (middleware MISSING)
+  /dialer                          — Protected (middleware MISSING)
+  /tasks                           — Protected (middleware MISSING)
+  /scraper                         — Protected (middleware MISSING)
+  /team                            — Protected (middleware MISSING)
+  /team/[userId]                   — Protected (middleware MISSING)
+  /analytics                       — Protected (middleware MISSING)
+  /outreach                        — Protected (middleware MISSING)
+  /settings                        — Protected (middleware MISSING)
+
+
+================================================================================
+  APPENDIX D — DATABASE MODEL INVENTORY
+================================================================================
+
+  Model               Purpose                  Tenant-scoped            Status
+  -----------------------------------------------------------------------
+  Organization        Multi-tenant root         —                        Active
+  User                Member with auth          via organizationId       Active
+  Team                User group                via organizationId       Active
+  Lead                CRM entity                organizationId           Active
+  LeadTag             Lead labels               organizationId (orphan)  UNUSED
+  Pipeline            Sales pipeline            organizationId           UNUSED
+  PipelineStage       Pipeline steps            via Pipeline             UNUSED
+  CallLog             Call history              via Lead.organizationId  Active
+  Note                Lead notes                via Lead                 Active
+  Activity            Audit trail               via Lead                 Active
+  Task                Scheduled work            via User.organizationId  Active
+  ScraperJob          Scraper runs              organizationId           Active
+  PasswordResetToken  Reset flow                via User                 Active
+  Account             OAuth accounts            via User                 NextAuth managed
+  Session             DB sessions               via User                 NextAuth (unused - JWT)
+  VerificationToken   Email verify              —                        NextAuth (unused)
+
+
+================================================================================
+  APPENDIX E — tRPC PROCEDURE INVENTORY
+================================================================================
+
+  auth.register                public     mutation
+  auth.resetPassword           public     mutation
+  auth.confirmResetPassword    public     mutation
+  auth.updateProfile           protected  mutation
+  auth.deleteAccount           protected  mutation
+
+  leads.getAll                 org        query
+  leads.getById                org        query
+  leads.create                 org        mutation
+  leads.bulkCreate             org        mutation
+  leads.delete                 org        mutation
+  leads.updateCallOutcome      org        mutation
+  leads.assign                 org        mutation
+  leads.createNote             org        mutation
+  leads.getNotes               org        query
+  leads.getActivities          org        query
+
+  calls.logCall                org        mutation
+  calls.getForLead             org        query
+  calls.getRecent              org        query
+
+  tasks.create                 org        mutation
+  tasks.update                 protected  mutation  <-- BUG: missing org scope
+  tasks.getAllForLead           org        query
+  tasks.getDueToday            org        query
+  tasks.getAll                 org        query
+
+  dashboard.getKpiStats        org        query
+  dashboard.sidebarCounts      org        query
+
+  scraper.config               org        query
+  scraper.list                 org        query
+  scraper.getById              org        query
+  scraper.start                org        mutation
+  scraper.stop                 org        mutation
+  scraper.delete               org        mutation
+  scraper.importResults        org        mutation
+  scraper.previewResults       org        query
+
+  teams.list                   org        query
+  teams.organizationMembers    org        query
+  teams.myTeam                 org        query
+  teams.activityFeed           org        query
+  teams.memberDetail           org        query
+  teams.create                 org        mutation  (admin only)
+  teams.update                 org        mutation  (admin only)
+  teams.delete                 org        mutation  (admin only)
+  teams.inviteUser             org        mutation  (admin only)
+  teams.setMembership          org        mutation  (admin/leader)
+
+
+================================================================================
+  APPENDIX F — ENVIRONMENT VARIABLE INVENTORY
+================================================================================
+
+  Variable                   Required      Used By              Notes
+  -----------------------------------------------------------------------
+  DATABASE_URL               Yes           Prisma               PostgreSQL connection
+  NEXTAUTH_SECRET            Yes           NextAuth, getToken   JWT signing key
+  NEXTAUTH_URL               Yes           NextAuth, email,     Controls __Secure-
+                                           cookie security      cookie prefix
+  NODE_ENV                   Yes           Next.js, tRPC        Error logging
+  POSTGRES_USER              Docker only   docker-compose       Not read by app
+  POSTGRES_PASSWORD          Docker only   docker-compose       Not read by app
+  POSTGRES_DB                Docker only   docker-compose       Not read by app
+  GOOGLE_CLIENT_ID           Optional      auth.ts              Enables Google OAuth
+  GOOGLE_CLIENT_SECRET       Optional      auth.ts
+  TWILIO_ACCOUNT_SID         Optional      calls router         Not wired to endpoint
+  TWILIO_AUTH_TOKEN          Optional      calls router
+  TWILIO_PHONE_NUMBER        Optional      calls router
+  SMTP_HOST                  Optional      email.ts             Falls back to console
+  SMTP_PORT                  Optional      email.ts             Default: 587
+  SMTP_SECURE                Optional      email.ts             Default: false
+  SMTP_USER                  Optional      email.ts
+  SMTP_PASS                  Optional      email.ts
+  SMTP_FROM                  Optional      email.ts             Default: noreply@...
+  OPENAI_API_KEY             Optional      (dep installed)      DEAD — unused
+  AWS_ACCESS_KEY_ID          Optional      (dep installed)      DEAD — unused
+  AWS_SECRET_ACCESS_KEY      Optional      (dep installed)      DEAD — unused
+  AWS_REGION                 Optional      (dep installed)      DEAD — unused
+  AWS_S3_BUCKET              Optional      (dep installed)      DEAD — unused
+  REDIS_URL                  Optional      redis.ts             Installed, never called
+  SCRAPER_ENABLED            Optional      scraper/config.ts    Default: true if paths set
+  SCRAPER_PYTHON_PATH        Scraper       scraper/config.ts    Required for scraper
+  SCRAPER_SCRIPT_PATH        Scraper       scraper/config.ts    Required for scraper
+  SCRAPER_OUTPUT_BASE_DIR    Optional      scraper/config.ts    Default: ./scraper-output
+
+
+================================================================================
+  APPENDIX G — UNUSED FILE INVENTORY
+================================================================================
+
+  File                            Why Unused
+  -----------------------------------------------------------------------
+  src/proxy.ts                    Not imported; not wired as middleware.ts
+  src/lib/redis.ts                Imported nowhere in production code
+  gemini.md.txt                   AI assistant context leaked to repo
+  GITHUB_PUBLISH_CHECKLIST.md     Internal ops doc committed to repo
+  PUBLICATION_SUMMARY.md          Internal doc committed to repo
+  skills-lock.json                Claude Code artifact committed to repo
+  prisma/prisma.config.ts         Redundant duplicate of repo-root version
+
+
+================================================================================
+  APPENDIX H — RISKY FILES INVENTORY
+================================================================================
+
+  File                                       Risk                         Severity
+  -----------------------------------------------------------------------
+  src/lib/auth.ts                            Login by name OR email;      High
+                                             30-day JWT, no invalidation
+                                             on account delete
+  src/server/scraper/runner.ts               Spawns OS child process;     Medium
+                                             in-memory state lost on restart
+  src/server/scraper/importer.ts             Loads all org leads into     High
+                                             memory for dedup
+  src/features/dashboard/server/router.ts    14 parallel queries, no      Medium
+                                             caching, duplicate KPI query
+  src/features/tasks/server/router.ts        update uses protectedProcedure  Medium
+                                             not organizationProcedure
+  src/features/leads/components/LeadsList.tsx  980-line monolith; no      Medium
+                                             virtual list; loads all leads
+  src/lib/email.ts                           Silent fail on missing SMTP;  Medium
+                                             user sees "email sent" but
+                                             gets nothing
+  src/features/auth/server/router.ts         deleteAccount doesn't        High
+                                             invalidate JWT
+  next.config.ts                             References unused libsql      Low
+                                             packages; misleads build tooling
+
+
+================================================================================
+  PRODUCTION READINESS SCORE: 61 / 100
+================================================================================
+
+  Category              Score   Notes
+  -----------------------------------------------------------------------
+  Architecture          15/20   Solid pattern; SQLite migration debt drags it down
+  Security               9/20   Missing middleware, ghost JWTs, no rate limiting
+  Feature Completeness  10/20   Outreach 0%, Dialer partial, lead search broken
+  Performance           10/20   No pagination, no caching, memory bomb in importer
+  Code Quality          10/15   Good patterns; as-any proliferation, large files
+  Testing                7/10   60% threshold; good spread across routers/components
+  DX/Ops                 0/5    Dead deps, orphaned files, gemini.md.txt committed
+
+SAFE TO SCALE? Not yet. Fix the 5 critical actions before growing beyond a
+handful of beta organizations.
+
+WHAT I WOULD PERSONALLY REFACTOR FIRST: src/middleware.ts (30 min, zero risk)
+and leadsRouter.getAll pagination (2 hours, highest user-visible impact). These
+two changes make the app materially safer and more scalable immediately with
+minimal code surface touched.
+
+================================================================================
+  END OF AUDIT
+================================================================================
