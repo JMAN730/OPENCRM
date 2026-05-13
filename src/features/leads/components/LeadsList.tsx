@@ -936,78 +936,80 @@ export function LeadsList() {
         </div>
 
         {selected.size > 0 && (
-          <div className="crm-selbar" style={{ position: "relative" }}>
-            <span>{selected.size} selected</span>
-            <button
-              className="crm-pill-btn"
-              disabled={!canAssign}
-              title={canAssign ? "Reassign selected leads" : "Only team leaders or admins can reassign"}
-              onClick={() => setShowAssign((v) => !v)}
-            >
-              Assign
-            </button>
-            <button className="crm-pill-btn">Change stage</button>
-            <button className="crm-pill-btn">Sequence</button>
-            <button
-              className="crm-pill-btn"
-              onClick={() => {
-                const ids = Array.from(selected);
-                if (ids.length === 0) return;
-                if (!confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"}?`)) return;
-                bulkDelete.mutate({ leadIds: ids });
-              }}
-              disabled={bulkDelete.isPending}
-              title="Delete selected leads"
-            >
-              {bulkDelete.isPending ? "Deleting..." : "Delete"}
-            </button>
-            <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
-
-            {showAssign && (
-              <div
-                className="crm-card"
-                style={{
-                  position: "absolute",
-                  bottom: "calc(100% + 8px)",
-                  left: 90,
-                  minWidth: 220,
-                  padding: 4,
-                  zIndex: 50,
-                  boxShadow: "0 6px 24px rgba(0,0,0,.25)",
-                  borderRadius: "var(--crm-radius-md)",
-                }}
-                onClick={(e) => e.stopPropagation()}
+          <div className="crm-selbar">
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+              <span>{selected.size} selected</span>
+              <button
+                className="crm-pill-btn"
+                disabled={!canAssign}
+                title={canAssign ? "Reassign selected leads" : "Only team leaders or admins can reassign"}
+                onClick={() => setShowAssign((v) => !v)}
               >
-                <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>
-                  Assign to
-                </div>
-                {assignableUsers.map((u) => (
+                Assign
+              </button>
+              <button className="crm-pill-btn">Change stage</button>
+              <button className="crm-pill-btn">Sequence</button>
+              <button
+                className="crm-pill-btn"
+                onClick={() => {
+                  const ids = Array.from(selected);
+                  if (ids.length === 0) return;
+                  if (!confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"}?`)) return;
+                  bulkDelete.mutate({ leadIds: ids });
+                }}
+                disabled={bulkDelete.isPending}
+                title="Delete selected leads"
+              >
+                {bulkDelete.isPending ? "Deleting..." : "Delete"}
+              </button>
+              <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
+
+              {showAssign && (
+                <div
+                  className="crm-card"
+                  style={{
+                    position: "absolute",
+                    bottom: "calc(100% + 8px)",
+                    left: 90,
+                    minWidth: 220,
+                    padding: 4,
+                    zIndex: 50,
+                    boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                    borderRadius: "var(--crm-radius-md)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>
+                    Assign to
+                  </div>
+                  {assignableUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      className="crm-nav-item"
+                      style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                      onClick={() =>
+                        assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: u.id })
+                      }
+                    >
+                      <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`}>
+                        {initials(u.name || u.email || "?")}
+                      </div>
+                      <span>{u.name || u.email}</span>
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
                   <button
-                    key={u.id}
                     className="crm-nav-item"
-                    style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                    style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
                     onClick={() =>
-                      assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: u.id })
+                      assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: null })
                     }
                   >
-                    <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`}>
-                      {initials(u.name || u.email || "?")}
-                    </div>
-                    <span>{u.name || u.email}</span>
+                    Unassign
                   </button>
-                ))}
-                <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
-                <button
-                  className="crm-nav-item"
-                  style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
-                  onClick={() =>
-                    assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: null })
-                  }
-                >
-                  Unassign
-                </button>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
