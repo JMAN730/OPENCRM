@@ -71,20 +71,28 @@ describe("tasksRouter", () => {
   });
 
   describe("update", () => {
-    it("only allows the task owner to update", async () => {
-      prisma.task.findUnique.mockResolvedValue({ userId: "user-1" });
+    it("scopes the lookup to the caller's organization (multi-tenant gate)", async () => {
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1" });
       prisma.task.update.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.update({ taskId: "t1", completed: true });
 
+      expect(prisma.task.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "t1",
+          user: { organizationId: "org-1" },
+        },
+        select: { id: true, userId: true },
+      });
       expect(prisma.task.update).toHaveBeenCalledWith({
         where: { id: "t1" },
         data: { completed: true, title: undefined, dueDate: undefined },
       });
     });
 
-    it("refuses when the task belongs to another user", async () => {
-      prisma.task.findUnique.mockResolvedValue({ userId: "another-user" });
+    it("returns NOT_FOUND when the task belongs to a different org", async () => {
+      // findFirst with the org filter would return null in that case.
+      prisma.task.findFirst.mockResolvedValue(null);
 
       await expect(
         caller.tasks.update({ taskId: "t1", completed: true })
@@ -92,8 +100,30 @@ describe("tasksRouter", () => {
       expect(prisma.task.update).not.toHaveBeenCalled();
     });
 
+    it("allows admins to edit any task within the same organization", async () => {
+      // Default test session has role=ADMIN.
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user" });
+      prisma.task.update.mockResolvedValue({ id: "t1" });
+
+      await caller.tasks.update({ taskId: "t1", completed: true });
+
+      expect(prisma.task.update).toHaveBeenCalled();
+    });
+
+    it("forbids a USER from editing another user's task even in the same org", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user" });
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", completed: true })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
     it("refuses when the task does not exist", async () => {
-      prisma.task.findUnique.mockResolvedValue(null);
+      prisma.task.findFirst.mockResolvedValue(null);
       await expect(
         caller.tasks.update({ taskId: "missing", completed: true })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });

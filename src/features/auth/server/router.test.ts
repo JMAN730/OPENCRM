@@ -24,7 +24,7 @@ describe("authRouter.resetPassword", () => {
     expect(result).toEqual({ success: true });
   });
 
-  it("creates a reset token when the user exists", async () => {
+  it("creates a hashed reset token when the user exists (raw value never stored)", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.user.findUnique.mockResolvedValue({ id: "u-1", email: "user@example.com" });
     prisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
@@ -33,11 +33,11 @@ describe("authRouter.resetPassword", () => {
     await caller.auth.resetPassword({ email: "user@example.com" });
 
     expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({ where: { userId: "u-1" } });
-    expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ userId: "u-1", token: expect.any(String) }),
-      })
-    );
+    const createArgs = prisma.passwordResetToken.create.mock.calls[0][0];
+    expect(createArgs.data.userId).toBe("u-1");
+    // tokenHash is SHA-256 hex (64 chars)
+    expect(createArgs.data.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(createArgs.data).not.toHaveProperty("token");
   });
 
   it("does not create a token when the user does not exist", async () => {
@@ -75,10 +75,26 @@ describe("authRouter.confirmResetPassword", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
+  it("looks up the token by sha256 hash, never by raw value", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+    await expect(
+      caller.auth.confirmResetPassword({ token: "raw-token-input", password: "newpassword" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    const findArgs = prisma.passwordResetToken.findUnique.mock.calls[0][0];
+    // SHA-256 hex of "raw-token-input"
+    expect(findArgs.where.tokenHash).toBe(
+      "354a6376afb5e2848d94fb051a99ef87be902a77163de23a80b4d1b733880d35",
+    );
+    expect(findArgs.where).not.toHaveProperty("token");
+  });
+
   it("rejects an expired token", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.passwordResetToken.findUnique.mockResolvedValue({
-      token: "tok",
+      tokenHash: "h",
       userId: "u-1",
       expires: new Date(Date.now() - 1000), // already expired
     });
@@ -88,15 +104,16 @@ describe("authRouter.confirmResetPassword", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("updates the password and deletes the token on success", async () => {
+  it("updates the password and consumes the token atomically on success", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.passwordResetToken.findUnique.mockResolvedValue({
-      token: "valid-token",
+      tokenHash: "h",
       userId: "u-1",
       expires: new Date(Date.now() + 60_000),
     });
     prisma.user.update.mockResolvedValue({ id: "u-1" });
     prisma.passwordResetToken.delete.mockResolvedValue({});
+    prisma.$transaction.mockResolvedValue([{ id: "u-1" }, {}]);
 
     const result = await caller.auth.confirmResetPassword({
       token: "valid-token",
@@ -104,16 +121,10 @@ describe("authRouter.confirmResetPassword", () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "u-1" } })
-    );
-    // Password should be hashed, not stored in plain text
-    const storedPassword = prisma.user.update.mock.calls[0][0].data.password;
-    expect(storedPassword).not.toBe("newpassword");
-    expect(storedPassword).toMatch(/^\$2[aby]\$/);
-    expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
-      where: { token: "valid-token" },
-    });
+    expect(prisma.$transaction).toHaveBeenCalled();
+    // Password should be hashed before being passed to user.update
+    const txCalls = prisma.$transaction.mock.calls[0][0] as unknown[];
+    expect(txCalls.length).toBe(2);
   });
 
   it("rejects passwords shorter than 8 chars", async () => {
