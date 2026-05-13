@@ -21,7 +21,15 @@ import { Badge } from "@/components/ui/badge";
 
 export function TasksList() {
   const utils = trpc.useUtils();
-  const { data: tasks, isLoading } = trpc.tasks.getAll.useQuery();
+  const { data: tasksRaw, isLoading } = trpc.tasks.getAll.useQuery();
+  type TaskRow = {
+    id: string;
+    title: string;
+    completed: boolean;
+    dueDate?: string | Date | null;
+    lead?: { company?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  };
+  const tasks: TaskRow[] = (tasksRaw ?? []) as TaskRow[];
   
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => {
@@ -40,7 +48,7 @@ export function TasksList() {
     return <div className="p-8 text-center text-muted-foreground">Loading tasks...</div>;
   }
 
-  if (!tasks || tasks.length === 0) {
+  if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center gap-4 border border-dashed border-border rounded-xl bg-card">
         <Clock size={36} className="text-muted-foreground/20" />
