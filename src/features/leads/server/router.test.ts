@@ -100,6 +100,36 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("bulkDelete", () => {
+    it("deletes multiple leads after scope check", async () => {
+      prisma.team.findMany.mockResolvedValue([]);
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }, { id: "lead-2" }]);
+      prisma.lead.deleteMany.mockResolvedValue({ count: 2 });
+
+      const result = await caller.leads.bulkDelete({ leadIds: ["lead-1", "lead-2"] });
+
+      expect(prisma.lead.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1", "lead-2"] }, organizationId: "org-1" },
+        select: { id: true },
+      });
+      expect(prisma.lead.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1", "lead-2"] } },
+      });
+      expect(result).toEqual({ count: 2 });
+    });
+
+    it("refuses when any lead is outside scope", async () => {
+      prisma.team.findMany.mockResolvedValue([]);
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }]); // missing lead-2
+
+      await expect(
+        caller.leads.bulkDelete({ leadIds: ["lead-1", "lead-2"] })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.lead.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe("create", () => {
     it("attaches organizationId and assignedToId from the session", async () => {
       prisma.lead.create.mockResolvedValue({ id: "lead-1" });

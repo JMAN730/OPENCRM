@@ -137,6 +137,43 @@ export const leadsRouter = createTRPCRouter({
       return ctx.prisma.lead.delete({ where: { id: input.id } });
     }),
 
+  bulkDelete: organizationProcedure
+    .input(z.object({ leadIds: z.array(z.string()).min(1).max(500) }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const orgId = ctx.organizationId;
+      const userId = ctx.session.user.id;
+
+      const scope = await resolveLeadScope(ctx.prisma, userId, orgId, role);
+      const leads = await ctx.prisma.lead.findMany({
+        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (leads.length !== input.leadIds.length) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "One or more leads are outside your scope.",
+        });
+      }
+
+      const result = await ctx.prisma.lead.deleteMany({
+        where: { id: { in: input.leadIds } },
+      });
+
+      await Promise.all(
+        input.leadIds.map((leadId) =>
+          logActivity(ctx.prisma, {
+            leadId,
+            userId,
+            type: "LEAD_DELETED",
+            description: "Deleted lead",
+          }),
+        ),
+      );
+
+      return { count: result.count };
+    }),
+
   create: organizationProcedure
     .input(leadInputSchema)
     .mutation(async ({ ctx, input }) => {

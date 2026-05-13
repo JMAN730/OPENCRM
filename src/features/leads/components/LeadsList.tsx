@@ -675,6 +675,14 @@ export function LeadsList() {
     onSuccess: () => { toast.success("Lead deleted"); utils.leads.getAll.invalidate(); },
     onError:   (e) => toast.error(e.message),
   });
+  const bulkDelete = trpc.leads.bulkDelete.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Deleted ${res.count} lead${res.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      utils.leads.getAll.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const allLeads = leads as Lead[];
 
@@ -940,6 +948,19 @@ export function LeadsList() {
             </button>
             <button className="crm-pill-btn">Change stage</button>
             <button className="crm-pill-btn">Sequence</button>
+            <button
+              className="crm-pill-btn"
+              onClick={() => {
+                const ids = Array.from(selected);
+                if (ids.length === 0) return;
+                if (!confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"}?`)) return;
+                bulkDelete.mutate({ leadIds: ids });
+              }}
+              disabled={bulkDelete.isPending}
+              title="Delete selected leads"
+            >
+              {bulkDelete.isPending ? "Deleting..." : "Delete"}
+            </button>
             <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
 
             {showAssign && (
