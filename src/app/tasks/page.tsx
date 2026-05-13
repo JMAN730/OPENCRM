@@ -8,7 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Check } from "lucide-react";
 
-type Task = inferRouterOutputs<AppRouter>["tasks"]["getAll"][number];
+type Task = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
 
 const COLS = [
   {
@@ -45,8 +45,8 @@ function fmt(d: string | Date | null | undefined) {
 
 export default function TasksPage() {
   const utils = trpc.useUtils();
-  const { data: tasksRaw } = trpc.tasks.getAll.useQuery();
-  const tasks: Task[] = tasksRaw ?? [];
+  const { data: tasksRaw } = trpc.tasks.getAll.useQuery({ limit: 100 });
+  const tasks: Task[] = tasksRaw?.items ?? [];
   const [adding, setAdding] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 

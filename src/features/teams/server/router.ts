@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { assertAdmin, assertCanGrantRole, isAdmin, ROLE_VALUES } from "@/server/authz";
+import { invalidateLeadScope } from "@/server/teams/scope";
 
 async function findLedTeam(prisma: PrismaClient, userId: string, orgId: string, teamId: string) {
   return prisma.team.findFirst({
@@ -226,6 +227,7 @@ export const teamsRouter = createTRPCRouter({
       assertAdmin(ctx.session.user.role);
       const team = await ctx.prisma.team.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
+        include: { users: { select: { id: true } } },
       });
       if (!team) throw new TRPCError({ code: "NOT_FOUND" });
       if (input.leaderId) {
@@ -235,13 +237,22 @@ export const teamsRouter = createTRPCRouter({
         });
         if (!leader) throw new TRPCError({ code: "BAD_REQUEST", message: "Leader not in organization." });
       }
-      return ctx.prisma.team.update({
+      const updated = await ctx.prisma.team.update({
         where: { id: input.id },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.leaderId !== undefined ? { leaderId: input.leaderId } : {}),
         },
       });
+      // If the leader changed, invalidate the scope cache for both the
+      // previous and current leader since their visible-leads set just shifted.
+      if (input.leaderId !== undefined) {
+        const affected = new Set<string>();
+        if (team.leaderId) affected.add(team.leaderId);
+        if (input.leaderId) affected.add(input.leaderId);
+        await Promise.all(Array.from(affected).map((id) => invalidateLeadScope(id)));
+      }
+      return updated;
     }),
 
   delete: organizationProcedure
@@ -250,6 +261,7 @@ export const teamsRouter = createTRPCRouter({
       assertAdmin(ctx.session.user.role);
       const team = await ctx.prisma.team.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
+        include: { users: { select: { id: true } } },
       });
       if (!team) throw new TRPCError({ code: "NOT_FOUND" });
       // Detach members first (User.teamId is nullable).
@@ -257,7 +269,12 @@ export const teamsRouter = createTRPCRouter({
         where: { teamId: input.id },
         data: { teamId: null },
       });
-      return ctx.prisma.team.delete({ where: { id: input.id } });
+      const result = await ctx.prisma.team.delete({ where: { id: input.id } });
+      // Bust scope cache for the leader and every former member.
+      const affected = new Set<string>(team.users.map((u) => u.id));
+      if (team.leaderId) affected.add(team.leaderId);
+      await Promise.all(Array.from(affected).map((id) => invalidateLeadScope(id)));
+      return result;
     }),
 
   /**
@@ -361,9 +378,28 @@ export const teamsRouter = createTRPCRouter({
         await assertTeamInOrg(ctx.prisma as PrismaClient, input.teamId, ctx.organizationId);
       }
 
-      return ctx.prisma.user.update({
+      const updated = await ctx.prisma.user.update({
         where: { id: input.userId },
         data: { teamId: input.teamId },
       });
+      // Scope changed for: the moved user, the leader of the destination team
+      // (if any), and the leader of the source team (if different).
+      const affected = new Set<string>([input.userId]);
+      if (input.teamId) {
+        const dest = await ctx.prisma.team.findFirst({
+          where: { id: input.teamId },
+          select: { leaderId: true },
+        });
+        if (dest?.leaderId) affected.add(dest.leaderId);
+      }
+      if (user.teamId && user.teamId !== input.teamId) {
+        const src = await ctx.prisma.team.findFirst({
+          where: { id: user.teamId },
+          select: { leaderId: true },
+        });
+        if (src?.leaderId) affected.add(src.leaderId);
+      }
+      await Promise.all(Array.from(affected).map((id) => invalidateLeadScope(id)));
+      return updated;
     }),
 });
