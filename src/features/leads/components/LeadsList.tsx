@@ -236,16 +236,25 @@ function LeadModal({
   const userRole = (session?.user as any)?.role as string | undefined;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
-  const { data: notes = [] } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  type LeadNote = { id: string; content: string; createdAt: string | Date };
+  const notes: LeadNote[] = (notesRaw ?? []) as LeadNote[];
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
 
-  const assignableUsers = isAdminOrManager
+  type AssignableUser = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image?: string | null;
+  };
+
+  const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
-    : (myTeam?.users ?? []);
+    : (myTeam?.users ?? [])) as AssignableUser[];
   const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const utils = trpc.useUtils();
@@ -622,6 +631,7 @@ export function LeadsList() {
   const [selected, setSelected] = useState(new Set<string>());
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role as string | undefined;
@@ -658,9 +668,16 @@ export function LeadsList() {
     onError: (e) => toast.error(e.message),
   });
 
-  const assignableUsers = isAdminOrManager
+  type AssignableUser = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image?: string | null;
+  };
+
+  const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
-    : (myTeam?.users ?? []);
+    : (myTeam?.users ?? [])) as AssignableUser[];
   const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
 
   const createLead = trpc.leads.create.useMutation({
@@ -671,6 +688,13 @@ export function LeadsList() {
     onSuccess: () => { toast.success("Lead deleted"); utils.leads.getAll.invalidate(); },
     onError:   (e) => toast.error(e.message),
   });
+  const bulkDelete = trpc.leads.bulkDelete.useMutation();
+
+  const chunk = <T,>(arr: T[], size: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
 
   // Flatten paged results into the single array the existing UI was written
   // against. Note: stage counts reflect *loaded* pages only — server-side
@@ -970,65 +994,98 @@ export function LeadsList() {
         </div>
 
         {selected.size > 0 && (
-          <div className="crm-selbar" style={{ position: "relative" }}>
-            <span>{selected.size} selected</span>
-            <button
-              className="crm-pill-btn"
-              disabled={!canAssign}
-              title={canAssign ? "Reassign selected leads" : "Only team leaders or admins can reassign"}
-              onClick={() => setShowAssign((v) => !v)}
-            >
-              Assign
-            </button>
-            <button className="crm-pill-btn">Change stage</button>
-            <button className="crm-pill-btn">Sequence</button>
-            <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
-
-            {showAssign && (
-              <div
-                className="crm-card"
-                style={{
-                  position: "absolute",
-                  bottom: "calc(100% + 8px)",
-                  left: 90,
-                  minWidth: 220,
-                  padding: 4,
-                  zIndex: 50,
-                  boxShadow: "0 6px 24px rgba(0,0,0,.25)",
-                  borderRadius: "var(--crm-radius-md)",
-                }}
-                onClick={(e) => e.stopPropagation()}
+          <div className="crm-selbar">
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+              <span>{selected.size} selected</span>
+              <button
+                className="crm-pill-btn"
+                disabled={!canAssign}
+                title={canAssign ? "Reassign selected leads" : "Only team leaders or admins can reassign"}
+                onClick={() => setShowAssign((v) => !v)}
               >
-                <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>
-                  Assign to
-                </div>
-                {assignableUsers.map((u) => (
+                Assign
+              </button>
+              <button className="crm-pill-btn">Change stage</button>
+              <button className="crm-pill-btn">Sequence</button>
+              <button
+                className="crm-pill-btn"
+                onClick={() => {
+                  const ids = Array.from(selected);
+                  if (ids.length === 0) return;
+                  if (!confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"}?`)) return;
+                  setIsBulkDeleting(true);
+                  (async () => {
+                    try {
+                      // Server caps each request at 500 ids; batch large deletions.
+                      const batches = chunk(ids, 500);
+                      let total = 0;
+                      for (const leadIds of batches) {
+                        const res = await bulkDelete.mutateAsync({ leadIds });
+                        total += res.count ?? 0;
+                      }
+                      toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
+                      setSelected(new Set());
+                      utils.leads.getAll.invalidate();
+                    } catch (e: any) {
+                      toast.error(e?.message ?? "Failed to delete selected leads.");
+                    } finally {
+                      setIsBulkDeleting(false);
+                    }
+                  })();
+                }}
+                disabled={isBulkDeleting || bulkDelete.isPending}
+                title="Delete selected leads"
+              >
+                {isBulkDeleting || bulkDelete.isPending ? "Deleting..." : "Delete"}
+              </button>
+              <button className="crm-pill-btn" onClick={() => setSelected(new Set())}>Clear</button>
+
+              {showAssign && (
+                <div
+                  className="crm-card"
+                  style={{
+                    position: "absolute",
+                    bottom: "calc(100% + 8px)",
+                    left: 90,
+                    minWidth: 220,
+                    padding: 4,
+                    zIndex: 50,
+                    boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                    borderRadius: "var(--crm-radius-md)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ padding: "6px 10px", fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>
+                    Assign to
+                  </div>
+                  {assignableUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      className="crm-nav-item"
+                      style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                      onClick={() =>
+                        assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: u.id })
+                      }
+                    >
+                      <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`}>
+                        {initials(u.name || u.email || "?")}
+                      </div>
+                      <span>{u.name || u.email}</span>
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
                   <button
-                    key={u.id}
                     className="crm-nav-item"
-                    style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                    style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
                     onClick={() =>
-                      assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: u.id })
+                      assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: null })
                     }
                   >
-                    <div className={`crm-avatar xs ${avatarClass(u.name || "?")}`}>
-                      {initials(u.name || u.email || "?")}
-                    </div>
-                    <span>{u.name || u.email}</span>
+                    Unassign
                   </button>
-                ))}
-                <div style={{ height: 1, background: "var(--crm-border)", margin: "4px 6px" }} />
-                <button
-                  className="crm-nav-item"
-                  style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left", color: "var(--crm-fg-faint)" }}
-                  onClick={() =>
-                    assignMutation.mutate({ leadIds: Array.from(selected), assigneeId: null })
-                  }
-                >
-                  Unassign
-                </button>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
