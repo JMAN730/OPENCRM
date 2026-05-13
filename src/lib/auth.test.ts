@@ -14,6 +14,10 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 import { authOptions } from "./auth";
 import bcrypt from "bcryptjs";
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 // authOptions.callbacks should always be defined; capture them with non-null assertions.
 const sessionCallback = authOptions.callbacks!.session!;
 const jwtCallback = authOptions.callbacks!.jwt!;
@@ -55,15 +59,13 @@ describe("session callback", () => {
 });
 
 describe("jwt callback", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("hydrates token with id/role/organizationId from DB on first sign-in", async () => {
-    mockPrisma.user.findFirst.mockResolvedValue({
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: "u1",
+      email: "x@y.com",
       role: "ADMIN",
       organizationId: "org-1",
+      teamId: null,
     });
 
     const token = await jwtCallback({
@@ -71,23 +73,76 @@ describe("jwt callback", () => {
       user: { email: "x@y.com" },
     } as never);
 
-    expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
+      select: { id: true, email: true, role: true, organizationId: true, teamId: true },
     });
     expect(token).toMatchObject({ id: "u1", role: "ADMIN", organizationId: "org-1" });
   });
 
-  it("does not query the DB on subsequent calls (no user in args)", async () => {
-    const token = await jwtCallback({
-      token: { id: "u1", role: "ADMIN", organizationId: "org-1" },
+  it("normalizes the email to lowercase before looking up the user", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      email: "x@y.com",
+      role: "ADMIN",
+      organizationId: "org-1",
+      teamId: null,
+    });
+
+    await jwtCallback({
+      token: {},
+      user: { email: "X@Y.COM" },
     } as never);
 
-    expect(mockPrisma.user.findFirst).not.toHaveBeenCalled();
-    expect(token).toMatchObject({ id: "u1" });
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: "x@y.com" } }),
+    );
   });
 
-  it("swallows DB errors so login isn't blocked entirely (best-effort hydration)", async () => {
-    mockPrisma.user.findFirst.mockRejectedValue(new Error("db down"));
+  it("re-fetches the user on subsequent refreshes so role/org changes take effect", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      email: "x@y.com",
+      role: "MANAGER",
+      organizationId: "org-2",
+      teamId: null,
+    });
+
+    const token = await jwtCallback({
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", teamId: null },
+    } as never);
+
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      select: { id: true, email: true, role: true, organizationId: true, teamId: true },
+    });
+    expect(token).toMatchObject({ role: "MANAGER", organizationId: "org-2" });
+  });
+
+  it("returns an empty token when the user no longer exists (ghost session)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+
+    const token = await jwtCallback({
+      token: { id: "deleted-user", role: "ADMIN", organizationId: "org-1", teamId: null },
+    } as never);
+
+    expect(token).toEqual({});
+  });
+
+  it("keeps the existing token if DB lookup throws on refresh (soft-fail)", async () => {
+    mockPrisma.user.findUnique.mockRejectedValueOnce(new Error("db down"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const token = await jwtCallback({
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", teamId: null },
+    } as never);
+
+    expect(token).toMatchObject({ id: "u1", role: "ADMIN" });
+    consoleSpy.mockRestore();
+  });
+
+  it("swallows DB errors on first sign-in so a transient failure doesn't block login", async () => {
+    mockPrisma.user.findUnique.mockRejectedValueOnce(new Error("db down"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const token = await jwtCallback({
@@ -109,29 +164,33 @@ describe("Credentials provider authorize()", () => {
   const authorize = (credentialsProvider!.options as { authorize: (creds: unknown) => Promise<unknown> })
     .authorize;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("returns null when credentials are missing", async () => {
     expect(await authorize({})).toBeNull();
     expect(await authorize({ email: "x@y.com" })).toBeNull();
     expect(await authorize({ password: "p" })).toBeNull();
   });
 
-  it("returns null when the user does not exist", async () => {
-    mockPrisma.user.findFirst.mockResolvedValue(null);
+  it("returns null when the user does not exist (constant-time bcrypt still runs)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
     expect(await authorize({ email: "x@y.com", password: "p" })).toBeNull();
   });
 
+  it("looks up users by email only (no name fallback)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    await authorize({ email: "X@Y.COM", password: "p" });
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "x@y.com" },
+    });
+  });
+
   it("returns null when the user has no password (e.g. OAuth-only account)", async () => {
-    mockPrisma.user.findFirst.mockResolvedValue({ id: "u1", password: null });
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", password: null });
     expect(await authorize({ email: "x@y.com", password: "p" })).toBeNull();
   });
 
   it("returns null when the password does not match", async () => {
     const hashed = await bcrypt.hash("right-password", 4);
-    mockPrisma.user.findFirst.mockResolvedValue({
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: "u1",
       email: "x@y.com",
       password: hashed,
@@ -149,7 +208,7 @@ describe("Credentials provider authorize()", () => {
       role: "ADMIN",
       organizationId: "org-1",
     };
-    mockPrisma.user.findFirst.mockResolvedValue(dbUser);
+    mockPrisma.user.findUnique.mockResolvedValueOnce(dbUser);
 
     const result = await authorize({ email: "x@y.com", password: "right-password" });
     expect(result).toEqual(dbUser);

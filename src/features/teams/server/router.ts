@@ -2,16 +2,27 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import type { PrismaClient } from "@prisma/client";
+import { assertAdmin, assertCanGrantRole, isAdmin, ROLE_VALUES } from "@/server/authz";
 
-function isAdmin(role: string) {
-  return role === "ADMIN";
-}
-
-async function findLedTeam(prisma: any, userId: string, orgId: string, teamId: string) {
+async function findLedTeam(prisma: PrismaClient, userId: string, orgId: string, teamId: string) {
   return prisma.team.findFirst({
     where: { id: teamId, organizationId: orgId, leaderId: userId },
     select: { id: true },
   });
+}
+
+async function assertTeamInOrg(
+  prisma: PrismaClient,
+  teamId: string,
+  orgId: string,
+  message = "Team not in organization.",
+): Promise<void> {
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, organizationId: orgId },
+    select: { id: true },
+  });
+  if (!team) throw new TRPCError({ code: "BAD_REQUEST", message });
 }
 
 export const teamsRouter = createTRPCRouter({
@@ -79,19 +90,23 @@ export const teamsRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
 
       const team = input.teamId
         ? await ctx.prisma.team.findFirst({
             where: { id: input.teamId, organizationId: ctx.organizationId },
-            include: { users: { select: { id: true } } },
+            include: {
+              users: { select: { id: true } },
+            },
           })
         : await ctx.prisma.team.findFirst({
             where: {
               organizationId: ctx.organizationId,
               OR: [{ users: { some: { id: userId } } }, { leaderId: userId }],
             },
-            include: { users: { select: { id: true } } },
+            include: {
+              users: { select: { id: true } },
+            },
           });
 
       if (!team) return [];
@@ -99,11 +114,7 @@ export const teamsRouter = createTRPCRouter({
       // Authorization: must be on the team, lead the team, or be ADMIN.
       const memberIds = team.users.map((u) => u.id);
       const isMember = memberIds.includes(userId);
-      const isLeader =
-        (await ctx.prisma.team.findFirst({
-          where: { id: team.id, leaderId: userId },
-          select: { id: true },
-        })) !== null;
+      const isLeader = (await findLedTeam(ctx.prisma as PrismaClient, userId, ctx.organizationId, team.id)) !== null;
       if (!isAdmin(role) && !isMember && !isLeader) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
@@ -126,7 +137,7 @@ export const teamsRouter = createTRPCRouter({
   memberDetail: organizationProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const callerId = ctx.session.user.id;
 
       const target = await ctx.prisma.user.findFirst({
@@ -186,8 +197,7 @@ export const teamsRouter = createTRPCRouter({
   create: organizationProcedure
     .input(z.object({ name: z.string().min(1).max(80), leaderId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
-      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      assertAdmin(ctx.session.user.role);
       if (input.leaderId) {
         const leader = await ctx.prisma.user.findFirst({
           where: { id: input.leaderId, organizationId: ctx.organizationId },
@@ -213,8 +223,7 @@ export const teamsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
-      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      assertAdmin(ctx.session.user.role);
       const team = await ctx.prisma.team.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
       });
@@ -238,8 +247,7 @@ export const teamsRouter = createTRPCRouter({
   delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
-      if (!isAdmin(role)) throw new TRPCError({ code: "FORBIDDEN" });
+      assertAdmin(ctx.session.user.role);
       const team = await ctx.prisma.team.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
       });
@@ -256,6 +264,10 @@ export const teamsRouter = createTRPCRouter({
    * Create a new user account inside the caller's organization (admin only).
    * If the email already exists with no org assigned, that account is claimed
    * into this org instead of creating a duplicate.
+   *
+   * Phase 4 replaces this with an email-token invite flow. For now it
+   * remains admin-set-password but with the cross-org and role-escalation
+   * holes plugged.
    */
   inviteUser: organizationProcedure
     .input(
@@ -263,13 +275,23 @@ export const teamsRouter = createTRPCRouter({
         name: z.string().min(1).max(255),
         email: z.string().email().max(255),
         password: z.string().min(8).max(255),
-        role: z.enum(["USER", "MANAGER", "ADMIN"]).default("USER"),
+        role: z.enum(ROLE_VALUES).default("USER"),
         teamId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!isAdmin((ctx.session.user as any).role)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
+      assertAdmin(ctx.session.user.role);
+      assertCanGrantRole(ctx.session.user.role, input.role);
+
+      // Critical: teamId is attacker-controlled, so it MUST be validated
+      // against the caller's org before we touch the user row.
+      if (input.teamId) {
+        await assertTeamInOrg(
+          ctx.prisma as PrismaClient,
+          input.teamId,
+          ctx.organizationId,
+          "Team is not part of your organization.",
+        );
       }
 
       const email = input.email.toLowerCase().trim();
@@ -282,7 +304,7 @@ export const teamsRouter = createTRPCRouter({
         if (existing.organizationId) {
           throw new TRPCError({ code: "CONFLICT", message: "User already belongs to another organization." });
         }
-        // Unaffiliated account — assign it to this org
+        // Unaffiliated account — assign it to this org.
         return ctx.prisma.user.update({
           where: { id: existing.id },
           data: {
@@ -315,7 +337,7 @@ export const teamsRouter = createTRPCRouter({
   setMembership: organizationProcedure
     .input(z.object({ userId: z.string(), teamId: z.string().nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const role = (ctx.session.user as any).role as string;
+      const role = ctx.session.user.role;
       const callerId = ctx.session.user.id;
 
       const user = await ctx.prisma.user.findFirst({
@@ -328,14 +350,15 @@ export const teamsRouter = createTRPCRouter({
         // Leader can only move members into/out of a team they lead.
         const targetTeamId = input.teamId ?? user.teamId;
         if (!targetTeamId) throw new TRPCError({ code: "FORBIDDEN" });
-        const led = await findLedTeam(ctx.prisma, callerId, ctx.organizationId, targetTeamId);
+        const led = await findLedTeam(
+          ctx.prisma as PrismaClient,
+          callerId,
+          ctx.organizationId,
+          targetTeamId,
+        );
         if (!led) throw new TRPCError({ code: "FORBIDDEN" });
       } else if (input.teamId) {
-        const team = await ctx.prisma.team.findFirst({
-          where: { id: input.teamId, organizationId: ctx.organizationId },
-          select: { id: true },
-        });
-        if (!team) throw new TRPCError({ code: "BAD_REQUEST", message: "Team not in org." });
+        await assertTeamInOrg(ctx.prisma as PrismaClient, input.teamId, ctx.organizationId);
       }
 
       return ctx.prisma.user.update({
