@@ -180,13 +180,13 @@ function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; coun
 }
 
 function TasksCard() {
-  const { data: tasks, isLoading } = trpc.tasks.getAll.useQuery();
+  const { data, isLoading } = trpc.tasks.getAll.useQuery({ limit: 50 });
   const utils = trpc.useUtils();
   const update = trpc.tasks.update.useMutation({
     onSuccess: () => utils.tasks.getAll.invalidate(),
   });
 
-  const taskList = tasks ?? [];
+  const taskList = data?.items ?? [];
   const displayed = taskList.slice(0, 5);
   const open = taskList.filter((t: { completed: boolean }) => !t.completed).length;
 
@@ -297,8 +297,8 @@ function CallsCard({
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
-  const { data: leadsRaw } = trpc.leads.getAll.useQuery();
-  const leads: any[] = leadsRaw ?? [];
+  const { data: leadsRaw } = trpc.leads.getAll.useQuery({ limit: 100 });
+  const leads: any[] = leadsRaw?.items ?? [];
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();

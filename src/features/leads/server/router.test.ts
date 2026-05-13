@@ -13,11 +13,12 @@ describe("leadsRouter", () => {
     it("filters by the caller's organizationId", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
 
-      await caller.leads.getAll();
+      const result = await caller.leads.getAll();
 
       expect(prisma.lead.findMany).toHaveBeenCalledTimes(1);
       const args = prisma.lead.findMany.mock.calls[0][0];
       expect(args.where.organizationId).toBe("org-1");
+      expect(result).toEqual({ items: [], nextCursor: null });
     });
 
     it("applies search across company, name, email, phone", async () => {
@@ -35,11 +36,47 @@ describe("leadsRouter", () => {
       ]);
     });
 
-    it("returns leads ordered by createdAt desc", async () => {
+    it("orders results by (createdAt desc, id desc) for stable cursor pagination", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
       await caller.leads.getAll();
       const args = prisma.lead.findMany.mock.calls[0][0];
-      expect(args.orderBy).toEqual({ createdAt: "desc" });
+      expect(args.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+    });
+
+    it("takes (limit + 1) so it can detect another page without a count()", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ limit: 25 });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.take).toBe(26);
+    });
+
+    it("returns nextCursor when more rows exist than the requested limit", async () => {
+      const rows = Array.from({ length: 51 }, (_, i) => ({
+        id: `lead-${i}`,
+        organizationId: "org-1",
+        createdAt: new Date(),
+      }));
+      prisma.lead.findMany.mockResolvedValue(rows);
+
+      const result = await caller.leads.getAll({ limit: 50 });
+
+      expect(result.items).toHaveLength(50);
+      // The 51st row is consumed for hasMore detection; its id is the cursor.
+      expect(result.nextCursor).toBe("lead-50");
+    });
+
+    it("returns nextCursor=null when fewer rows than the limit are returned", async () => {
+      prisma.lead.findMany.mockResolvedValue([{ id: "x", organizationId: "org-1" }]);
+      const result = await caller.leads.getAll({ limit: 50 });
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it("forwards the cursor to Prisma as a skip-1 cursor on the next page", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ cursor: "lead-50", limit: 25 });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.cursor).toEqual({ id: "lead-50" });
+      expect(args.skip).toBe(1);
     });
 
     it("treats whitespace-only search as no search (no OR clause)", async () => {
@@ -49,6 +86,13 @@ describe("leadsRouter", () => {
 
       const args = prisma.lead.findMany.mock.calls[0][0];
       expect(args.where.OR).toBeUndefined();
+    });
+
+    it("filters by status when provided", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ status: "CONNECTED" });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.status).toBe("CONNECTED");
     });
   });
 
