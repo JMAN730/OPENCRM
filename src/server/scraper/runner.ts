@@ -123,7 +123,7 @@ export async function startScraperJob(jobId: string): Promise<void> {
     );
   }
 
-  // locations and categories are stored as JSON strings in SQLite — parse it back to an array
+  // locations and categories are stored as JSON strings in the DB — parse them back to arrays
   let locationList: string[];
   try { locationList = JSON.parse(job.locations as string); } catch { locationList = []; }
 
