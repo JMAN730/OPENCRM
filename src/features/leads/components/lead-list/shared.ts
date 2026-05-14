@@ -13,6 +13,7 @@ export type Lead = {
   source?: string | null;
   callOutcome?: string | null;
   callNotes?: string | null;
+  starred?: boolean | null;
   createdAt: string;
   assignedToId?: string | null;
   assignedTo?: {
