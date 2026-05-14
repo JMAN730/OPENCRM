@@ -26,6 +26,7 @@ export type LeadNote = {
   id: string;
   content: string;
   createdAt: string | Date;
+  userId: string;
 };
 
 export type AssignableUser = {
