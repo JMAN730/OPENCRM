@@ -1,7 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, Inbox, Sparkles, Plus, ChevronRight, Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -14,9 +15,45 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
+type Panel = "bell" | "inbox" | "ai" | null;
+
+const POPOVER_STYLE: React.CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 8px)",
+  right: 0,
+  width: 240,
+  padding: "16px",
+  zIndex: 200,
+  boxShadow: "0 4px 24px rgba(0,0,0,.18)",
+  borderRadius: "var(--crm-radius-md)",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 4,
+  textAlign: "center",
+  animation: "crm-fade-in 0.12s ease-out",
+};
+
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const title = PAGE_TITLES[pathname] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).find((k) => pathname.startsWith(k)) ?? ""] ?? "Dashboard";
+
+  const [openPanel, setOpenPanel] = useState<Panel>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openPanel) return;
+    function handleClick(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpenPanel(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [openPanel]);
+
+  const toggle = (panel: Panel) => setOpenPanel((p) => (p === panel ? null : panel));
 
   return (
     <div className="crm-topbar">
@@ -35,23 +72,57 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         <span className="crm-current">{title}</span>
       </div>
 
-      <div className="crm-topbar-actions">
-        <button className="crm-btn ghost icon" title="Notifications">
+      <div className="crm-topbar-actions" ref={panelRef} style={{ position: "relative" }}>
+        <button
+          className="crm-btn ghost icon"
+          title="Notifications"
+          aria-pressed={openPanel === "bell"}
+          onClick={() => toggle("bell")}
+        >
           <Bell size={15} />
         </button>
-        <button className="crm-btn ghost icon" title="Inbox">
+        <button
+          className="crm-btn ghost icon"
+          title="Inbox"
+          aria-pressed={openPanel === "inbox"}
+          onClick={() => toggle("inbox")}
+        >
           <Inbox size={15} />
         </button>
         <div style={{ width: 1, height: 20, background: "var(--crm-border)", margin: "0 4px" }} />
-        <button className="crm-btn">
+        <button className="crm-btn" aria-pressed={openPanel === "ai"} onClick={() => toggle("ai")}>
           <Sparkles size={14} />
           Ask AI
           <span className="crm-kbd">⌘J</span>
         </button>
-        <button className="crm-btn primary">
+        <button className="crm-btn primary" onClick={() => router.push("/leads?new=1")}>
           <Plus size={14} />
           New lead
         </button>
+
+        {openPanel === "bell" && (
+          <div className="crm-card" style={POPOVER_STYLE}>
+            <span style={{ fontSize: 22 }}>🔔</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>No notifications</span>
+            <span style={{ color: "var(--crm-fg-faint)", fontSize: 12 }}>You&apos;re all caught up.</span>
+          </div>
+        )}
+
+        {openPanel === "inbox" && (
+          <div className="crm-card" style={POPOVER_STYLE}>
+            <span style={{ fontSize: 22 }}>📬</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>No messages</span>
+            <span style={{ color: "var(--crm-fg-faint)", fontSize: 12 }}>Your inbox is empty.</span>
+          </div>
+        )}
+
+        {openPanel === "ai" && (
+          <div className="crm-card" style={POPOVER_STYLE}>
+            <span style={{ fontSize: 22 }}>✨</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Ask AI — Coming Soon</span>
+            <span style={{ color: "var(--crm-fg-faint)", fontSize: 12 }}>AI-powered lead insights are on the way.</span>
+          </div>
+        )}
       </div>
     </div>
   );
