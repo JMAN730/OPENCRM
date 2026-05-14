@@ -22,6 +22,7 @@ import {
   Tag,
   Calendar,
   Loader2,
+  MapPin,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ type Lead = {
   email?: string | null;
   phone?: string | null;
   company?: string | null;
+  city?: string | null;
   website?: string | null;
   status: string;
   source?: string | null;
@@ -161,6 +163,28 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
                 >
                   {lead.website}
                 </a>
+              </div>
+            </div>
+          )}
+
+          {lead.city && (
+            <div className="flex items-start gap-3">
+              <MapPin size={15} className="text-muted-foreground mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">City</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{lead.city}</p>
+                  {(lead.city || lead.company) && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.company, lead.city].filter(Boolean).join(" "))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline underline-offset-4"
+                    >
+                      View on Maps
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           )}
