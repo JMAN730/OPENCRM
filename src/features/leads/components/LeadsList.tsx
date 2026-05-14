@@ -5,7 +5,7 @@ import {
   Plus, Search, Filter, MoreVertical, X, Check, MoreHorizontal,
   Phone, Mail, Star, ArrowUpDown, ArrowUp, ArrowDown,
   Columns, Flame, Sun, Snowflake, ChevronLeft, ChevronRight,
-  NotebookPen, Globe,
+  NotebookPen, Globe, Trash2, MapPin, CheckSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -20,6 +20,7 @@ type Lead = {
   email?: string | null;
   phone?: string | null;
   company?: string | null;
+  city?: string | null;
   website?: string | null;
   status: string;
   source?: string | null;
@@ -266,6 +267,23 @@ function LeadModal({
     },
     onError: (e) => toast.error(e.message),
   });
+  const deleteNote = trpc.leads.deleteNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note deleted");
+      utils.leads.getNotes.invalidate({ leadId: lead.id });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const { data: leadTasksRaw } = trpc.tasks.getAllForLead.useQuery({ leadId: lead.id });
+  type LeadTask = { id: string; title: string; completed: boolean; dueDate?: Date | string | null; user?: { name: string | null } | null };
+  const leadTasks: LeadTask[] = (leadTasksRaw ?? []) as LeadTask[];
+  const deleteTask = trpc.tasks.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Task deleted");
+      utils.tasks.getAllForLead.invalidate({ leadId: lead.id });
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const assignMutation = trpc.leads.assign.useMutation({
     onSuccess: () => {
       toast.success("Lead reassigned");
@@ -486,6 +504,27 @@ function LeadModal({
                     <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>{lead.website}</span>
                   </>
                 )}
+                {lead.city && (
+                  <>
+                    <span className="crm-k">City</span>
+                    <span className="crm-v">{lead.city}</span>
+                  </>
+                )}
+                {(lead.city || lead.company) && (
+                  <>
+                    <span className="crm-k">Maps</span>
+                    <span className="crm-v">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.company, lead.city].filter(Boolean).join(" "))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--crm-accent-fg)", display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >
+                        <MapPin size={11} /> View on Google Maps
+                      </a>
+                    </span>
+                  </>
+                )}
                 <span className="crm-k">Created</span>
                 <span className="crm-v" style={{ color: "var(--crm-fg-muted)" }}>
                   {new Date(lead.createdAt).toLocaleDateString()}
@@ -521,10 +560,18 @@ function LeadModal({
                 <span className="ts">{relativeTime(lead.createdAt)}</span>
               </div>
               {notes.map((n) => (
-                <div key={n.id} className="crm-tl-row">
+                <div key={n.id} className="crm-tl-row" style={{ position: "relative" }}>
                   <span className="ico"><NotebookPen size={11} /></span>
                   <span className="body">{n.content}</span>
                   <span className="ts">{relativeTime(n.createdAt as unknown as string)}</span>
+                  <button
+                    className="crm-btn ghost icon"
+                    style={{ marginLeft: "auto", opacity: 0.45, padding: "0 3px", height: 18, minWidth: 0 }}
+                    title="Delete note"
+                    onClick={() => deleteNote.mutate({ noteId: n.id })}
+                  >
+                    <Trash2 size={10} />
+                  </button>
                 </div>
               ))}
               {lead.callNotes && (
@@ -541,6 +588,35 @@ function LeadModal({
               </div>
             </div>
           </div>
+
+          {leadTasks.length > 0 && (
+            <div>
+              <h4>Tasks</h4>
+              <div className="crm-timeline">
+                {leadTasks.map((t) => (
+                  <div key={t.id} className="crm-tl-row" style={{ position: "relative" }}>
+                    <span className="ico"><CheckSquare size={11} style={{ opacity: t.completed ? 0.4 : 1 }} /></span>
+                    <span className="body" style={{ textDecoration: t.completed ? "line-through" : undefined, opacity: t.completed ? 0.55 : 1 }}>
+                      {t.title}
+                      {t.dueDate && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: "var(--crm-fg-muted)" }}>
+                          · due {new Date(t.dueDate as string).toLocaleDateString()}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      className="crm-btn ghost icon"
+                      style={{ marginLeft: "auto", opacity: 0.45, padding: "0 3px", height: 18, minWidth: 0 }}
+                      title="Delete task"
+                      onClick={() => deleteTask.mutate({ taskId: t.id })}
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="crm-modal-foot">
@@ -567,6 +643,7 @@ function AddLeadForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
       firstName: fd.get("firstName") as string,
       lastName:  fd.get("lastName")  as string,
       company:   fd.get("company")   as string,
+      city:      fd.get("city")      as string,
       email:     fd.get("email")     as string,
       phone:     fd.get("phone")     as string,
     });
@@ -597,7 +674,7 @@ function AddLeadForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
               </label>
             ))}
           </div>
-          {[["company", "Company"], ["email", "Work email"], ["phone", "Phone"]].map(([n, l]) => (
+          {[["company", "Company"], ["city", "City"], ["email", "Work email"], ["phone", "Phone"]].map(([n, l]) => (
             <label key={n} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               <span style={{ fontSize: 12, color: "var(--crm-fg-muted)", fontWeight: 500 }}>{l}</span>
               <input name={n} type={n === "email" ? "email" : "text"} style={{
