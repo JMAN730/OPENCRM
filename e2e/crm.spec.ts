@@ -23,7 +23,10 @@ type MockLead = {
   phone: string | null;
   company: string | null;
   website: string | null;
+  rating: number | null;
+  reviewCount: number | null;
   status: string;
+  temperatureOverride: "HOT" | "WARM" | "COOL" | null;
   source: string | null;
   callOutcome: string | null;
   callNotes: string | null;
@@ -222,7 +225,10 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
         phone: payload.phone ?? null,
         company: payload.company ?? null,
         website: null,
+        rating: null,
+        reviewCount: null,
         status: "NOT_CONTACTED",
+        temperatureOverride: null,
         source: payload.source ?? "Manual",
         callOutcome: "NOT_CONTACTED",
         callNotes: null,
@@ -243,6 +249,30 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
       const payload = input as { id: string };
       state.leads = state.leads.filter((lead) => lead.id !== payload.id);
       return { success: true };
+    }
+
+    case "leads.getNotes":
+      return [];
+
+    case "leads.updateCallOutcome": {
+      const payload = input as { id: string; callOutcome: string; callNotes?: string };
+      const lead = state.leads.find((item) => item.id === payload.id);
+      if (!lead) throw new Error(`Unknown lead ${payload.id}`);
+      lead.callOutcome = payload.callOutcome;
+      lead.callNotes = payload.callNotes ?? null;
+      lead.status =
+        payload.callOutcome === "ANSWERED"
+          ? "CONNECTED"
+          : payload.callOutcome;
+      return clone(lead);
+    }
+
+    case "leads.updateTemperatureOverride": {
+      const payload = input as { id: string; temperatureOverride: "HOT" | "WARM" | "COOL" | null };
+      const lead = state.leads.find((item) => item.id === payload.id);
+      if (!lead) throw new Error(`Unknown lead ${payload.id}`);
+      lead.temperatureOverride = payload.temperatureOverride;
+      return clone(lead);
     }
 
     case "tasks.getAll":
@@ -375,7 +405,32 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
     teamId: null,
   };
   const state: MockState = {
-    leads: [],
+    leads: [
+      {
+        id: "seed-lead-1",
+        firstName: "Ava",
+        lastName: "Lane",
+        email: "ava@example.com",
+        phone: "5551234567",
+        company: "Signal Labs",
+        website: "signallabs.example.com",
+        rating: 4.6,
+        reviewCount: 128,
+        status: "NOT_CONTACTED",
+        temperatureOverride: null,
+        source: "GoogleMaps",
+        callOutcome: "NOT_CONTACTED",
+        callNotes: null,
+        createdAt: new Date().toISOString(),
+        assignedToId: user.id,
+        assignedTo: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: null,
+        },
+      },
+    ],
     tasks: [],
     members: [
       {
@@ -404,6 +459,14 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await page.goto("/leads");
   const leadsMain = page.getByRole("main");
   await expect(leadsMain.getByRole("heading", { name: "Leads" })).toBeVisible();
+  const seededLeadRow = leadsMain.locator("tr").filter({ hasText: "Signal Labs" });
+  await seededLeadRow.click();
+  await expect(page.getByText("4.6 ★ (128 reviews)").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "signallabs.example.com" })).toHaveAttribute(
+    "href",
+    "https://signallabs.example.com",
+  );
+  await page.getByTitle("Close (Esc)").click();
   await leadsMain.getByRole("button", { name: /^new lead$/i }).click();
   const leadForm = page.locator("form").filter({ has: page.locator('input[name="company"]') }).first();
   await leadForm.locator('input[name="company"]').fill(leadCompany);

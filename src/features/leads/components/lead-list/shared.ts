@@ -6,7 +6,10 @@ export type Lead = {
   phone?: string | null;
   company?: string | null;
   website?: string | null;
+  rating?: number | null;
+  reviewCount?: number | null;
   status: string;
+  temperatureOverride?: "HOT" | "WARM" | "COOL" | null;
   source?: string | null;
   callOutcome?: string | null;
   callNotes?: string | null;
@@ -108,26 +111,61 @@ export function avatarClass(seed: string) {
 }
 
 export function scoreOf(lead: Lead): number {
-  switch (lead.status) {
-    case "CONNECTED":
-      return 90;
-    case "AI_VOICEMAIL":
-      return 65;
-    case "NO_ANSWER":
-      return 45;
-    case "NOT_CONTACTED":
-      return 30;
-    case "HUNG_UP":
-      return 15;
-    default:
-      return 30;
-  }
+  const rating = typeof lead.rating === "number" ? Math.max(0, Math.min(5, lead.rating)) : null;
+  const reviewCount =
+    typeof lead.reviewCount === "number" ? Math.max(0, Math.floor(lead.reviewCount)) : null;
+
+  const ratingScore = rating == null ? 0 : Math.round((rating / 5) * 40);
+  const volumeScore =
+    reviewCount == null ? 0 : Math.min(25, Math.round(Math.log10(reviewCount + 1) * 12));
+
+  const engagementKey = lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
+    ? lead.callOutcome
+    : lead.status;
+
+  const engagementScore =
+    engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
+      ? 25
+      : engagementKey === "AI_VOICEMAIL"
+        ? 10
+        : engagementKey === "NOT_CONTACTED"
+          ? 5
+          : engagementKey === "HUNG_UP"
+            ? -10
+            : 0;
+
+  return Math.max(0, Math.min(100, ratingScore + volumeScore + engagementScore));
 }
 
 export function tempOf(score: number): LeadTemperature {
   if (score >= 70) return "hot";
-  if (score >= 45) return "warm";
+  if (score >= 40) return "warm";
   return "cool";
+}
+
+export function effectiveTempOf(lead: Lead): LeadTemperature {
+  if (lead.temperatureOverride === "HOT") return "hot";
+  if (lead.temperatureOverride === "WARM") return "warm";
+  if (lead.temperatureOverride === "COOL") return "cool";
+  return tempOf(scoreOf(lead));
+}
+
+export function normalizeWebsiteHref(website?: string | null): string | null {
+  if (!website) return null;
+  return website.startsWith("http://") || website.startsWith("https://")
+    ? website
+    : `https://${website}`;
+}
+
+export function reviewSummary(lead: Lead): string | null {
+  if (typeof lead.rating !== "number" && typeof lead.reviewCount !== "number") {
+    return null;
+  }
+
+  const ratingText = typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-";
+  const reviewCount = typeof lead.reviewCount === "number" ? lead.reviewCount : 0;
+  const reviewsLabel = reviewCount === 1 ? "review" : "reviews";
+  return `${ratingText} ★ (${reviewCount} ${reviewsLabel})`;
 }
 
 export function tempLabel(temperature: LeadTemperature) {
