@@ -28,6 +28,7 @@
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "tauri": "tauri",
@@ -78,6 +79,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.0.0",
