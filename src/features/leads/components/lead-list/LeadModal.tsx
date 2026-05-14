@@ -19,14 +19,16 @@ import {
 } from "lucide-react";
 import {
   avatarClass,
+  effectiveTempOf,
   fullNameOf,
   initials,
+  normalizeWebsiteHref,
   OUTCOMES,
   relativeTime,
+  reviewSummary,
   scoreOf,
   SessionUser,
   tempLabel,
-  tempOf,
   type AssignableUser,
   type Lead,
   type LeadNote,
@@ -140,7 +142,9 @@ type LeadModalProps = {
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const name = fullNameOf(lead);
   const score = scoreOf(lead);
-  const temp = tempOf(score);
+  const temp = effectiveTempOf(lead);
+  const websiteHref = normalizeWebsiteHref(lead.website);
+  const reviews = reviewSummary(lead);
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(
@@ -178,6 +182,13 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const updateTemperatureOverride = trpc.leads.updateTemperatureOverride.useMutation({
+    onSuccess: () => {
+      toast.success("Temperature updated");
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const assignMutation = trpc.leads.assign.useMutation({
     onSuccess: () => {
       toast.success("Lead reassigned");
@@ -199,6 +210,14 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [outcomeOpen]);
+
+  useEffect(() => {
+    setOutcome(
+      lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
+        ? lead.callOutcome
+        : null,
+    );
+  }, [lead.callOutcome, lead.id]);
 
   useEffect(() => {
     if (!assignOpen) return;
@@ -455,8 +474,20 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     <>
                       <span className="crm-k">Website</span>
                       <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>
-                        {lead.website}
+                        {websiteHref ? (
+                          <a href={websiteHref} target="_blank" rel="noopener noreferrer">
+                            {lead.website}
+                          </a>
+                        ) : (
+                          lead.website
+                        )}
                       </span>
+                    </>
+                  ) : null}
+                  {reviews ? (
+                    <>
+                      <span className="crm-k">Reviews</span>
+                      <span className="crm-v">{reviews}</span>
                     </>
                   ) : null}
                   <span className="crm-k">Created</span>
@@ -478,6 +509,45 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                         {tempLabel(temp)}
                       </span>
                     </div>
+                    {reviews ? (
+                      <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)", marginTop: 6 }}>
+                        {reviews}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>
+                      Temperature
+                    </div>
+                    <select
+                      aria-label="Temperature override"
+                      value={lead.temperatureOverride ?? ""}
+                      disabled={updateTemperatureOverride.isPending}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        border: "1px solid var(--crm-border)",
+                        borderRadius: "var(--crm-radius-sm)",
+                        background: "var(--crm-surface-2)",
+                        color: "var(--crm-fg)",
+                        fontSize: 12.5,
+                      }}
+                      onChange={(event) =>
+                        updateTemperatureOverride.mutate({
+                          id: lead.id,
+                          temperatureOverride: (event.target.value || null) as
+                            | "HOT"
+                            | "WARM"
+                            | "COOL"
+                            | null,
+                        })
+                      }
+                    >
+                      <option value="">Auto</option>
+                      <option value="HOT">Hot</option>
+                      <option value="WARM">Warm</option>
+                      <option value="COOL">Cool</option>
+                    </select>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>

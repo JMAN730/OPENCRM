@@ -7,6 +7,7 @@ const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     lead: {
       findMany: vi.fn(),
+      update: vi.fn(),
       createMany: vi.fn(),
     },
     scraperJob: {
@@ -101,6 +102,7 @@ describe("importRowsToLeads", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.update.mockResolvedValue({});
     mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.scraperJob.update.mockResolvedValue({});
   });
@@ -240,7 +242,7 @@ describe("importRowsToLeads", () => {
         organizationId: "org-X",
         company: { in: ["Acme"], mode: "insensitive" },
       },
-      select: { company: true, phone: true },
+      select: { id: true, company: true, phone: true, rating: true, reviewCount: true },
     });
   });
 
@@ -260,5 +262,40 @@ describe("importRowsToLeads", () => {
     expect(call.where.organizationId).toBe("org-1");
     expect(new Set(call.where.company.in)).toEqual(new Set(["Acme", "Beta"]));
     expect(call.where.company.mode).toBe("insensitive");
+  });
+
+  it("imports rating and review count when present in scraped rows", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    await importRowsToLeads({
+      rows: [{ Name: "Acme", Rating: "4.6", ReviewCount: "128" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    expect(inserted.rating).toBe(4.6);
+    expect(inserted.reviewCount).toBe(128);
+  });
+
+  it("updates existing matching leads with fresher review data", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([
+      { id: "lead-1", company: "Acme", phone: "555", rating: 4.1, reviewCount: 10 },
+    ]);
+
+    const result = await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", Rating: "4.7", ReviewCount: "18" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    expect(result).toEqual({ inserted: 0, skipped: 1 });
+    expect(mockPrisma.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-1" },
+      data: { rating: 4.7, reviewCount: 18 },
+    });
   });
 });
