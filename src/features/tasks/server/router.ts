@@ -73,6 +73,34 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
+  delete: organizationProcedure
+    .input(z.object({
+      taskId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const task = await ctx.prisma.task.findFirst({
+        where: {
+          id: input.taskId,
+          user: { organizationId: ctx.organizationId },
+        },
+        select: { id: true, userId: true },
+      });
+
+      if (!task) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
+      }
+
+      const callerId = ctx.session.user.id;
+      const callerRole = ctx.session.user.role;
+      if (task.userId !== callerId && !isManagerOrAdmin(callerRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot delete another user's task." });
+      }
+
+      return ctx.prisma.task.delete({
+        where: { id: task.id },
+      });
+    }),
+
   getAllForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
