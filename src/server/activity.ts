@@ -6,6 +6,7 @@ export type ActivityType =
   | "LEAD_DELETED"
   | "CALL_OUTCOME"
   | "CALL_LOGGED"
+  | "LEAD_TEMPERATURE_OVERRIDE"
   | "TASK_CREATED"
   | "TASK_COMPLETED"
   | "NOTE_ADDED";

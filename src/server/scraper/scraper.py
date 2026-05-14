@@ -57,7 +57,7 @@ async def get_business_details(browser_context, maps_url, semaphore):
     """Opens a fresh page for the specific Maps URL to ensure correct details."""
     async with semaphore:
         page = await browser_context.new_page()
-        details = {"phone": None, "website": None}
+        details = {"phone": None, "website": None, "rating": None, "review_count": None}
         try:
             await page.goto(maps_url)
             await page.wait_for_selector("div[role='main']", timeout=10000)
@@ -81,6 +81,20 @@ async def get_business_details(browser_context, maps_url, semaphore):
                 ws_el = await panel.query_selector("a[data-item-id='authority'], a[aria-label*='website'], a[aria-label*='Website']")
                 if ws_el:
                     details["website"] = await ws_el.get_attribute("href")
+
+                rating_el = await panel.query_selector('[role="img"][aria-label*="stars"], span[aria-hidden="true"]')
+                if rating_el:
+                    rating_label = await rating_el.get_attribute("aria-label")
+                    rating_text = rating_label or await rating_el.inner_text()
+                    if rating_text:
+                        rating_match = re.search(r'([0-5](?:\.\d)?)', rating_text)
+                        if rating_match:
+                            details["rating"] = rating_match.group(1)
+
+                text = await panel.inner_text()
+                review_match = re.search(r'([\d,]+)\s+reviews', text, re.IGNORECASE)
+                if review_match:
+                    details["review_count"] = review_match.group(1).replace(",", "")
         except Exception as e:
             # print(f"Error getting details for {maps_url}: {e}")
             pass
@@ -140,7 +154,9 @@ async def scrape_gmaps(browser_context, search_query, max_results=50):
             final_results.append({
                 "Name": place["Name"],
                 "Phone": details["phone"],
-                "Website": details["website"]
+                "Website": details["website"],
+                "Rating": details["rating"],
+                "ReviewCount": details["review_count"],
             })
     
     return final_results
@@ -194,7 +210,13 @@ async def process_category(browser_context, http_client, location, category, lim
         
         is_valid_ws = await check_website(http_client, b["Website"], check_semaphore)
         if not is_valid_ws:
-            return {"Name": b["Name"], "Phone": b["Phone"]}
+            return {
+                "Name": b["Name"],
+                "Phone": b["Phone"],
+                "Website": b.get("Website"),
+                "Rating": b.get("Rating"),
+                "ReviewCount": b.get("ReviewCount"),
+            }
         return None
 
     tasks = [process_lead(b) for b in data]

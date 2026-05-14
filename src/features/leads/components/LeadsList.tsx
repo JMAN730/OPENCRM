@@ -22,7 +22,7 @@ import {
 } from "./lead-list/shared";
 
 export function LeadsList() {
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [stageFilter, setStageFilter] = useState(new Set<string>());
@@ -158,18 +158,22 @@ export function LeadsList() {
     setSelected(allSelected ? new Set() : new Set(filtered.map((lead) => lead.id)));
   };
 
+  const selectedLead = selectedLeadId
+    ? allLeads.find((lead) => lead.id === selectedLeadId) ?? null
+    : null;
+
   const selectedIndex = selectedLead
     ? filtered.findIndex((lead) => lead.id === selectedLead.id)
     : -1;
   const previousLead = useCallback(() => {
     if (selectedIndex > 0) {
-      setSelectedLead(filtered[selectedIndex - 1]);
+      setSelectedLeadId(filtered[selectedIndex - 1]?.id ?? null);
     }
   }, [filtered, selectedIndex]);
 
   const nextLead = useCallback(() => {
     if (selectedIndex >= 0 && selectedIndex < filtered.length - 1) {
-      setSelectedLead(filtered[selectedIndex + 1]);
+      setSelectedLeadId(filtered[selectedIndex + 1]?.id ?? null);
     }
   }, [filtered, selectedIndex]);
 
@@ -178,7 +182,7 @@ export function LeadsList() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedLead(null);
+        setSelectedLeadId(null);
       } else if (event.key === "ArrowDown" || event.key === "j") {
         event.preventDefault();
         nextLead();
@@ -230,7 +234,7 @@ export function LeadsList() {
         <LeadModal
           key={selectedLead.id}
           lead={selectedLead}
-          onClose={() => setSelectedLead(null)}
+          onClose={() => setSelectedLeadId(null)}
           onPrev={previousLead}
           onNext={nextLead}
         />
@@ -266,7 +270,7 @@ export function LeadsList() {
             }
           }}
           onFetchNextPage={() => void fetchNextPage()}
-          onOpenLead={setSelectedLead}
+          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
           onSearchChange={setSearch}
           onSortChange={(key) =>
             setSortBy((current) => ({

@@ -104,19 +104,22 @@ model Team {
 }
 
 model Lead {
-  id        String  @id @default(cuid())
-  firstName String?
-  lastName  String?
-  email     String?
-  phone     String?
-  company   String?
-  title     String?
-  website   String?
-  status    LeadStatus @default(NOT_CONTACTED)
-  source    String?
-  value     Float?
-  callOutcome CallOutcome @default(NOT_CONTACTED)
-  callNotes String?
+  id                  String                   @id @default(cuid())
+  firstName           String?
+  lastName            String?
+  email               String?
+  phone               String?
+  company             String?
+  title               String?
+  website             String?
+  rating              Float?
+  reviewCount         Int?
+  status              LeadStatus               @default(NOT_CONTACTED)
+  temperatureOverride LeadTemperatureOverride?
+  source              String?
+  value               Float?
+  callOutcome         CallOutcome              @default(NOT_CONTACTED)
+  callNotes           String?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -153,9 +156,15 @@ enum LeadStatus {
   HUNG_UP
 }
 
+enum LeadTemperatureOverride {
+  HOT
+  WARM
+  COOL
+}
+
 model LeadTag {
-  id   String @id @default(cuid())
-  name String
+  id    String @id @default(cuid())
+  name  String
   leads Lead[]
 
   organizationId String
@@ -191,10 +200,10 @@ model CallLog {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  duration      Int?
-  status        CallStatus
-  recordingUrl  String?
-  disposition   String?
+  duration     Int?
+  status       CallStatus
+  recordingUrl String?
+  disposition  String?
 
   twilioCallSid String? @unique
 
@@ -304,16 +313,16 @@ model ScraperJob {
   locations  String @default("[]")
   categories String @default("[]")
 
-  limit       Int     @default(20)
-  concurrency Int     @default(1)
+  limit       Int @default(20)
+  concurrency Int @default(1)
 
   totalScraped  Int     @default(0)
   importedCount Int     @default(0)
   autoImport    Boolean @default(true)
 
-  outputDir   String?
-  logs        String  @default("")
-  error       String?
+  outputDir String?
+  logs      String  @default("")
+  error     String?
 
   startedAt   DateTime?
   completedAt DateTime?

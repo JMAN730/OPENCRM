@@ -7,6 +7,8 @@ export type ScrapedRow = {
   Name?: string;
   Phone?: string;
   Website?: string;
+  Rating?: string;
+  ReviewCount?: string;
   Category?: string;
   Location?: string;
 };
@@ -69,10 +71,10 @@ function dedupKey(company: string, phone: string | null): string {
 async function loadExistingKeys(
   organizationId: string,
   companies: string[],
-): Promise<Set<string>> {
-  if (companies.length === 0) return new Set();
+): Promise<Map<string, { id: string; rating: number | null; reviewCount: number | null }>> {
+  if (companies.length === 0) return new Map();
 
-  const seen = new Set<string>();
+  const seen = new Map<string, { id: string; rating: number | null; reviewCount: number | null }>();
   for (let i = 0; i < companies.length; i += DEDUP_CHUNK) {
     const slice = companies.slice(i, i + DEDUP_CHUNK);
     const rows = await prisma.lead.findMany({
@@ -80,10 +82,14 @@ async function loadExistingKeys(
         organizationId,
         company: { in: slice, mode: "insensitive" },
       },
-      select: { company: true, phone: true },
+      select: { id: true, company: true, phone: true, rating: true, reviewCount: true },
     });
     for (const r of rows) {
-      seen.add(dedupKey(r.company ?? "", r.phone ?? null));
+      seen.set(dedupKey(r.company ?? "", r.phone ?? null), {
+        id: r.id,
+        rating: r.rating ?? null,
+        reviewCount: r.reviewCount ?? null,
+      });
     }
   }
   return seen;
@@ -113,10 +119,13 @@ export async function importRowsToLeads(opts: {
     company: string;
     phone: string | null;
     website: string | null;
+    rating: number | null;
+    reviewCount: number | null;
     source: string;
     organizationId: string;
     assignedToId: string;
   }> = [];
+  const toUpdate: Array<{ id: string; data: { rating?: number | null; reviewCount?: number | null } }> = [];
   let skipped = 0;
 
   for (const row of rows) {
@@ -127,12 +136,34 @@ export async function importRowsToLeads(opts: {
     }
     const phone = (row.Phone ?? "").trim() || null;
     const website = (row.Website ?? "").trim() || null;
+    const ratingRaw = (row.Rating ?? "").trim();
+    const reviewCountRaw = (row.ReviewCount ?? "").trim();
+    const rating = ratingRaw ? Number(ratingRaw) : null;
+    const reviewCount = reviewCountRaw ? Number(reviewCountRaw) : null;
     const key = dedupKey(company, phone);
-    if (existingKeys.has(key)) {
+    const existing = existingKeys.get(key);
+    if (existing) {
+      const data: { rating?: number | null; reviewCount?: number | null } = {};
+      const nextRating = Number.isFinite(rating) ? rating : null;
+      const nextReviewCount = Number.isFinite(reviewCount) ? reviewCount : null;
+      if (nextRating !== null && existing.rating !== nextRating) {
+        data.rating = nextRating;
+      }
+      if (nextReviewCount !== null && existing.reviewCount !== nextReviewCount) {
+        data.reviewCount = nextReviewCount;
+      }
+      if (Object.keys(data).length > 0) {
+        toUpdate.push({ id: existing.id, data });
+        existingKeys.set(key, {
+          ...existing,
+          rating: data.rating ?? existing.rating,
+          reviewCount: data.reviewCount ?? existing.reviewCount,
+        });
+      }
       skipped++;
       continue;
     }
-    existingKeys.add(key);
+    existingKeys.set(key, { id: "", rating: Number.isFinite(rating) ? rating : null, reviewCount: Number.isFinite(reviewCount) ? reviewCount : null });
 
     const sourceParts = ["GoogleMaps"];
     if (row.Category) sourceParts.push(row.Category);
@@ -142,22 +173,35 @@ export async function importRowsToLeads(opts: {
       company,
       phone,
       website,
+      rating: Number.isFinite(rating) ? rating : null,
+      reviewCount: Number.isFinite(reviewCount) ? reviewCount : null,
       source: sourceParts.join(" / "),
       organizationId,
       assignedToId,
     });
   }
 
-  if (toInsert.length === 0) return { inserted: 0, skipped };
+  const result = toInsert.length
+    ? await prisma.lead.createMany({
+        data: toInsert,
+      })
+    : { count: 0 };
 
-  const result = await prisma.lead.createMany({
-    data: toInsert,
-  });
+  await Promise.all(
+    toUpdate.map((update) =>
+      prisma.lead.update({
+        where: { id: update.id },
+        data: update.data,
+      }),
+    ),
+  );
 
-  await prisma.scraperJob.update({
-    where: { id: jobId },
-    data: { importedCount: { increment: result.count } },
-  });
+  if (result.count > 0) {
+    await prisma.scraperJob.update({
+      where: { id: jobId },
+      data: { importedCount: { increment: result.count } },
+    });
+  }
 
   return { inserted: result.count, skipped };
 }
