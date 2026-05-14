@@ -204,6 +204,18 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const [starred, setStarred] = useState(lead.starred ?? false);
+  const toggleStar = trpc.leads.toggleStar.useMutation({
+    onMutate: () => setStarred((s) => !s),
+    onSuccess: (updated) => {
+      setStarred(updated.starred);
+      void utils.leads.getAll.invalidate();
+    },
+    onError: () => {
+      setStarred((s) => !s);
+      toast.error("Failed to update star");
+    },
+  });
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   useEffect(() => {
@@ -341,8 +353,17 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
             </div>
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <button className="crm-btn ghost icon" title="Star">
-                <Star size={14} />
+              <button
+                className="crm-btn ghost icon"
+                title={starred ? "Unstar" : "Star"}
+                onClick={() => toggleStar.mutate({ id: lead.id })}
+                disabled={toggleStar.isPending}
+              >
+                <Star
+                  size={14}
+                  fill={starred ? "currentColor" : "none"}
+                  style={{ color: starred ? "#f59e0b" : undefined }}
+                />
               </button>
               <button className="crm-btn ghost icon" title="More">
                 <MoreHorizontal size={14} />
