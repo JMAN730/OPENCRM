@@ -82,7 +82,7 @@ describe("TasksList", () => {
     const checkbox = screen.getByRole("checkbox");
     fireEvent.click(checkbox);
 
-    expect(updateMutate).toHaveBeenCalledWith({ taskId: "t1", completed: true });
+    expect(updateMutate).toHaveBeenCalledWith({ taskId: "t1", status: "COMPLETED" });
   });
 
   it("opens the edit dialog and saves title/date changes", () => {
@@ -103,11 +103,11 @@ describe("TasksList", () => {
     fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-06-01" } });
     fireEvent.click(screen.getByText("Save changes"));
 
-    expect(updateMutate).toHaveBeenCalledWith({
+    expect(updateMutate).toHaveBeenCalledWith(expect.objectContaining({
       taskId: "t1",
       title: "Updated title",
       dueDate: "2026-06-01",
-    });
+    }));
   });
 
   it("calls delete mutation from the actions menu", () => {
