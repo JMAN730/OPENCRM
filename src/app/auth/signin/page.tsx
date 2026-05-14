@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn, getSession, useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,23 +26,49 @@ type SavedUser = {
 };
 
 const STORAGE_KEY = "crm_saved_users";
+const STORAGE_EVENT = "crm-saved-users-changed";
 
 function getSavedUsers(): SavedUser[] {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    return JSON.parse(getSavedUsersSnapshot());
   } catch {
     return [];
   }
 }
 
+function getSavedUsersSnapshot() {
+  if (typeof window === "undefined") return "[]";
+  return localStorage.getItem(STORAGE_KEY) ?? "[]";
+}
+
+function emitSavedUsersChanged() {
+  window.dispatchEvent(new Event(STORAGE_EVENT));
+}
+
+function subscribeToSavedUsers(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(STORAGE_EVENT, onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(STORAGE_EVENT, onStoreChange);
+  };
+}
+
 function upsertSavedUser(user: SavedUser) {
   const rest = getSavedUsers().filter((u) => u.email !== user.email);
   localStorage.setItem(STORAGE_KEY, JSON.stringify([user, ...rest]));
+  emitSavedUsersChanged();
 }
 
 function removeSavedUser(email: string) {
   const users = getSavedUsers().filter((u) => u.email !== email);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+  emitSavedUsersChanged();
 }
 
 function getInitials(name: string) {
@@ -57,10 +83,17 @@ function getInitials(name: string) {
 export default function SignInPage() {
   const { status } = useSession();
   const router = useRouter();
+  const savedUsersSnapshot = useSyncExternalStore(subscribeToSavedUsers, getSavedUsersSnapshot, () => "[]");
+  const savedUsers = useMemo(() => {
+    try {
+      return JSON.parse(savedUsersSnapshot) as SavedUser[];
+    } catch {
+      return [];
+    }
+  }, [savedUsersSnapshot]);
+  const hasSavedUsers = savedUsers.length > 0;
 
-  const [savedUsers, setSavedUsers] = useState<SavedUser[]>([]);
-  const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<"picker" | "password" | "new">("picker");
+  const [viewOverride, setViewOverride] = useState<"picker" | "password" | "new" | null>(null);
   const [selectedUser, setSelectedUser] = useState<SavedUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,7 +107,7 @@ export default function SignInPage() {
   });
 
   const handleResetPassword = () => {
-    const emailToReset = view === "password" ? selectedUser!.email : email;
+    const emailToReset = view === "password" && selectedUser ? selectedUser.email : email;
     if (!emailToReset) {
       setError("Enter your email first.");
       return;
@@ -88,12 +121,7 @@ export default function SignInPage() {
     if (status === "authenticated") router.push("/dashboard");
   }, [status, router]);
 
-  useEffect(() => {
-    setMounted(true);
-    const users = getSavedUsers();
-    setSavedUsers(users);
-    if (users.length === 0) setView("new");
-  }, []);
+  const view = viewOverride ?? (hasSavedUsers ? "picker" : "new");
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,25 +165,26 @@ export default function SignInPage() {
     setSelectedUser(user);
     setPassword("");
     setError("");
-    setView("password");
+    setViewOverride("password");
   };
 
   const handleRemoveUser = (email: string, e: React.MouseEvent) => {
     e.stopPropagation();
     removeSavedUser(email);
-    const updated = getSavedUsers();
-    setSavedUsers(updated);
-    if (updated.length === 0) setView("new");
+    if (selectedUser?.email === email) {
+      setSelectedUser(null);
+    }
+    setViewOverride(null);
   };
 
   const handleBack = () => {
     setError("");
     setPassword("");
     setSelectedUser(null);
-    setView("picker");
+    setViewOverride(null);
   };
 
-  if (status === "loading" || !mounted)
+  if (status === "loading")
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -200,7 +229,7 @@ export default function SignInPage() {
             ))}
 
             <button
-              onClick={() => { setEmail(""); setPassword(""); setError(""); setView("new"); }}
+              onClick={() => { setEmail(""); setPassword(""); setError(""); setViewOverride("new"); }}
               className="flex w-32 flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">

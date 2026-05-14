@@ -2,13 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  turbopack: {
+    root: __dirname,
+  },
   serverExternalPackages: [
     "@prisma/client",
   ],
-  typescript: {
-    // Unblock production builds even if the repo has outstanding TS strictness issues.
-    ignoreBuildErrors: true,
-  },
 };
 
 export default nextConfig;

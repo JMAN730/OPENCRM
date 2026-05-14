@@ -1,31 +1,40 @@
 "use client";
 
+import type { inferRouterOutputs } from "@trpc/server";
 import { trpc } from "@/app/_trpc/client";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Crown, UserPlus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { AppRouter } from "@/server/api/root";
+
+type TeamsListItem = inferRouterOutputs<AppRouter>["teams"]["list"][number];
+type OrganizationMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
+type TeamActivity = inferRouterOutputs<AppRouter>["teams"]["activityFeed"][number];
+type InviteRole = "USER" | "MANAGER" | "ADMIN";
 
 function initials(name: string | null | undefined, fallback = "?") {
   if (!name) return fallback;
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
+
 function avatarClass(seed: string | null | undefined) {
   const n = (((seed ?? "")?.charCodeAt(0) || 0) % 6) + 1;
   return `c${n}`;
 }
+
 function relativeTime(iso: string | Date) {
   const d = new Date(iso).getTime();
   const sec = Math.max(0, Math.floor((Date.now() - d) / 1000));
@@ -48,12 +57,10 @@ const ACTIVITY_VERB: Record<string, string> = {
   NOTE_ADDED: "added note on",
 };
 
-// ── Add Member Modal ──────────────────────────────────────────────────────────
-
 interface AddMemberModalProps {
   teamId: string;
   teamName: string;
-  orgMembers: any[];
+  orgMembers: OrganizationMember[];
   membersLoading: boolean;
   callerId: string | undefined;
   open: boolean;
@@ -75,57 +82,57 @@ function AddMemberModal({
 
   const setMembership = trpc.teams.setMembership.useMutation({
     onSuccess: () => {
-      utils.teams.list.invalidate();
-      utils.teams.organizationMembers.invalidate();
-      utils.teams.myTeam.invalidate();
+      void utils.teams.list.invalidate();
+      void utils.teams.organizationMembers.invalidate();
+      void utils.teams.myTeam.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
 
-  // Users available to add: not current user, not already in this team
   const available = useMemo(() => {
-    const q = search.toLowerCase();
-    return orgMembers.filter((m) => {
-      if (m.id === callerId) return false;
-      if (m.teamId === teamId) return false;
-      if (!q) return true;
+    const query = search.toLowerCase();
+    return orgMembers.filter((member) => {
+      if (member.id === callerId) return false;
+      if (member.teamId === teamId) return false;
+      if (!query) return true;
+
       return (
-        (m.name ?? "").toLowerCase().includes(q) ||
-        (m.email ?? "").toLowerCase().includes(q)
+        (member.name ?? "").toLowerCase().includes(query) ||
+        (member.email ?? "").toLowerCase().includes(query)
       );
     });
-  }, [orgMembers, callerId, teamId, search]);
+  }, [callerId, orgMembers, search, teamId]);
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }
 
   async function handleAdd() {
     const ids = Array.from(selected);
-    await Promise.all(
-      ids.map((userId) =>
-        setMembership.mutateAsync({ userId, teamId })
-      )
-    );
-    toast.success(
-      ids.length === 1 ? "Member added" : `${ids.length} members added`
-    );
+    await Promise.all(ids.map((userId) => setMembership.mutateAsync({ userId, teamId })));
+    toast.success(ids.length === 1 ? "Member added" : `${ids.length} members added`);
     setSelected(new Set());
     setSearch("");
     onClose();
   }
 
-  function handleOpenChange(open: boolean) {
-    if (!open) {
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
       setSearch("");
       setSelected(new Set());
       onClose();
     }
   }
+
+  const addableUsersCount = orgMembers.filter((member) => member.id !== callerId && member.teamId !== teamId).length;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -138,10 +145,10 @@ function AddMemberModal({
         </DialogHeader>
 
         <Input
+          autoFocus
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="Search by name or email…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          autoFocus
         />
 
         <div
@@ -153,10 +160,9 @@ function AddMemberModal({
           }}
         >
           {membersLoading ? (
-            // Loading skeletons
-            Array.from({ length: 4 }).map((_, i) => (
+            Array.from({ length: 4 }).map((_, index) => (
               <div
-                key={i}
+                key={index}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -167,7 +173,7 @@ function AddMemberModal({
               >
                 <Skeleton className="size-8 rounded-full" />
                 <div style={{ flex: 1 }}>
-                  <Skeleton className="h-3 w-28 mb-1" />
+                  <Skeleton className="mb-1 h-3 w-28" />
                   <Skeleton className="h-2.5 w-40" />
                 </div>
               </div>
@@ -183,14 +189,14 @@ function AddMemberModal({
             >
               {search
                 ? "No users match your search."
-                : orgMembers.filter((m) => m.id !== callerId && m.teamId !== teamId).length === 0
-                  ? "No users available to add. Use \"Invite user to org\" to create accounts first."
+                : addableUsersCount === 0
+                  ? "No users available to add. Use \"Create user account\" to add accounts first."
                   : "No users match your search."}
             </div>
           ) : (
-            available.map((m) => (
+            available.map((member) => (
               <label
-                key={m.id}
+                key={member.id}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -202,26 +208,26 @@ function AddMemberModal({
                 }}
               >
                 <Checkbox
-                  checked={selected.has(m.id)}
-                  onCheckedChange={() => toggle(m.id)}
+                  checked={selected.has(member.id)}
+                  onCheckedChange={() => toggle(member.id)}
                 />
-                <div className={`crm-avatar sm ${avatarClass(m.name)}`}>
-                  {initials(m.name || m.email)}
+                <div className={`crm-avatar sm ${avatarClass(member.name)}`}>
+                  {initials(member.name || member.email)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>
-                    {m.name || m.email}
+                    {member.name || member.email}
                   </div>
-                  {m.name && (
+                  {member.name ? (
                     <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-                      {m.email}
+                      {member.email}
                     </div>
-                  )}
-                  {m.team && (
+                  ) : null}
+                  {member.team ? (
                     <div style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>
-                      Currently in: {m.team.name}
+                      Currently in: {member.team.name}
                     </div>
-                  )}
+                  ) : null}
                 </div>
                 <span
                   style={{
@@ -230,7 +236,7 @@ function AddMemberModal({
                     color: "var(--crm-fg-faint)",
                   }}
                 >
-                  {m.role}
+                  {member.role}
                 </span>
               </label>
             ))
@@ -239,15 +245,15 @@ function AddMemberModal({
 
         <DialogFooter>
           <Button
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
             disabled={setMembership.isPending}
+            onClick={() => handleOpenChange(false)}
+            variant="outline"
           >
             Cancel
           </Button>
           <Button
-            onClick={handleAdd}
             disabled={selected.size === 0 || setMembership.isPending}
+            onClick={handleAdd}
           >
             {setMembership.isPending
               ? "Adding…"
@@ -261,11 +267,9 @@ function AddMemberModal({
   );
 }
 
-// ── Main TeamPage ─────────────────────────────────────────────────────────────
-
 export function TeamPage() {
   const { data: session } = useSession();
-  const role = (session?.user as { role?: string })?.role;
+  const role = (session?.user as { role?: string } | undefined)?.role;
   const isAdmin = role === "ADMIN";
   const callerId = session?.user?.id;
 
@@ -292,32 +296,31 @@ export function TeamPage() {
               ? `${myTeam.name} · ${myTeam.users.length} member${myTeam.users.length === 1 ? "" : "s"}`
               : isAdmin
                 ? "Manage teams for your organization"
-                : "You're not currently on a team"}
+                : "You are not on a team yet"}
           </div>
         </div>
       </div>
 
-      {!myTeam && !isAdmin && (
+      {!myTeam && !isAdmin ? (
         <div className="crm-card" style={{ padding: 32, textAlign: "center", color: "var(--crm-fg-faint)" }}>
-          You haven't been added to a team yet. Ask your admin to invite you.
+          You are not on a team yet. Ask your admin to add you to one.
         </div>
-      )}
+      ) : null}
 
-      {myTeam && (
+      {myTeam ? (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 16 }}>
-          {/* Members */}
           <div className="crm-card flush">
             <div className="crm-card-head">
               <h3>Members</h3>
               <span className="crm-sub">· {myTeam.users.length}</span>
             </div>
             <div>
-              {myTeam.users.map((u) => {
-                const canViewDetail = isAdmin || isLeader || u.id === callerId;
-                const isLeaderOfTeam = myTeam.leaderId === u.id;
+              {myTeam.users.map((user) => {
+                const canViewDetail = isAdmin || isLeader || user.id === callerId;
+                const isLeaderOfTeam = myTeam.leaderId === user.id;
                 const row = (
                   <div
-                    key={u.id}
+                    key={user.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -327,25 +330,32 @@ export function TeamPage() {
                       cursor: canViewDetail ? "pointer" : "default",
                     }}
                   >
-                    <div className={`crm-avatar sm ${avatarClass(u.name)}`}>
-                      {initials(u.name || u.email)}
+                    <div className={`crm-avatar sm ${avatarClass(user.name)}`}>
+                      {initials(user.name || user.email)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="crm-n">{u.name || u.email}</span>
-                        {isLeaderOfTeam && (
+                        <span className="crm-n">{user.name || user.email}</span>
+                        {isLeaderOfTeam ? (
                           <span title="Team leader" style={{ color: "var(--crm-warn, #d4a017)", display: "inline-flex" }}>
                             <Crown size={12} />
                           </span>
-                        )}
+                        ) : null}
                       </div>
-                      {u.email && <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>{u.email}</div>}
+                      {user.email ? (
+                        <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>{user.email}</div>
+                      ) : null}
                     </div>
-                    <span style={{ fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>{u.role}</span>
+                    <span style={{ fontSize: 11, color: "var(--crm-fg-faint)", textTransform: "uppercase" }}>{user.role}</span>
                   </div>
                 );
+
                 return canViewDetail ? (
-                  <Link key={u.id} href={`/team/${u.id}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                  <Link
+                    key={user.id}
+                    href={`/team/${user.id}`}
+                    style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                  >
                     {row}
                   </Link>
                 ) : (
@@ -355,7 +365,6 @@ export function TeamPage() {
             </div>
           </div>
 
-          {/* Activity feed */}
           <div className="crm-card flush">
             <div className="crm-card-head">
               <h3>Team activity</h3>
@@ -367,15 +376,16 @@ export function TeamPage() {
                   No recent activity from your team.
                 </div>
               ) : (
-                feed.map((a: any) => {
-                  const verb = ACTIVITY_VERB[a.type] ?? a.type.toLowerCase();
+                feed.map((activity: TeamActivity) => {
+                  const verb = ACTIVITY_VERB[activity.type] ?? activity.type.toLowerCase();
                   const leadLabel =
-                    [a.lead?.firstName, a.lead?.lastName].filter(Boolean).join(" ") ||
-                    a.lead?.company ||
+                    [activity.lead?.firstName, activity.lead?.lastName].filter(Boolean).join(" ") ||
+                    activity.lead?.company ||
                     "(lead)";
+
                   return (
                     <div
-                      key={a.id}
+                      key={activity.id}
                       style={{
                         display: "flex",
                         gap: 10,
@@ -384,19 +394,19 @@ export function TeamPage() {
                         alignItems: "flex-start",
                       }}
                     >
-                      <div className={`crm-avatar xs ${avatarClass(a.user?.name)}`}>
-                        {initials(a.user?.name || a.user?.email)}
+                      <div className={`crm-avatar xs ${avatarClass(activity.user?.name)}`}>
+                        {initials(activity.user?.name || activity.user?.email)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13 }}>
-                          <strong>{a.user?.name || a.user?.email || "Someone"}</strong>{" "}
+                          <strong>{activity.user?.name || activity.user?.email || "Someone"}</strong>{" "}
                           <span style={{ color: "var(--crm-fg-faint)" }}>{verb}</span>{" "}
-                          <Link href={`/leads`} style={{ color: "var(--crm-fg)" }}>
+                          <Link href="/leads" style={{ color: "var(--crm-fg)" }}>
                             {leadLabel}
                           </Link>
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)", marginTop: 1 }}>
-                          {a.description} · {relativeTime(a.createdAt)}
+                          {activity.description} · {relativeTime(activity.createdAt)}
                         </div>
                       </div>
                     </div>
@@ -406,25 +416,23 @@ export function TeamPage() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {isAdmin && (
+      {isAdmin ? (
         <AdminTeamsPanel
-          teams={allTeams}
+          callerId={callerId}
           members={orgMembers}
           membersLoading={membersLoading}
-          callerId={callerId}
+          teams={allTeams}
         />
-      )}
+      ) : null}
 
-      {teamLoading && !myTeam && !isAdmin && (
+      {teamLoading && !myTeam && !isAdmin ? (
         <div style={{ padding: 32, textAlign: "center", color: "var(--crm-fg-faint)" }}>Loading…</div>
-      )}
+      ) : null}
     </div>
   );
 }
-
-// ── Admin Panel ───────────────────────────────────────────────────────────────
 
 function AdminTeamsPanel({
   teams,
@@ -432,26 +440,23 @@ function AdminTeamsPanel({
   membersLoading,
   callerId,
 }: {
-  teams: any[];
-  members: any[];
+  teams: TeamsListItem[];
+  members: OrganizationMember[];
   membersLoading: boolean;
   callerId: string | undefined;
 }) {
   const utils = trpc.useUtils();
 
-  // New team form
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [leaderId, setLeaderId] = useState<string>("");
 
-  // Invite user to org form
-  const [inviting, setInviting] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
-  const [inviteRole, setInviteRole] = useState<"USER" | "MANAGER" | "ADMIN">("USER");
+  const [inviteRole, setInviteRole] = useState<InviteRole>("USER");
 
-  // Add member modal
   const [addMemberFor, setAddMemberFor] = useState<{ id: string; name: string } | null>(null);
 
   const createTeam = trpc.teams.create.useMutation({
@@ -460,90 +465,87 @@ function AdminTeamsPanel({
       setCreating(false);
       setName("");
       setLeaderId("");
-      utils.teams.list.invalidate();
-      utils.teams.myTeam.invalidate();
+      void utils.teams.list.invalidate();
+      void utils.teams.myTeam.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
 
   const updateTeam = trpc.teams.update.useMutation({
     onSuccess: () => {
       toast.success("Team updated");
-      utils.teams.list.invalidate();
-      utils.teams.myTeam.invalidate();
+      void utils.teams.list.invalidate();
+      void utils.teams.myTeam.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
 
   const deleteTeam = trpc.teams.delete.useMutation({
     onSuccess: () => {
       toast.success("Team deleted");
-      utils.teams.list.invalidate();
-      utils.teams.myTeam.invalidate();
-      utils.teams.organizationMembers.invalidate();
+      void utils.teams.list.invalidate();
+      void utils.teams.myTeam.invalidate();
+      void utils.teams.organizationMembers.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
 
   const setMembership = trpc.teams.setMembership.useMutation({
     onSuccess: () => {
       toast.success("Membership updated");
-      utils.teams.list.invalidate();
-      utils.teams.organizationMembers.invalidate();
-      utils.teams.myTeam.invalidate();
+      void utils.teams.list.invalidate();
+      void utils.teams.organizationMembers.invalidate();
+      void utils.teams.myTeam.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
 
   const inviteUser = trpc.teams.inviteUser.useMutation({
     onSuccess: () => {
       toast.success("User added to organization");
-      setInviting(false);
+      setCreatingUser(false);
       setInviteName("");
       setInviteEmail("");
       setInvitePassword("");
       setInviteRole("USER");
-      utils.teams.organizationMembers.invalidate();
+      void utils.teams.organizationMembers.invalidate();
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
+
+  const parseInviteRole = (value: string): InviteRole => {
+    if (value === "MANAGER" || value === "ADMIN") return value;
+    return "USER";
+  };
 
   return (
     <>
-      {/* Add Member Modal */}
-      {addMemberFor && (
+      {addMemberFor ? (
         <AddMemberModal
+          callerId={callerId}
+          membersLoading={membersLoading}
+          onClose={() => setAddMemberFor(null)}
+          open={!!addMemberFor}
+          orgMembers={members}
           teamId={addMemberFor.id}
           teamName={addMemberFor.name}
-          orgMembers={members}
-          membersLoading={membersLoading}
-          callerId={callerId}
-          open={!!addMemberFor}
-          onClose={() => setAddMemberFor(null)}
         />
-      )}
+      ) : null}
 
       <div className="crm-card flush" style={{ marginTop: 16 }}>
         <div className="crm-card-head">
           <h3>Teams (admin)</h3>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            <button
-              className="crm-btn"
-              onClick={() => setInviting((v) => !v)}
-            >
-              <UserPlus size={13} /> Invite user to org
+            <button className="crm-btn" onClick={() => setCreatingUser((value) => !value)}>
+              <UserPlus size={13} /> Create user account
             </button>
-            <button
-              className="crm-btn primary"
-              onClick={() => setCreating((v) => !v)}
-            >
+            <button className="crm-btn primary" onClick={() => setCreating((value) => !value)}>
               <Plus size={13} /> New team
             </button>
           </div>
         </div>
 
-        {/* Invite user to org form */}
-        {inviting && (
+        {creatingUser ? (
           <div
             style={{
               padding: "12px 14px",
@@ -552,33 +554,33 @@ function AdminTeamsPanel({
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Invite new user to organization
+              Create user account
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
               <input
+                onChange={(event) => setInviteName(event.target.value)}
                 placeholder="Full name"
-                value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
                 style={{ flex: "1 1 140px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
+                value={inviteName}
               />
               <input
+                onChange={(event) => setInviteEmail(event.target.value)}
                 placeholder="Email address"
+                style={{ flex: "1 1 180px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
                 type="email"
                 value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                style={{ flex: "1 1 180px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
               />
               <input
+                onChange={(event) => setInvitePassword(event.target.value)}
                 placeholder="Password (min 8 chars)"
+                style={{ flex: "1 1 160px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
                 type="password"
                 value={invitePassword}
-                onChange={(e) => setInvitePassword(e.target.value)}
-                style={{ flex: "1 1 160px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
               />
               <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as any)}
+                onChange={(event) => setInviteRole(parseInviteRole(event.target.value))}
                 style={{ padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
+                value={inviteRole}
               >
                 <option value="USER">User</option>
                 <option value="MANAGER">Manager</option>
@@ -598,68 +600,69 @@ function AdminTeamsPanel({
               >
                 {inviteUser.isPending ? "Adding…" : "Add user"}
               </button>
-              <button className="crm-btn" onClick={() => setInviting(false)}>Cancel</button>
+              <button className="crm-btn" onClick={() => setCreatingUser(false)}>Cancel</button>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* New team form */}
-        {creating && (
+        {creating ? (
           <div style={{ padding: "10px 14px", borderTop: "1px solid var(--crm-border)", display: "flex", gap: 8, alignItems: "center" }}>
             <input
+              onChange={(event) => setName(event.target.value)}
               placeholder="Team name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               style={{ flex: 1, padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
+              value={name}
             />
             <select
-              value={leaderId}
-              onChange={(e) => setLeaderId(e.target.value)}
+              onChange={(event) => setLeaderId(event.target.value)}
               style={{ padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)" }}
+              value={leaderId}
             >
               <option value="">(no leader)</option>
-              {members.map((m: any) => (
-                <option key={m.id} value={m.id}>{m.name || m.email}</option>
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>{member.name || member.email}</option>
               ))}
             </select>
             <button
               className="crm-btn primary"
-              onClick={() => name.trim() && createTeam.mutate({ name: name.trim(), leaderId: leaderId || undefined })}
               disabled={!name.trim() || createTeam.isPending}
-            >Create</button>
+              onClick={() => name.trim() && createTeam.mutate({ name: name.trim(), leaderId: leaderId || undefined })}
+            >
+              Create
+            </button>
             <button className="crm-btn" onClick={() => setCreating(false)}>Cancel</button>
           </div>
-        )}
+        ) : null}
 
-        {teams.map((t: any) => (
-          <div key={t.id} style={{ padding: "12px 14px", borderTop: "1px solid var(--crm-border)" }}>
+        {teams.map((team) => (
+          <div key={team.id} style={{ padding: "12px 14px", borderTop: "1px solid var(--crm-border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <strong style={{ fontSize: 14 }}>{t.name}</strong>
+              <strong style={{ fontSize: 14 }}>{team.name}</strong>
               <span style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-                · {t.users.length} member{t.users.length === 1 ? "" : "s"}
+                · {team.users.length} member{team.users.length === 1 ? "" : "s"}
               </span>
               <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>Leader:</span>
                 <select
-                  defaultValue={t.leaderId ?? ""}
-                  onChange={(e) =>
-                    updateTeam.mutate({ id: t.id, leaderId: e.target.value || null })
+                  defaultValue={team.leaderId ?? ""}
+                  onChange={(event) =>
+                    updateTeam.mutate({ id: team.id, leaderId: event.target.value || null })
                   }
                   style={{ padding: "4px 8px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 12 }}
                 >
                   <option value="">(none)</option>
-                  {members.map((m: any) => (
-                    <option key={m.id} value={m.id}>{m.name || m.email}</option>
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name || member.email}</option>
                   ))}
                 </select>
                 <button
                   className="crm-btn ghost icon"
-                  title="Delete team"
                   onClick={() => {
-                    if (confirm(`Delete team "${t.name}"? Members will be detached.`)) {
-                      deleteTeam.mutate({ id: t.id });
+                    if (confirm(`Delete team "${team.name}"? Members will be detached.`)) {
+                      deleteTeam.mutate({ id: team.id });
                     }
                   }}
+                  title="Delete team"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -667,9 +670,9 @@ function AdminTeamsPanel({
             </div>
 
             <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {t.users.map((u: any) => (
+              {team.users.map((user) => (
                 <span
-                  key={u.id}
+                  key={user.id}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -681,13 +684,13 @@ function AdminTeamsPanel({
                     fontSize: 12,
                   }}
                 >
-                  <div className={`crm-avatar xs ${avatarClass(u.name)}`}>{initials(u.name || u.email)}</div>
-                  {u.name || u.email}
+                  <div className={`crm-avatar xs ${avatarClass(user.name)}`}>{initials(user.name || user.email)}</div>
+                  {user.name || user.email}
                   <button
                     className="crm-btn ghost icon"
+                    onClick={() => setMembership.mutate({ userId: user.id, teamId: null })}
                     style={{ width: 18, height: 18 }}
                     title="Remove from team"
-                    onClick={() => setMembership.mutate({ userId: u.id, teamId: null })}
                   >
                     <Trash2 size={10} />
                   </button>
@@ -696,8 +699,8 @@ function AdminTeamsPanel({
 
               <button
                 className="crm-pill-btn"
+                onClick={() => setAddMemberFor({ id: team.id, name: team.name })}
                 style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" }}
-                onClick={() => setAddMemberFor({ id: t.id, name: t.name })}
               >
                 <UserPlus size={11} /> Add member
               </button>
@@ -705,11 +708,11 @@ function AdminTeamsPanel({
           </div>
         ))}
 
-        {teams.length === 0 && !creating && (
+        {teams.length === 0 && !creating ? (
           <div style={{ padding: 24, textAlign: "center", color: "var(--crm-fg-faint)" }}>
             No teams yet. Create one to start grouping users.
           </div>
-        )}
+        ) : null}
       </div>
     </>
   );

@@ -7,7 +7,7 @@ import {
   Columns, Flame, Sun, Snowflake, ChevronLeft, ChevronRight,
   NotebookPen, Globe,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
@@ -29,6 +29,7 @@ type Lead = {
   assignedToId?: string | null;
   assignedTo?: { id: string; name: string | null; email: string | null; image: string | null } | null;
 };
+type SessionUser = { role?: string };
 
 const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
   NOT_CONTACTED: { cls: "plain", label: "Not Contacted" },
@@ -233,7 +234,7 @@ function LeadModal({
   const assignRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role as string | undefined;
+  const userRole = (session?.user as SessionUser | undefined)?.role;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
@@ -273,11 +274,6 @@ function LeadModal({
     },
     onError: (e) => toast.error(e.message),
   });
-
-  useEffect(() => {
-    setOutcome(lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? lead.callOutcome : null);
-    setOutcomeOpen(false);
-  }, [lead.id, lead.callOutcome]);
 
   useEffect(() => {
     if (!outcomeOpen) return;
@@ -634,7 +630,7 @@ export function LeadsList() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const { data: session } = useSession();
-  const userRole = (session?.user as any)?.role as string | undefined;
+  const userRole = (session?.user as SessionUser | undefined)?.role;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const utils = trpc.useUtils();
@@ -746,13 +742,21 @@ export function LeadsList() {
 
   const toggleStage = (s: string) => {
     const next = new Set(stageFilter);
-    next.has(s) ? next.delete(s) : next.add(s);
+    if (next.has(s)) {
+      next.delete(s);
+    } else {
+      next.add(s);
+    }
     setStageFilter(next);
   };
 
   const toggleSel = (id: string) => {
     const n = new Set(selected);
-    n.has(id) ? n.delete(id) : n.add(id);
+    if (n.has(id)) {
+      n.delete(id);
+    } else {
+      n.add(id);
+    }
     setSelected(n);
   };
   const allSelected = filtered.length > 0 && filtered.every((l) => selected.has(l.id));
@@ -778,8 +782,17 @@ export function LeadsList() {
 
   // Modal keyboard navigation
   const idx = selectedLead ? filtered.findIndex((l) => l.id === selectedLead.id) : -1;
-  const prev = () => idx > 0 && setSelectedLead(filtered[idx - 1]);
-  const next = () => idx >= 0 && idx < filtered.length - 1 && setSelectedLead(filtered[idx + 1]);
+  const prev = useCallback(() => {
+    if (idx > 0) {
+      setSelectedLead(filtered[idx - 1]);
+    }
+  }, [filtered, idx]);
+
+  const next = useCallback(() => {
+    if (idx >= 0 && idx < filtered.length - 1) {
+      setSelectedLead(filtered[idx + 1]);
+    }
+  }, [filtered, idx]);
 
   useEffect(() => {
     if (!selectedLead) return;
@@ -790,7 +803,7 @@ export function LeadsList() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [selectedLead, idx, filtered]);
+  }, [next, prev, selectedLead]);
 
   return (
     <>
@@ -803,6 +816,7 @@ export function LeadsList() {
 
       {selectedLead && (
         <LeadModal
+          key={selectedLead.id}
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
           onPrev={prev}
@@ -1026,8 +1040,8 @@ export function LeadsList() {
                       toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
                       setSelected(new Set());
                       utils.leads.getAll.invalidate();
-                    } catch (e: any) {
-                      toast.error(e?.message ?? "Failed to delete selected leads.");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Failed to delete selected leads.");
                     } finally {
                       setIsBulkDeleting(false);
                     }
