@@ -1,22 +1,23 @@
 # Executive Summary
 
-Overall health score: 8.3/10
+Overall health score: 9.0/10
 
 Key strengths:
 - Authentication, lead access, and task access are org-scoped and now backed by passing lint, type-check, test, and build gates.
 - Lead search, pagination, bulk delete, dashboard data wiring, and auth rate limiting were verified as already fixed in the live codebase.
-- The codebase now has explicit proxy/auth tests, teams authorization tests, and task edit/delete coverage.
+- The codebase now has explicit proxy/auth tests, teams authorization tests, task edit/delete coverage, and browser-level Playwright coverage for protected CRM flows.
 
 Highest priority remaining issues:
 - [!] Replace the current admin-set-password "invite user" flow with a tokenized email invite flow.
 - [!] Clean up legacy Prisma schema artifacts with a deliberate migration plan instead of ad hoc removals.
+- [ ] Decide whether scheduled scraper execution is a real product requirement before adding recurring job orchestration.
 - [!] Validate `docker compose build` on a host with Docker permissions; local verification is blocked by a host-level lock file.
 
 Open issue counts:
 - Critical: 0
 - High: 0
-- Medium: 3
-- Low: 3
+- Medium: 2
+- Low: 2
 
 # Critical Issues
 
@@ -38,29 +39,29 @@ Status: [!] Requires Manual Review
 
 ## [!] Migrate legacy Prisma schema artifacts safely
 Severity: Medium
-Description: The schema still contains legacy or partially retired structures such as `Pipeline`, `PipelineStage`, `LeadTag`, `twilioCallSid`, and JSON-string storage for scraper arrays.
+Description: The schema still contains legacy or partially retired structures such as `Pipeline`, `PipelineStage`, `LeadTag`, `twilioCallSid`, and JSON-string storage for scraper arrays. The stale local SQLite artifact `prisma/dev.db` has been removed, but the schema-backed objects still need migration planning.
 Why it matters: These structures increase schema noise, slow future migrations, and risk data loss if removed without a planned migration and production data review.
-Exact file paths involved: `C:\Users\jo\OPENCRM\prisma\schema.prisma`, `C:\Users\jo\OPENCRM\src\features\scraper\server\router.ts`
+Exact file paths involved: `C:\Users\jo\OPENCRM\prisma\schema.prisma`, `C:\Users\jo\OPENCRM\src\features\scraper\server\router.ts`, `C:\Users\jo\OPENCRM\prisma\dev.db`
 Recommended fix: Audit production data usage first, then ship explicit Prisma migrations for table/column removal or type normalization, including rollback notes.
 Status: [!] Requires Manual Review
 
-## [ ] Split oversized lead and team client modules
+## [x] Split oversized lead and team client modules
 Severity: Medium
-Description: `LeadsList.tsx` and `TeamPage.tsx` are still large multi-responsibility client components even after the audit fixes.
+Description: `LeadsList.tsx` and `TeamPage.tsx` were large multi-responsibility client components and have now been decomposed into smaller view modules.
 Why it matters: Large files raise maintenance cost, increase regression risk, and make future feature work slower.
-Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`
-Recommended fix: Extract modal logic, bulk actions, and table/toolbar sections into dedicated components and hooks with typed view models.
-Status: [ ] Pending
+Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\shared.ts`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadUi.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\AddLeadForm.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadModal.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadsTable.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadBulkActionBar.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\shared.ts`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\AddMemberModal.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\TeamOverview.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\AdminTeamsPanel.tsx`
+Recommended fix: Completed.
+Resolution summary: Extracted lead modal/form/table/bulk-action concerns and team admin/member-management concerns into focused components while keeping the parent pages as orchestration shells.
 
 # Low Priority Issues
 
-## [ ] Add end-to-end coverage for core CRM flows
+## [x] Add end-to-end coverage for core CRM flows
 Severity: Low
-Description: Unit and integration coverage is strong, but there is still no browser-level end-to-end suite for login, lead workflows, team management, and proxy redirects.
+Description: Unit and integration coverage is now complemented by a browser-level Playwright suite covering auth redirects and core CRM workflows.
 Why it matters: E2E coverage catches real-world routing, hydration, and auth-boundary regressions that isolated tests can miss.
-Exact file paths involved: `C:\Users\jo\OPENCRM\src\app\auth\signin\page.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`, `C:\Users\jo\OPENCRM\src\proxy.ts`
-Recommended fix: Add a Playwright suite for auth redirect, lead CRUD/search/delete, task edit/delete, and team membership management.
-Status: [ ] Pending
+Exact file paths involved: `C:\Users\jo\OPENCRM\playwright.config.ts`, `C:\Users\jo\OPENCRM\e2e\crm.spec.ts`, `C:\Users\jo\OPENCRM\package.json`, `C:\Users\jo\OPENCRM\.gitignore`, `C:\Users\jo\OPENCRM\src\proxy.ts`, `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`
+Recommended fix: Completed.
+Resolution summary: Added Playwright with browser coverage for protected-route redirects plus mocked authenticated lead, task, and team-admin flows against the built app shell.
 
 ## [ ] Add scheduled scraper execution if recurring jobs are a product requirement
 Severity: Low
@@ -217,6 +218,14 @@ Why it matters: Keeps installs smaller and reduces security/audit noise.
 Exact file paths involved: `C:\Users\jo\OPENCRM\package.json`, `C:\Users\jo\OPENCRM\package-lock.json`
 Recommended fix: Completed.
 
+## [x] Removed stale local Prisma SQLite artifact
+Severity: Low
+Description: The repository still contained `prisma/dev.db` even though the project now uses PostgreSQL-only Prisma configuration.
+Why it matters: Keeping a dead local SQLite database in-repo creates stack confusion and makes future schema cleanup look riskier than it is.
+Exact file paths involved: `C:\Users\jo\OPENCRM\prisma\dev.db`
+Recommended fix: Completed.
+Resolution summary: Deleted the unused SQLite-era file; this does not change the active PostgreSQL schema or production data model.
+
 ## [!] Review legacy schema-only artifacts
 Severity: Medium
 Description: `Pipeline`, `PipelineStage`, `LeadTag`, and `twilioCallSid` remain as schema artifacts and are not part of the current active UI remediation.
@@ -227,21 +236,21 @@ Status: [!] Requires Manual Review
 
 # Refactoring Opportunities
 
-## [ ] Break up `LeadsList.tsx`
+## [x] Break up `LeadsList.tsx`
 Severity: Medium
-Description: Search, bulk actions, modal orchestration, and table rendering still live in one file.
+Description: Search, bulk actions, modal orchestration, and table rendering were split into dedicated lead-list modules.
 Why it matters: The file remains harder to reason about than necessary.
-Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`
-Recommended fix: Extract table row rendering, bulk action bar, and modal state management into smaller modules.
-Status: [ ] Pending
+Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\shared.ts`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadUi.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\AddLeadForm.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadModal.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadsTable.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\lead-list\LeadBulkActionBar.tsx`
+Recommended fix: Completed.
+Resolution summary: The parent component now coordinates data/state while extracted subcomponents own UI sections and typed helpers.
 
-## [ ] Break up `TeamPage.tsx`
+## [x] Break up `TeamPage.tsx`
 Severity: Medium
-Description: Admin team management, membership modal, and activity feed rendering still share one large client module.
+Description: Admin team management, membership modal, and overview rendering were split into dedicated team-page modules.
 Why it matters: Future changes to team management are more error-prone while everything is coupled.
-Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`
-Recommended fix: Extract admin team editor, user-account creation form, and activity feed into dedicated components.
-Status: [ ] Pending
+Exact file paths involved: `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\shared.ts`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\AddMemberModal.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\TeamOverview.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\team-page\AdminTeamsPanel.tsx`
+Recommended fix: Completed.
+Resolution summary: The page now delegates admin editing, member assignment, and overview rendering to focused components with shared typed helpers.
 
 # Missing Tests
 
@@ -266,13 +275,13 @@ Why it matters: Auth routing regressions should fail fast in CI.
 Exact file paths involved: `C:\Users\jo\OPENCRM\src\proxy.test.ts`
 Recommended fix: Completed.
 
-## [ ] Add browser-level end-to-end coverage
+## [x] Add browser-level end-to-end coverage
 Severity: Low
-Description: The suite still stops at unit and integration layers.
+Description: The suite now includes browser-level Playwright coverage in addition to unit and integration tests.
 Why it matters: Full user-journey regressions remain possible.
-Exact file paths involved: `C:\Users\jo\OPENCRM\src\app\auth\signin\page.tsx`, `C:\Users\jo\OPENCRM\src\features\leads\components\LeadsList.tsx`, `C:\Users\jo\OPENCRM\src\features\teams\components\TeamPage.tsx`
-Recommended fix: Add Playwright coverage for login, proxy redirect, lead actions, task actions, and team membership.
-Status: [ ] Pending
+Exact file paths involved: `C:\Users\jo\OPENCRM\playwright.config.ts`, `C:\Users\jo\OPENCRM\e2e\crm.spec.ts`
+Recommended fix: Completed.
+Resolution summary: Added Playwright coverage for protected-route redirect behavior and authenticated lead/task/team workflows using deterministic API/session mocks.
 
 # Security Recommendations
 
@@ -291,6 +300,6 @@ Status: [ ] Pending
 
 1. Design and ship the email-token invite flow.
 2. Plan a safe Prisma migration for legacy schema cleanup.
-3. Add Playwright coverage for auth, leads, tasks, and team workflows.
+3. Add the Playwright suite to CI and revisit the local server bootstrap once Docker/host automation constraints are clearer.
 4. Decide whether scheduled scraper jobs are required; implement only if product needs them.
 5. Re-run `docker compose build` in an environment with Docker buildx access.
