@@ -29,6 +29,8 @@ const FIELD_MAP: Record<string, string> = {
   // Contact
   email: "email", "email address": "email",
   phone: "phone", "phone number": "phone", mobile: "phone", telephone: "phone",
+  // Location
+  city: "city", "city/town": "city", town: "city", location: "city",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
   rating: "rating", stars: "rating", "star rating": "rating", reviews: "reviewCount",
@@ -43,6 +45,7 @@ type ParsedLead = {
   email?: string;
   phone?: string;
   company?: string;
+  city?: string;
   website?: string;
   rating?: number;
   reviewCount?: number;
