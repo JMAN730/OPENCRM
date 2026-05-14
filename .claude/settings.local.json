@@ -10,7 +10,9 @@
       "Read(//tmp/**)",
       "Bash(curl *)",
       "Bash(cp \"/root/.claude/projects/-home-user-OPENCRM/ec4af14a-6b59-4083-b1ea-bd007a4b21f3/tool-results/webfetch-1778382357611-pewnrx.bin\" /tmp/design.gz)",
-      "Bash(gunzip -f /tmp/design.gz)"
+      "Bash(gunzip -f /tmp/design.gz)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
     ]
   }
 }
