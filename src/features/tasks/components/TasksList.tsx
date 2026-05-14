@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Calendar as CalendarIcon, Clock, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Flag, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,19 +27,20 @@ import { toast } from "sonner";
 
 type TaskListItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
 
+const PRIORITY_LABELS = { LOW: "Low", MEDIUM: "Medium", HIGH: "High" } as const;
+const STATUS_LABELS = { PENDING: "Pending", IN_PROGRESS: "In Progress", COMPLETED: "Completed" } as const;
+
 type EditTaskDialogProps = {
   onClose: () => void;
-  onSave: (input: { taskId: string; title: string; dueDate?: string }) => void;
+  onSave: (input: { taskId: string; title: string; dueDate?: string; priority?: "LOW" | "MEDIUM" | "HIGH"; status?: "PENDING" | "IN_PROGRESS" | "COMPLETED" }) => void;
   pending: boolean;
   task: TaskListItem;
 };
 
 function toDateInputValue(date: Date | string | null | undefined) {
   if (!date) return "";
-
   const parsed = new Date(date);
   if (Number.isNaN(parsed.getTime())) return "";
-
   const year = parsed.getFullYear();
   const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
   const day = `${parsed.getDate()}`.padStart(2, "0");
@@ -49,6 +50,8 @@ function toDateInputValue(date: Date | string | null | undefined) {
 function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps) {
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(toDateInputValue(task.dueDate));
+  const [priority, setPriority] = useState<"LOW" | "MEDIUM" | "HIGH">((task.priority as "LOW" | "MEDIUM" | "HIGH") ?? "MEDIUM");
+  const [status, setStatus] = useState<"PENDING" | "IN_PROGRESS" | "COMPLETED">((task.status as "PENDING" | "IN_PROGRESS" | "COMPLETED") ?? "PENDING");
 
   const handleSubmit = () => {
     const trimmedTitle = title.trim();
@@ -56,12 +59,13 @@ function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps)
       toast.error("Task title is required.");
       return;
     }
+    onSave({ taskId: task.id, title: trimmedTitle, dueDate: dueDate || undefined, priority, status });
+  };
 
-    onSave({
-      taskId: task.id,
-      title: trimmedTitle,
-      dueDate: dueDate || undefined,
-    });
+  const selectStyle: React.CSSProperties = {
+    width: "100%", padding: "8px 10px", border: "1px solid hsl(var(--border))",
+    borderRadius: 6, fontSize: 14, background: "hsl(var(--background))",
+    color: "hsl(var(--foreground))", outline: "none",
   };
 
   return (
@@ -69,7 +73,7 @@ function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps)
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
-          <DialogDescription>Update the task title or due date.</DialogDescription>
+          <DialogDescription>Update the task details.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -94,6 +98,24 @@ function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps)
               type="date"
               value={dueDate}
             />
+          </label>
+
+          <label className="block space-y-1" htmlFor="task-priority">
+            <span className="text-sm font-medium">Priority</span>
+            <select id="task-priority" value={priority} onChange={(e) => setPriority(e.target.value as "LOW" | "MEDIUM" | "HIGH")} disabled={pending} style={selectStyle}>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+          </label>
+
+          <label className="block space-y-1" htmlFor="task-status">
+            <span className="text-sm font-medium">Status</span>
+            <select id="task-status" value={status} onChange={(e) => setStatus(e.target.value as "PENDING" | "IN_PROGRESS" | "COMPLETED")} disabled={pending} style={selectStyle}>
+              <option value="PENDING">Pending</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
           </label>
         </div>
 
@@ -138,10 +160,10 @@ export function TasksList() {
   });
 
   const toggleTask = (taskId: string, completed: boolean) => {
-    updateTask.mutate({ taskId, completed });
+    updateTask.mutate({ taskId, status: completed ? "COMPLETED" : "PENDING" });
   };
 
-  const saveTaskChanges = (input: { taskId: string; title: string; dueDate?: string }) => {
+  const saveTaskChanges = (input: { taskId: string; title: string; dueDate?: string; priority?: "LOW" | "MEDIUM" | "HIGH"; status?: "PENDING" | "IN_PROGRESS" | "COMPLETED" }) => {
     updateTask.mutate(input);
   };
 
@@ -188,7 +210,7 @@ export function TasksList() {
                 <p className={`font-medium ${task.completed ? "line-through text-muted-foreground" : ""}`}>
                   {task.title}
                 </p>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   {task.dueDate && (
                     <span className={`flex items-center gap-1 ${!task.completed && isOverdue(task.dueDate) ? "text-destructive" : ""}`}>
                       <CalendarIcon size={12} />
@@ -199,6 +221,18 @@ export function TasksList() {
                     <span className="flex items-center gap-1">
                       <Users size={12} />
                       {task.lead.company || `${task.lead.firstName} ${task.lead.lastName}`}
+                    </span>
+                  )}
+                  {task.assignedTo && (
+                    <span className="flex items-center gap-1">
+                      <Users size={12} />
+                      {task.assignedTo.name}
+                    </span>
+                  )}
+                  {task.priority && task.priority !== "MEDIUM" && (
+                    <span className="flex items-center gap-1">
+                      <Flag size={12} />
+                      {PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS]}
                     </span>
                   )}
                 </div>
@@ -213,6 +247,10 @@ export function TasksList() {
               ) : task.dueDate && isOverdue(task.dueDate) ? (
                 <Badge variant="outline" className="border-destructive/20 bg-destructive/10 text-destructive">
                   Overdue
+                </Badge>
+              ) : task.status ? (
+                <Badge variant="outline">
+                  {STATUS_LABELS[task.status as keyof typeof STATUS_LABELS] ?? task.status}
                 </Badge>
               ) : null}
 
