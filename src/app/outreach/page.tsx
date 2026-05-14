@@ -1,91 +1,76 @@
 "use client";
 
+import { Clock3, Send, TriangleAlert } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Plus, Send } from "lucide-react";
-
-const TABS = ["steps", "audience", "analytics", "settings"] as const;
-type Tab = typeof TABS[number];
-import { useState } from "react";
 
 export default function OutreachPage() {
-  const [tab, setTab] = useState<Tab>("steps");
-
   return (
     <DashboardLayout>
       <div className="crm-content">
         <div className="crm-page-head">
           <div>
             <h1 className="crm-page-title">Outreach</h1>
-            <div className="crm-page-sub">Email and SMS sequences</div>
-          </div>
-          <div className="crm-page-head-actions">
-            <button className="crm-btn primary"><Plus size={13} /> New sequence</button>
+            <div className="crm-page-sub">Sequence automation is not available in this build</div>
           </div>
         </div>
 
-        {/* Stat pills */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          {[
-            { label: "Enrolled",   value: "0", sub: "no sequences yet" },
-            { label: "Sent · 7d",  value: "0", sub: "—" },
-            { label: "Reply rate", value: "—",  sub: "—" },
-            { label: "Meetings",   value: "0",  sub: "—" },
-          ].map(({ label, value, sub }) => (
-            <div key={label} className="crm-card" style={{ padding: "14px 18px" }}>
-              <div style={{ fontSize: 12, color: "var(--crm-fg-muted)", marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "var(--crm-font-mono)", color: "var(--crm-fg)", letterSpacing: "-0.02em" }}>{value}</div>
-              <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 2 }}>{sub}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16 }}>
+          <div className="crm-card" style={{ padding: "24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  background: "var(--crm-surface-2)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--crm-fg-faint)",
+                }}
+              >
+                <Send size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--crm-fg)" }}>
+                  Outreach is currently disabled
+                </div>
+                <div style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>
+                  This route is intentionally present so navigation stays stable, but sequence creation and delivery are not implemented yet.
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* Sequences table — empty state */}
-        <div className="crm-card flush">
-          <div className="crm-card-head">
-            <h3>Sequences</h3>
-            <span className="crm-sub">· 0 total</span>
-          </div>
-          <div style={{ padding: "64px 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--crm-surface-2)", display: "grid", placeItems: "center", color: "var(--crm-fg-faint)" }}>
-              <Send size={18} />
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                padding: 16,
+                borderRadius: "var(--crm-radius-md)",
+                border: "1px solid color-mix(in srgb, var(--crm-border) 75%, transparent)",
+                background: "color-mix(in srgb, var(--crm-surface-2) 70%, transparent)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--crm-fg)" }}>
+                <TriangleAlert size={14} />
+                The UI no longer shows fake &quot;New sequence&quot; actions.
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--crm-fg)" }}>
+                <Clock3 size={14} />
+                Enable this page only after sequence storage, delivery providers, analytics, and permission checks are implemented.
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--crm-fg)" }}>No sequences yet</div>
-              <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginTop: 4 }}>Create a sequence to start enrolling leads in automated outreach.</div>
-            </div>
-            <button className="crm-btn primary" style={{ marginTop: 4 }}>
-              <Plus size={13} /> New sequence
-            </button>
           </div>
-        </div>
 
-        {/* Detail panel placeholder */}
-        <div className="crm-card flush">
-          <div className="crm-card-head">
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Sequence detail</h3>
-              <span className="crm-sub" style={{ fontSize: 12 }}>Select a sequence above to view steps</span>
-            </div>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 4, border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", padding: 2 }}>
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  style={{
-                    padding: "3px 10px", borderRadius: 4, border: "none", cursor: "pointer", fontSize: 12,
-                    fontFamily: "var(--crm-font-sans)", fontWeight: tab === t ? 500 : 400,
-                    background: tab === t ? "var(--crm-surface)" : "transparent",
-                    color: tab === t ? "var(--crm-fg)" : "var(--crm-fg-muted)",
-                    boxShadow: tab === t ? "0 1px 3px rgba(0,0,0,.06)" : "none",
-                  }}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
-            No sequence selected
+          <div className="crm-card" style={{ padding: "24px" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "var(--crm-fg)" }}>
+              Before enabling this feature
+            </h3>
+            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8, fontSize: 13, color: "var(--crm-fg-muted)" }}>
+              <li>Add real sequence storage and step scheduling.</li>
+              <li>Integrate an actual delivery provider and webhook handling.</li>
+              <li>Track enrollment, send outcomes, replies, and unsubscribes.</li>
+              <li>Protect campaign actions with org-scoped permissions and automated tests.</li>
+            </ul>
           </div>
         </div>
       </div>
