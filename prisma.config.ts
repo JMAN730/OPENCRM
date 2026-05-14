@@ -1,4 +1,4 @@
-export default {
+const prismaConfig = {
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
@@ -8,3 +8,5 @@ export default {
     url: process.env.DATABASE_URL ?? "postgresql://crm:crm@localhost:5432/crm",
   },
 };
+
+export default prismaConfig;
