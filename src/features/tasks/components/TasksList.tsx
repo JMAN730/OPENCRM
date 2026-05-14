@@ -1,40 +1,152 @@
 "use client";
 
+import { useState } from "react";
+import type { inferRouterOutputs } from "@trpc/server";
+import { Calendar as CalendarIcon, Clock, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { 
-  Calendar as CalendarIcon, 
-  Clock, 
-  MoreHorizontal, 
-  Trash2, 
-  Users 
-} from "lucide-react";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import type { AppRouter } from "@/server/api/root";
+import { toast } from "sonner";
+
+type TaskListItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
+
+type EditTaskDialogProps = {
+  onClose: () => void;
+  onSave: (input: { taskId: string; title: string; dueDate?: string }) => void;
+  pending: boolean;
+  task: TaskListItem;
+};
+
+function toDateInputValue(date: Date | string | null | undefined) {
+  if (!date) return "";
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps) {
+  const [title, setTitle] = useState(task.title);
+  const [dueDate, setDueDate] = useState(toDateInputValue(task.dueDate));
+
+  const handleSubmit = () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      toast.error("Task title is required.");
+      return;
+    }
+
+    onSave({
+      taskId: task.id,
+      title: trimmedTitle,
+      dueDate: dueDate || undefined,
+    });
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit task</DialogTitle>
+          <DialogDescription>Update the task title or due date.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <label className="block space-y-1" htmlFor="task-title">
+            <span className="text-sm font-medium">Title</span>
+            <Input
+              autoFocus
+              disabled={pending}
+              id="task-title"
+              maxLength={200}
+              onChange={(event) => setTitle(event.target.value)}
+              value={title}
+            />
+          </label>
+
+          <label className="block space-y-1" htmlFor="task-due-date">
+            <span className="text-sm font-medium">Due date</span>
+            <Input
+              disabled={pending}
+              id="task-due-date"
+              onChange={(event) => setDueDate(event.target.value)}
+              type="date"
+              value={dueDate}
+            />
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button disabled={pending} onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={handleSubmit}>
+            {pending ? "Saving..." : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function TasksList() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.tasks.getAll.useQuery({ limit: 100 });
-  const tasks = data?.items;
-  
+  const tasks = data?.items ?? [];
+  const [editingTask, setEditingTask] = useState<TaskListItem | null>(null);
+
   const updateTask = trpc.tasks.update.useMutation({
     onSuccess: () => {
-      utils.tasks.getAll.invalidate();
+      void utils.tasks.getAll.invalidate();
+      setEditingTask(null);
+      toast.success("Task updated.");
     },
     onError: (error) => {
       toast.error(`Error: ${error.message}`);
-    }
+    },
+  });
+
+  const deleteTask = trpc.tasks.delete.useMutation({
+    onSuccess: () => {
+      void utils.tasks.getAll.invalidate();
+      toast.success("Task deleted.");
+    },
+    onError: (error) => {
+      toast.error(`Error: ${error.message}`);
+    },
   });
 
   const toggleTask = (taskId: string, completed: boolean) => {
     updateTask.mutate({ taskId, completed });
+  };
+
+  const saveTaskChanges = (input: { taskId: string; title: string; dueDate?: string }) => {
+    updateTask.mutate(input);
+  };
+
+  const handleDelete = (taskId: string) => {
+    deleteTask.mutate({ taskId });
   };
 
   if (isLoading) {
@@ -43,81 +155,101 @@ export function TasksList() {
 
   if (tasks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center gap-4 border border-dashed border-border rounded-xl bg-card">
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card py-20 text-center">
         <Clock size={36} className="text-muted-foreground/20" />
         <div>
           <p className="text-sm font-medium">No tasks yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Create a task to start tracking your follow-ups.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Create a task to start tracking your follow-ups.</p>
         </div>
       </div>
     );
   }
 
   const isOverdue = (date: Date | string) => {
-    return new Date(date) < new Date() && new Date(date).toDateString() !== new Date().toDateString();
+    const dueDate = new Date(date);
+    const now = new Date();
+    return dueDate < now && dueDate.toDateString() !== now.toDateString();
   };
 
   return (
-    <div className="space-y-4">
-      {tasks.map((task) => (
-        <div 
-          key={task.id} 
-          className={`flex items-center justify-between p-4 rounded-lg border border-border bg-card transition-opacity ${task.completed ? "opacity-60" : ""}`}
-        >
-          <div className="flex items-center gap-4">
-            <Checkbox 
-              checked={task.completed} 
-              onCheckedChange={(checked) => toggleTask(task.id, !!checked)}
-            />
-            <div className="space-y-1">
-              <p className={`font-medium ${task.completed ? "line-through text-muted-foreground" : ""}`}>
-                {task.title}
-              </p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                {task.dueDate && (
-                  <span className={`flex items-center gap-1 ${!task.completed && isOverdue(task.dueDate) ? "text-destructive" : ""}`}>
-                    <CalendarIcon size={12} />
-                    {new Date(task.dueDate).toLocaleDateString()}
-                  </span>
-                )}
-                {task.lead && (
-                  <span className="flex items-center gap-1">
-                    <Users size={12} />
-                    {task.lead.company || `${task.lead.firstName} ${task.lead.lastName}`}
-                  </span>
-                )}
+    <>
+      <div className="space-y-4">
+        {tasks.map((task) => (
+          <div
+            key={task.id}
+            className={`flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-opacity ${task.completed ? "opacity-60" : ""}`}
+          >
+            <div className="flex items-center gap-4">
+              <Checkbox
+                checked={task.completed}
+                onCheckedChange={(checked) => toggleTask(task.id, !!checked)}
+              />
+              <div className="space-y-1">
+                <p className={`font-medium ${task.completed ? "line-through text-muted-foreground" : ""}`}>
+                  {task.title}
+                </p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {task.dueDate && (
+                    <span className={`flex items-center gap-1 ${!task.completed && isOverdue(task.dueDate) ? "text-destructive" : ""}`}>
+                      <CalendarIcon size={12} />
+                      {new Date(task.dueDate).toLocaleDateString()}
+                    </span>
+                  )}
+                  {task.lead && (
+                    <span className="flex items-center gap-1">
+                      <Users size={12} />
+                      {task.lead.company || `${task.lead.firstName} ${task.lead.lastName}`}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {task.completed ? (
-              <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
-                Completed
-              </Badge>
-            ) : task.dueDate && isOverdue(task.dueDate) ? (
-              <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
-                Overdue
-              </Badge>
-            ) : null}
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
-                <MoreHorizontal size={16} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem className="gap-2 cursor-pointer">
-                  Edit Task
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 cursor-pointer text-destructive">
-                  <Trash2 size={14} />
-                  Delete Task
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              {task.completed ? (
+                <Badge variant="outline" className="border-green-500/20 bg-green-500/10 text-green-500">
+                  Completed
+                </Badge>
+              ) : task.dueDate && isOverdue(task.dueDate) ? (
+                <Badge variant="outline" className="border-destructive/20 bg-destructive/10 text-destructive">
+                  Overdue
+                </Badge>
+              ) : null}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button aria-label={`Open actions for ${task.title}`} variant="ghost" size="icon" className="h-8 w-8" />}
+                >
+                  <MoreHorizontal size={16} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="cursor-pointer gap-2" onClick={() => setEditingTask(task)}>
+                    <Pencil size={14} />
+                    Edit task
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onClick={() => handleDelete(task.id)}
+                    variant="destructive"
+                  >
+                    <Trash2 size={14} />
+                    Delete task
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      {editingTask ? (
+        <EditTaskDialog
+          onClose={() => setEditingTask(null)}
+          onSave={saveTaskChanges}
+          pending={updateTask.isPending}
+          task={editingTask}
+        />
+      ) : null}
+    </>
   );
 }

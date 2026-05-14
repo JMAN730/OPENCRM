@@ -43,6 +43,9 @@ global.ResizeObserver = class {
   disconnect() {}
 };
 
+const mockSignIn = vi.mocked(signIn);
+const mockGetSession = vi.mocked(getSession);
+
 describe("SignIn Page Authentication Flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,9 +60,17 @@ describe("SignIn Page Authentication Flow", () => {
 
   it("handles successful login and redirects to dashboard", async () => {
     // Arrange
-    (signIn as any).mockResolvedValueOnce({ error: null });
-    (getSession as any).mockResolvedValueOnce({
-      user: { email: "test@example.com", name: "Test User" },
+    mockSignIn.mockResolvedValueOnce({ error: null, ok: true, status: 200, url: null });
+    mockGetSession.mockResolvedValueOnce({
+      user: {
+        id: "user-1",
+        role: "ADMIN",
+        organizationId: "org-1",
+        teamId: null,
+        email: "test@example.com",
+        name: "Test User",
+      },
+      expires: new Date(Date.now() + 60_000).toISOString(),
     });
 
     render(<SignInPage />);
@@ -90,7 +101,7 @@ describe("SignIn Page Authentication Flow", () => {
 
   it("handles invalid credentials by showing an error message", async () => {
     // Arrange
-    (signIn as any).mockResolvedValueOnce({ error: "CredentialsSignin" });
+    mockSignIn.mockResolvedValueOnce({ error: "CredentialsSignin", ok: false, status: 401, url: null });
 
     render(<SignInPage />);
 
@@ -117,9 +128,18 @@ describe("SignIn Page Authentication Flow", () => {
 
   it("saves the session and user to localStorage on success", async () => {
     // Arrange
-    (signIn as any).mockResolvedValueOnce({ error: null });
-    (getSession as any).mockResolvedValueOnce({
-      user: { email: "jonas@example.com", name: "jonas", image: "https://example.com/jonas.png" },
+    mockSignIn.mockResolvedValueOnce({ error: null, ok: true, status: 200, url: null });
+    mockGetSession.mockResolvedValueOnce({
+      user: {
+        id: "user-1",
+        role: "ADMIN",
+        organizationId: "org-1",
+        teamId: null,
+        email: "jonas@example.com",
+        name: "jonas",
+        image: "https://example.com/jonas.png",
+      },
+      expires: new Date(Date.now() + 60_000).toISOString(),
     });
 
     render(<SignInPage />);

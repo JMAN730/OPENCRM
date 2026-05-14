@@ -1,5 +1,6 @@
 "use client";
 
+import type { CallOutcome } from "@prisma/client";
 import { trpc } from "@/app/_trpc/client";
 import {
   Dialog,
@@ -36,7 +37,7 @@ type Lead = {
   website?: string | null;
   status: string;
   source?: string | null;
-  callOutcome?: string | null;
+  callOutcome?: CallOutcome | null;
   callNotes?: string | null;
   createdAt: string;
 };
@@ -47,7 +48,7 @@ const CALL_OUTCOME_OPTIONS = [
   { value: "HUNG_UP", label: "Hung Up" },
   { value: "NO_ANSWER", label: "No Answer" },
   { value: "AI_VOICEMAIL", label: "AI Voicemail" },
-];
+] as const satisfies ReadonlyArray<{ value: CallOutcome; label: string }>;
 
 interface LeadDetailsModalProps {
   lead: Lead;
@@ -56,7 +57,7 @@ interface LeadDetailsModalProps {
 }
 
 export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProps) {
-  const [callOutcome, setCallOutcome] = useState(lead.callOutcome || "NOT_CONTACTED");
+  const [callOutcome, setCallOutcome] = useState<CallOutcome>(lead.callOutcome ?? "NOT_CONTACTED");
   const [callNotes, setCallNotes] = useState(lead.callNotes || "");
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
 
@@ -75,7 +76,7 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
   const handleSave = () => {
     updateOutcome.mutate({
       id: lead.id,
-      callOutcome: callOutcome as any,
+      callOutcome,
       callNotes: callNotes || undefined,
     });
   };
@@ -195,7 +196,7 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
             <select
               id="callOutcome"
               value={callOutcome}
-              onChange={(e) => setCallOutcome(e.target.value)}
+              onChange={(e) => setCallOutcome(e.target.value as CallOutcome)}
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               {CALL_OUTCOME_OPTIONS.map((option) => (
