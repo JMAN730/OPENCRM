@@ -238,7 +238,7 @@ describe("leadsRouter", () => {
         { id: "lead-1", email: "a@example.com", phone: null, status: "CONNECTED" },
       ]);
       prisma.lead.update.mockResolvedValue({ id: "lead-1" });
-      prisma.$transaction.mockResolvedValue([{}, { id: "lead-1" }] as any);
+      prisma.$transaction.mockResolvedValue([{ id: "lead-1" }]);
 
       const result = await caller.leads.bulkCreate([
         { email: "A@EXAMPLE.COM", phone: "", company: "Acme", status: "NOT_CONTACTED" },
