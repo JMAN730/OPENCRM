@@ -10,17 +10,8 @@ import {
   CheckCheck,
   Plus,
 } from "lucide-react";
-import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
-
-/* ── Helpers ── */
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
 
 function formatDueDate(date: string | Date | null | undefined): string {
   if (!date) return "";
@@ -74,7 +65,14 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
   const connectRate = ((connected / total) * 100).toFixed(1);
   const size = 140, stroke = 20, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
   const C = 2 * Math.PI * r;
-  let acc = 0;
+  const segments = data.map((d, i) => {
+    const previous = data.slice(0, i).reduce((sum, item) => sum + item.count, 0);
+    return {
+      ...d,
+      len: (d.count / total) * C,
+      off: C - (previous / total) * C,
+    };
+  });
 
   return (
     <div className="crm-card flush">
@@ -86,16 +84,13 @@ function PhoneReachCard({ data }: { data: { status: string; count: number }[] })
         <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
-            {data.map((d, i) => {
+            {segments.map((d, i) => {
               const cfg = STATUS_DISPLAY[d.status];
-              const len = (d.count / total) * C;
-              const off = C - acc;
-              acc += len;
               return (
                 <circle key={i} cx={cx} cy={cy} r={r} fill="none"
                   stroke={cfg?.color ?? "var(--crm-fg-faint)"} strokeWidth={stroke}
-                  strokeDasharray={`${len - 1} ${C - len + 1}`}
-                  strokeDashoffset={off}
+                  strokeDasharray={`${d.len - 1} ${C - d.len + 1}`}
+                  strokeDashoffset={d.off}
                   transform={`rotate(-90 ${cx} ${cy})`}
                   strokeLinecap="butt"
                 />
@@ -207,7 +202,7 @@ function TasksCard() {
         <div className="crm-empty">No tasks yet.</div>
       ) : (
         <div className="crm-tasks">
-          {displayed.map((t: any) => (
+          {displayed.map((t) => (
             <div key={t.id} className="crm-task" data-done={t.completed}>
               <div
                 className="crm-check"
@@ -297,8 +292,6 @@ function CallsCard({
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
-  const { data: leadsRaw } = trpc.leads.getAll.useQuery({ limit: 100 });
-  const leads: any[] = leadsRaw?.items ?? [];
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
@@ -310,15 +303,10 @@ export default function DashboardPage() {
   const totalLeads = stats?.totalLeads?.toLocaleString() ?? "0";
 
   const followupsDue = stats?.followupsDue ?? 0;
-  const callsToday = (stats as any)?.callsToday ?? 0;
-
-  // Compute leadsByStatus for PipelineCard
-  const leadsByStatusMap: Record<string, number> = {};
-  leads.forEach((l) => { leadsByStatusMap[l.status] = (leadsByStatusMap[l.status] ?? 0) + 1; });
-  const leadsByStatus = Object.keys(leadsByStatusMap).map(k => ({ status: k, count: leadsByStatusMap[k] }));
-
-  const recentCalls = (stats as any)?.recentCalls ?? [];
-  const statusDist = (stats as any)?.statusDistribution ?? [];
+  const callsToday = stats?.callsToday ?? 0;
+  const leadsByStatus = stats?.leadsByStatus ?? [];
+  const recentCalls = stats?.recentCalls ?? [];
+  const statusDist = stats?.charts.statusDistribution ?? [];
 
   return (
     <DashboardLayout>
