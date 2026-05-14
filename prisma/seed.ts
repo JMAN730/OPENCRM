@@ -146,7 +146,7 @@ async function main() {
   // 60 HUNG_UP
   for (let k = 0; k < 60; k++) push("HUNG_UP", 10 + (k % 90));
 
-  // Create leads in batches of 50 to avoid hitting libsql limits
+  // Create leads in batches of 50 to keep each insert payload bounded.
   const BATCH = 50;
   for (let b = 0; b < rows.length; b += BATCH) {
     await prisma.lead.createMany({ data: rows.slice(b, b + BATCH) as any });
