@@ -33,6 +33,8 @@ const FIELD_MAP: Record<string, string> = {
   city: "city", "city/town": "city", town: "city", location: "city",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
+  rating: "rating", stars: "rating", "star rating": "rating", reviews: "reviewCount",
+  "review count": "reviewCount", "total reviews": "reviewCount",
   source: "source", "lead source": "source", category: "source",
   status: "status",
 };
@@ -45,6 +47,8 @@ type ParsedLead = {
   company?: string;
   city?: string;
   website?: string;
+  rating?: number;
+  reviewCount?: number;
   source?: string;
   status?: "NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP";
 };
@@ -101,8 +105,15 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
 
   const validStatuses = ["NOT_CONTACTED","CONNECTED","AI_VOICEMAIL","NO_ANSWER","HUNG_UP"] as const;
   const rawStatus = lead.status?.toUpperCase();
+  const rating = lead.rating ? Number(lead.rating) : undefined;
+  const reviewCount = lead.reviewCount ? Number(lead.reviewCount) : undefined;
   return {
     ...lead,
+    rating: typeof rating === "number" && Number.isFinite(rating) ? rating : undefined,
+    reviewCount:
+      typeof reviewCount === "number" && Number.isFinite(reviewCount)
+        ? Math.max(0, Math.round(reviewCount))
+        : undefined,
     status: validStatuses.includes(rawStatus as typeof validStatuses[number])
       ? (rawStatus as typeof validStatuses[number])
       : "NOT_CONTACTED",
