@@ -110,6 +110,7 @@ model Lead {
   email               String?
   phone               String?
   company             String?
+  city                String?
   title               String?
   website             String?
   rating              Float?
@@ -120,6 +121,7 @@ model Lead {
   value               Float?
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?
+  starred             Boolean                  @default(false)
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
