@@ -1,7 +1,7 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { Prisma, type LeadStatus } from "@prisma/client";
+import { Prisma, type LeadStatus, type LeadTemperatureOverride } from "@prisma/client";
 import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
@@ -12,6 +12,9 @@ const optionalEmail = z.union([z.literal(""), z.string().email().max(255)]).opti
 const optionalUrl = z.union([z.literal(""), z.string().url().max(2048)]).optional();
 const optionalShortString = (max: number) =>
   z.string().max(max).optional();
+const optionalRating = z.number().min(0).max(5).optional();
+const optionalReviewCount = z.number().int().min(0).optional();
+const optionalTemperatureOverride = z.enum(["HOT", "WARM", "COOL"]).nullable();
 
 const leadInputSchema = z.object({
   firstName: optionalShortString(100),
@@ -21,6 +24,8 @@ const leadInputSchema = z.object({
   company: optionalShortString(200),
   city: optionalShortString(100),
   website: optionalUrl,
+  rating: optionalRating,
+  reviewCount: optionalReviewCount,
   status: z
     .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
     .default("NOT_CONTACTED"),
@@ -293,6 +298,8 @@ export const leadsRouter = createTRPCRouter({
         if (row.city) data.city = row.city;
         if (row.website) data.website = row.website;
         if (row.source) data.source = row.source;
+        if (typeof row.rating === "number") data.rating = row.rating;
+        if (typeof row.reviewCount === "number") data.reviewCount = row.reviewCount;
         if (email) data.email = email;
         if (phone) data.phone = phone;
 
@@ -319,6 +326,35 @@ export const leadsRouter = createTRPCRouter({
       const updated = toUpdate.length;
 
       return { count: created + updated };
+    }),
+
+  updateTemperatureOverride: organizationProcedure
+    .input(z.object({ id: z.string(), temperatureOverride: optionalTemperatureOverride }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      const updated = await ctx.prisma.lead.update({
+        where: { id: input.id },
+        data: {
+          temperatureOverride: input.temperatureOverride as LeadTemperatureOverride | null,
+        },
+      });
+
+      await logActivity(ctx.prisma, {
+        leadId: lead.id,
+        userId: ctx.session.user.id,
+        type: "LEAD_TEMPERATURE_OVERRIDE",
+        description: input.temperatureOverride
+          ? `Set temperature override to ${input.temperatureOverride.toLowerCase()}`
+          : "Cleared temperature override",
+      });
+
+      return updated;
     }),
 
   updateCallOutcome: organizationProcedure
