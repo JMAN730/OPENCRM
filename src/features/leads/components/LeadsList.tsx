@@ -797,6 +797,8 @@ export function LeadsList() {
   useEffect(() => {
     if (!selectedLead) return;
     const h = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
       if (e.key === "Escape") setSelectedLead(null);
       else if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); next(); }
       else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); prev(); }
