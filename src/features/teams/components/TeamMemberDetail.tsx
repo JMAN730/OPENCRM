@@ -1,8 +1,15 @@
 "use client";
 
+import type { inferRouterOutputs } from "@trpc/server";
 import { trpc } from "@/app/_trpc/client";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import type { AppRouter } from "@/server/api/root";
+
+type MemberDetail = inferRouterOutputs<AppRouter>["teams"]["memberDetail"];
+type MemberLead = MemberDetail["leads"][number];
+type MemberCall = MemberDetail["recentCalls"][number];
+type MemberTask = MemberDetail["openTasks"][number];
 
 function initials(name: string | null | undefined) {
   if (!name) return "?";
@@ -103,7 +110,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {leads.map((l: any) => {
+                {leads.map((l: MemberLead) => {
                   const ln = [l.firstName, l.lastName].filter(Boolean).join(" ") || l.company || "Lead";
                   return (
                     <tr key={l.id}>
@@ -136,7 +143,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
             {recentCalls.length === 0 ? (
               <div style={{ padding: 16, textAlign: "center", color: "var(--crm-fg-faint)" }}>No calls yet.</div>
             ) : (
-              recentCalls.map((c: any) => {
+              recentCalls.map((c: MemberCall) => {
                 const ln = [c.lead?.firstName, c.lead?.lastName].filter(Boolean).join(" ") || c.lead?.company || "Lead";
                 return (
                   <div key={c.id} style={{ padding: "10px 14px", borderTop: "1px solid var(--crm-border)", fontSize: 13 }}>
@@ -162,7 +169,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
             {openTasks.length === 0 ? (
               <div style={{ padding: 16, textAlign: "center", color: "var(--crm-fg-faint)" }}>No open tasks.</div>
             ) : (
-              openTasks.map((t: any) => (
+              openTasks.map((t: MemberTask) => (
                 <div key={t.id} style={{ padding: "10px 14px", borderTop: "1px solid var(--crm-border)", fontSize: 13 }}>
                   <div>{t.title}</div>
                   {t.dueDate && (

@@ -24,6 +24,9 @@ vi.mock('next-auth/react', () => ({
   signOut: vi.fn(),
 }))
 
+const useInfiniteQueryMock =
+  trpc.leads.getAll.useInfiniteQuery as unknown as ReturnType<typeof vi.fn>;
+
 // Mock tRPC. LeadsList now uses useInfiniteQuery for cursor pagination
 // (one page = 50 leads), so the mock returns the multi-page shape.
 vi.mock('@/app/_trpc/client', () => ({
@@ -70,7 +73,7 @@ vi.mock('@/app/_trpc/client', () => ({
 
 describe('LeadsList', () => {
   it('shows loading state initially', () => {
-    (trpc.leads.getAll.useInfiniteQuery as any).mockReturnValue({
+    useInfiniteQueryMock.mockReturnValue({
       data: undefined,
       isLoading: true,
       hasNextPage: false,
@@ -85,7 +88,7 @@ describe('LeadsList', () => {
   })
 
   it('renders leads from the first infinite-query page', () => {
-    (trpc.leads.getAll.useInfiniteQuery as any).mockReturnValue({
+    useInfiniteQueryMock.mockReturnValue({
       data: {
         pages: [
           {
@@ -119,7 +122,7 @@ describe('LeadsList', () => {
   })
 
   it('flattens multiple pages into a single rendered list', () => {
-    (trpc.leads.getAll.useInfiniteQuery as any).mockReturnValue({
+    useInfiniteQueryMock.mockReturnValue({
       data: {
         pages: [
           {
@@ -165,7 +168,7 @@ describe('LeadsList', () => {
   })
 
   it('shows a Load more affordance when more pages are available', () => {
-    (trpc.leads.getAll.useInfiniteQuery as any).mockReturnValue({
+    useInfiniteQueryMock.mockReturnValue({
       data: {
         pages: [{ items: [], nextCursor: null }],
         pageParams: [],

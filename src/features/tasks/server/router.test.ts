@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("tasksRouter", () => {
@@ -10,7 +10,7 @@ describe("tasksRouter", () => {
   });
 
   describe("create", () => {
-    it("creates a task without a leadId (standalone task)", async () => {
+    it("creates a task without a leadId", async () => {
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.create({ title: "Call back" });
@@ -64,14 +64,13 @@ describe("tasksRouter", () => {
 
     it("rejects garbage dueDate strings", async () => {
       await expect(
-        // @ts-expect-error — testing zod runtime coercion of unparseable date
         caller.tasks.create({ title: "x", dueDate: "not-a-date" })
       ).rejects.toThrow();
     });
   });
 
   describe("update", () => {
-    it("scopes the lookup to the caller's organization (multi-tenant gate)", async () => {
+    it("scopes the lookup to the caller's organization", async () => {
       prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1" });
       prisma.task.update.mockResolvedValue({ id: "t1" });
 
@@ -91,7 +90,6 @@ describe("tasksRouter", () => {
     });
 
     it("returns NOT_FOUND when the task belongs to a different org", async () => {
-      // findFirst with the org filter would return null in that case.
       prisma.task.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -101,7 +99,6 @@ describe("tasksRouter", () => {
     });
 
     it("allows admins to edit any task within the same organization", async () => {
-      // Default test session has role=ADMIN.
       prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user" });
       prisma.task.update.mockResolvedValue({ id: "t1" });
 
@@ -124,6 +121,7 @@ describe("tasksRouter", () => {
 
     it("refuses when the task does not exist", async () => {
       prisma.task.findFirst.mockResolvedValue(null);
+
       await expect(
         caller.tasks.update({ taskId: "missing", completed: true })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -131,9 +129,49 @@ describe("tasksRouter", () => {
 
     it("rejects garbage dueDate strings", async () => {
       await expect(
-        // @ts-expect-error — testing zod runtime coercion of unparseable date
         caller.tasks.update({ taskId: "t1", dueDate: "not-a-date" })
       ).rejects.toThrow();
+    });
+  });
+
+  describe("delete", () => {
+    it("scopes deletes to the caller's organization", async () => {
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1" });
+      prisma.task.delete.mockResolvedValue({ id: "t1" });
+
+      await caller.tasks.delete({ taskId: "t1" });
+
+      expect(prisma.task.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "t1",
+          user: { organizationId: "org-1" },
+        },
+        select: { id: true, userId: true },
+      });
+      expect(prisma.task.delete).toHaveBeenCalledWith({
+        where: { id: "t1" },
+      });
+    });
+
+    it("returns NOT_FOUND when the task belongs to another organization", async () => {
+      prisma.task.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.tasks.delete({ taskId: "t1" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(prisma.task.delete).not.toHaveBeenCalled();
+    });
+
+    it("forbids a USER from deleting another user's task", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user" });
+
+      await expect(
+        caller.tasks.delete({ taskId: "t1" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(prisma.task.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -149,6 +187,7 @@ describe("tasksRouter", () => {
 
     it("refuses cross-tenant access", async () => {
       prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+
       await expect(
         caller.tasks.getAllForLead({ leadId: "lead-1" })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -180,13 +219,17 @@ describe("tasksRouter", () => {
 
     it("returns paginated shape { items, nextCursor }", async () => {
       prisma.task.findMany.mockResolvedValue([]);
+
       const result = await caller.tasks.getAll();
+
       expect(result).toEqual({ items: [], nextCursor: null });
     });
 
     it("orders by (completed asc, dueDate asc, id asc) for stable cursor paging", async () => {
       prisma.task.findMany.mockResolvedValue([]);
+
       await caller.tasks.getAll();
+
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.orderBy).toEqual([
         { completed: "asc" },
@@ -209,14 +252,18 @@ describe("tasksRouter", () => {
 
     it("filters by completed flag when supplied", async () => {
       prisma.task.findMany.mockResolvedValue([]);
+
       await caller.tasks.getAll({ completed: false });
+
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.where.completed).toBe(false);
     });
 
     it("passes the cursor to Prisma with skip-1 on subsequent pages", async () => {
       prisma.task.findMany.mockResolvedValue([]);
+
       await caller.tasks.getAll({ cursor: "t-99" });
+
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.cursor).toEqual({ id: "t-99" });
       expect(args.skip).toBe(1);
