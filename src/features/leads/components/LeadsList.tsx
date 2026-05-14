@@ -11,6 +11,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDebounce } from "@/hooks/use-debounce";
 
 type Lead = {
@@ -21,6 +27,7 @@ type Lead = {
   phone?: string | null;
   company?: string | null;
   city?: string | null;
+  starred?: boolean | null;
   website?: string | null;
   status: string;
   source?: string | null;
@@ -284,6 +291,18 @@ function LeadModal({
     },
     onError: (e) => toast.error(e.message),
   });
+  const toggleStar = trpc.leads.toggleStar.useMutation({
+    onSuccess: () => utils.leads.getAll.invalidate(),
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteLeadMutation = trpc.leads.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Lead deleted");
+      utils.leads.getAll.invalidate();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const assignMutation = trpc.leads.assign.useMutation({
     onSuccess: () => {
       toast.success("Lead reassigned");
@@ -401,8 +420,30 @@ function LeadModal({
           </div>
 
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            <button className="crm-btn ghost icon" title="Star"><Star size={14} /></button>
-            <button className="crm-btn ghost icon" title="More"><MoreHorizontal size={14} /></button>
+            <button
+              className="crm-btn ghost icon"
+              title={lead.starred ? "Unstar" : "Star"}
+              onClick={() => toggleStar.mutate({ id: lead.id })}
+              style={{ color: lead.starred ? "var(--crm-warn, #f59e0b)" : undefined }}
+            >
+              <Star size={14} fill={lead.starred ? "currentColor" : "none"} />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<button className="crm-btn ghost icon" title="More" />}>
+                <MoreHorizontal size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  variant="destructive"
+                  onClick={() => {
+                    if (confirm("Delete this lead?")) deleteLeadMutation.mutate({ id: lead.id });
+                  }}
+                >
+                  <Trash2 size={14} /> Delete lead
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

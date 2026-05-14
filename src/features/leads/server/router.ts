@@ -354,6 +354,22 @@ export const leadsRouter = createTRPCRouter({
       return updated;
     }),
 
+  toggleStar: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+        select: { id: true, starred: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { starred: !lead.starred },
+      });
+    }),
+
   /**
    * Reassigns one or more leads to another user.
    * Allowed for:
