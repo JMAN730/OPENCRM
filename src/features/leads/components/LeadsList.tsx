@@ -3,7 +3,7 @@
 import { trpc } from "@/app/_trpc/client";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSession } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
@@ -37,17 +37,15 @@ export function LeadsList() {
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const utils = trpc.useUtils();
+  const [pageCursor, setPageCursor] = useState<string | undefined>(undefined);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+
   const {
-    data: leadsPages,
+    data: leadsPage,
     isLoading,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = trpc.leads.getAll.useInfiniteQuery(
-    { search: debouncedSearch, limit: 50 },
-    {
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    },
+    isFetching,
+  } = trpc.leads.getAll.useQuery(
+    { search: debouncedSearch, limit: 100, cursor: pageCursor }
   );
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
@@ -87,27 +85,28 @@ export function LeadsList() {
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
 
   const allLeads = useMemo<Lead[]>(
-    () => (leadsPages?.pages.flatMap((page) => page.items as Lead[]) ?? []),
-    [leadsPages],
+    () => (leadsPage?.items as Lead[]) ?? [],
+    [leadsPage],
   );
 
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const element = loadMoreRef.current;
-    if (!element) return;
+  const hasNextPage = Boolean(leadsPage?.nextCursor);
+  const isFetchingNextPage = isFetching && !isLoading;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      { rootMargin: "200px" },
-    );
+  const goToNextPage = () => {
+    if (!leadsPage?.nextCursor) return;
+    setCursorHistory((prev) => [...prev, pageCursor ?? ""]);
+    setPageCursor(leadsPage.nextCursor);
+  };
 
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  const goToPreviousPage = () => {
+    setCursorHistory((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      const previousCursor = next.pop() ?? "";
+      setPageCursor(previousCursor || undefined);
+      return next;
+    });
+  };
 
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -262,16 +261,21 @@ export function LeadsList() {
           hasNextPage={hasNextPage}
           isFetchingNextPage={isFetchingNextPage}
           isLoading={isLoading}
-          loadMoreRef={loadMoreRef}
+          canGoPrevious={cursorHistory.length > 0}
           onClearStageFilters={() => setStageFilter(new Set())}
           onDeleteLead={(leadId) => {
             if (confirm("Delete this lead?")) {
               deleteLead.mutate({ id: leadId });
             }
           }}
-          onFetchNextPage={() => void fetchNextPage()}
+          onFetchNextPage={goToNextPage}
+          onFetchPreviousPage={goToPreviousPage}
           onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPageCursor(undefined);
+            setCursorHistory([]);
+          }}
           onSortChange={(key) =>
             setSortBy((current) => ({
               key,
