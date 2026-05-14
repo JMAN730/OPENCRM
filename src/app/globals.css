@@ -195,6 +195,11 @@
   display: grid;
   grid-template-columns: 244px 1fr;
   min-height: 100vh;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.crm-app.sidebar-collapsed {
+  grid-template-columns: 56px 1fr;
 }
 
 .crm-sidebar {
@@ -205,6 +210,8 @@
   padding: 16px 12px;
   position: sticky;
   top: 0;
+  overflow-x: hidden;
+  transition: width 0.2s ease;
   height: 100vh;
   overflow-y: auto;
 }
@@ -329,6 +336,28 @@
 .crm-nav-item[aria-current="page"] .crm-nav-count {
   background: var(--crm-accent-soft);
   color: var(--crm-accent-fg);
+}
+
+.crm-sidebar-collapse-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--crm-radius-sm);
+  background: var(--crm-surface-hover);
+  border: none;
+  display: grid;
+  place-items: center;
+  color: var(--crm-fg-faint);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.crm-sidebar-collapse-btn:hover {
+  background: var(--crm-border);
+  color: var(--crm-fg-muted);
+}
+
+.crm-nav-item.collapsed {
+  justify-content: center;
+  padding: 8px;
 }
 
 .crm-sidebar-footer {
