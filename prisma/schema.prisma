@@ -57,12 +57,13 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
 
-  leads       Lead[]       @relation("AssignedTo")
-  calls       CallLog[]
-  notes       Note[]
-  tasks       Task[]
-  activities  Activity[]
-  scraperJobs ScraperJob[]
+  leads          Lead[]       @relation("AssignedTo")
+  calls          CallLog[]
+  notes          Note[]
+  tasks          Task[]       @relation("TaskCreator")
+  assignedTasks  Task[]       @relation("TaskAssignee")
+  activities     Activity[]
+  scraperJobs    ScraperJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,6 +83,7 @@ model Organization {
   leads       Lead[]
   pipelines   Pipeline[]
   scraperJobs ScraperJob[]
+  tasks       Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -262,23 +264,49 @@ model Activity {
   @@index([leadId])
 }
 
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
 model Task {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
   description String?
   dueDate     DateTime?
-  completed   Boolean   @default(false)
+  completed   Boolean      @default(false)
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(PENDING)
+  deletedAt   DateTime?
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
   userId String
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation("TaskCreator", fields: [userId], references: [id], onDelete: Cascade)
+
+  assignedToId String?
+  assignedTo   User?   @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([leadId])
   @@index([userId, dueDate])
+  @@index([assignedToId, dueDate])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, status])
+  @@index([deletedAt])
 }
 
 model VerificationToken {
