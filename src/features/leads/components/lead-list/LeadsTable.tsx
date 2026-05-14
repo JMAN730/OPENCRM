@@ -13,13 +13,14 @@ import {
 } from "lucide-react";
 import {
   avatarClass,
+  effectiveTempOf,
   fullNameOf,
   initials,
   relativeTime,
+  reviewSummary,
   scoreOf,
   STAGE_ORDER,
   STATUS_LABELS,
-  tempOf,
   type Lead,
   type LeadSort,
   type LeadSortKey,
@@ -170,8 +171,9 @@ export function LeadsTable({
               const name = fullNameOf(lead);
               const checked = selectedIds.has(lead.id);
               const score = scoreOf(lead);
-              const temp = tempOf(score);
+              const temp = effectiveTempOf(lead);
               const touches = lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? 1 : 0;
+              const reviews = reviewSummary(lead);
 
               return (
                 <tr key={lead.id} className={checked ? "selected" : ""} onClick={() => onOpenLead(lead)}>
@@ -221,7 +223,12 @@ export function LeadsTable({
                     <StageTag status={lead.status} />
                   </td>
                   <td>
-                    <ScoreBar score={score} temp={temp} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <ScoreBar score={score} temp={temp} />
+                      {reviews ? (
+                        <span style={{ color: "var(--crm-fg-faint)", fontSize: 11.5 }}>{reviews}</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     <Touches count={touches} />
