@@ -18,8 +18,8 @@ import {
   readScrapedCsv,
 } from "@/server/scraper/importer";
 
-// SQLite stores array fields as JSON strings — these helpers keep the rest of
-// the code working with plain string[] values.
+// The DB stores these array-like fields as JSON strings — these helpers keep
+// the rest of the code working with plain string[] values.
 function serializeArray(arr: string[]): string {
   return JSON.stringify(arr);
 }
