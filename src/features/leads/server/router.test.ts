@@ -264,6 +264,55 @@ describe("leadsRouter", () => {
       expect(result).toEqual({ count: 1 });
     });
 
+    it("creates rating and review count fields when present", async () => {
+      prisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+      await caller.leads.bulkCreate([
+        { company: "Acme", rating: 4.6, reviewCount: 128, status: "NOT_CONTACTED" },
+      ]);
+
+      expect(prisma.lead.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            company: "Acme",
+            rating: 4.6,
+            reviewCount: 128,
+            status: "NOT_CONTACTED",
+            organizationId: "org-1",
+            assignedToId: "user-1",
+          },
+        ],
+      });
+    });
+
+    it("updates existing review fields when fresher import data arrives", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        {
+          id: "lead-1",
+          email: "a@example.com",
+          phone: null,
+          status: "NOT_CONTACTED",
+          rating: 4.1,
+          reviewCount: 12,
+        },
+      ]);
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+      prisma.$transaction.mockResolvedValue([{ id: "lead-1" }]);
+
+      await caller.leads.bulkCreate([
+        { email: "a@example.com", rating: 4.8, reviewCount: 44, status: "NOT_CONTACTED" },
+      ]);
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: expect.objectContaining({
+          email: "a@example.com",
+          rating: 4.8,
+          reviewCount: 44,
+        }),
+      });
+    });
+
     it("rejects empty arrays", async () => {
       await expect(caller.leads.bulkCreate([])).rejects.toThrow();
     });
@@ -278,6 +327,35 @@ describe("leadsRouter", () => {
     it("rejects unauthenticated callers", async () => {
       const { caller: anon } = createTestCaller({ session: null });
       await expect(anon.leads.getAll()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+  });
+
+  describe("updateTemperatureOverride", () => {
+    it("updates the lead override when the lead is in scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", temperatureOverride: "HOT" });
+
+      const result = await caller.leads.updateTemperatureOverride({
+        id: "lead-1",
+        temperatureOverride: "HOT",
+      });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: { temperatureOverride: "HOT" },
+      });
+      expect(result).toEqual({ id: "lead-1", temperatureOverride: "HOT" });
+    });
+
+    it("rejects override updates for leads outside the caller scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.leads.updateTemperatureOverride({
+          id: "lead-1",
+          temperatureOverride: "COOL",
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 });
