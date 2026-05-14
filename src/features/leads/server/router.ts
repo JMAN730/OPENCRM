@@ -1,6 +1,7 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { Prisma, type LeadStatus } from "@prisma/client";
 import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin } from "@/server/authz";
@@ -29,6 +30,7 @@ const callOutcomeSchema = z.object({
   callOutcome: z.enum(["NOT_CONTACTED", "ANSWERED", "HUNG_UP", "NO_ANSWER", "AI_VOICEMAIL"]),
   callNotes: z.string().max(1000).optional(),
 });
+type CallOutcomeInput = z.infer<typeof callOutcomeSchema>["callOutcome"];
 
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
@@ -302,15 +304,15 @@ export const leadsRouter = createTRPCRouter({
         }
       }
 
-      const ops: any[] = [];
+      const ops: Prisma.PrismaPromise<unknown>[] = [];
       if (toCreate.length) {
-        ops.push(ctx.prisma.lead.createMany({ data: toCreate }) as never);
+        ops.push(ctx.prisma.lead.createMany({ data: toCreate }));
       }
       for (const u of toUpdate) {
-        ops.push(ctx.prisma.lead.update({ where: { id: u.id }, data: u.data }) as never);
+        ops.push(ctx.prisma.lead.update({ where: { id: u.id }, data: u.data }));
       }
 
-      const results = ops.length ? await ctx.prisma.$transaction(ops as never) : [];
+      const results = ops.length ? await ctx.prisma.$transaction(ops) : [];
       const created = toCreate.length ? (results[0] as { count: number }).count : 0;
       const updated = toUpdate.length;
 
@@ -326,7 +328,7 @@ export const leadsRouter = createTRPCRouter({
         where: { id: input.id, ...leadWhereFromScope(scope) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      const outcomeToStatus: Record<string, string> = {
+      const outcomeToStatus: Record<CallOutcomeInput, LeadStatus> = {
         ANSWERED:      "CONNECTED",
         AI_VOICEMAIL:  "AI_VOICEMAIL",
         NO_ANSWER:     "NO_ANSWER",
@@ -338,7 +340,7 @@ export const leadsRouter = createTRPCRouter({
         data: {
           callOutcome: input.callOutcome,
           callNotes: input.callNotes,
-          status: outcomeToStatus[input.callOutcome] as any,
+          status: outcomeToStatus[input.callOutcome],
         },
       });
       await logActivity(ctx.prisma, {

@@ -1,7 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { ComponentProps } from 'react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LeadDetailsModal } from './LeadDetailsModal'
-import { trpc } from '@/app/_trpc/client'
+
+type ModalLead = ComponentProps<typeof LeadDetailsModal>['lead']
 
 // Mock tRPC
 vi.mock('@/app/_trpc/client', () => ({
@@ -33,7 +35,7 @@ vi.mock('sonner', () => ({
 }))
 
 describe('LeadDetailsModal', () => {
-  const mockLead = {
+  const mockLead: ModalLead = {
     id: '1',
     firstName: 'John',
     lastName: 'Doe',
@@ -126,7 +128,7 @@ describe('LeadDetailsModal', () => {
 
 
   it('preloads existing call outcome', () => {
-    const leadWithOutcome = {
+    const leadWithOutcome: ModalLead = {
       ...mockLead,
       callOutcome: 'ANSWERED',
       callNotes: 'Customer was interested',
@@ -146,7 +148,7 @@ describe('LeadDetailsModal', () => {
   })
 
   it('preloads existing notes', () => {
-    const leadWithOutcome = {
+    const leadWithOutcome: ModalLead = {
       ...mockLead,
       callOutcome: 'ANSWERED',
       callNotes: 'Customer was interested',

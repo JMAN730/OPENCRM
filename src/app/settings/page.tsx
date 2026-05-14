@@ -72,7 +72,7 @@ export default function SettingsPage() {
     Profile:      "Your personal information and account preferences.",
     Workspace:    "Workspace defaults and regional settings.",
     Members:      "Manage who has access to this workspace.",
-    Integrations: "Connect third-party tools like Twilio, OpenAI, and AWS.",
+    Integrations: "Review supported integrations and placeholder areas that still need implementation.",
     Billing:      "Subscription plan and payment details.",
     API:          "API keys and webhook configuration.",
     "Audit log":  "A history of actions taken in this workspace.",

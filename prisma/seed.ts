@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { subDays, subHours, subMinutes } from "date-fns";
 // ── Name pools ───────────────────────────────────────────────────────────────
 
@@ -113,13 +114,7 @@ async function main() {
   //  195 NOT_CONTACTED  (185 + 10 merged)
   //   60 HUNG_UP
 
-  type LeadData = {
-    firstName: string; lastName: string; company: string; phone: string; source: string;
-    status: string; value?: number; createdAt: Date; updatedAt: Date;
-    organizationId: string; assignedToId: string;
-  };
-
-  const rows: LeadData[] = [];
+  const rows: Prisma.LeadCreateManyInput[] = [];
   let i = 0;
 
   const push = (status: string, daysAgo: number, value?: number) => {
@@ -149,7 +144,7 @@ async function main() {
   // Create leads in batches of 50 to keep each insert payload bounded.
   const BATCH = 50;
   for (let b = 0; b < rows.length; b += BATCH) {
-    await prisma.lead.createMany({ data: rows.slice(b, b + BATCH) as any });
+    await prisma.lead.createMany({ data: rows.slice(b, b + BATCH) });
     process.stdout.write(`\r   Leads created: ${Math.min(b + BATCH, rows.length)}/${rows.length}`);
   }
   console.log();
@@ -167,7 +162,7 @@ async function main() {
     "BUSY","FAILED",
   ] as const;
 
-  const callRows: any[] = [];
+  const callRows: Prisma.CallLogCreateManyInput[] = [];
   let callIdx = 0;
   for (let day = 29; day >= 0; day--) {
     const n = 8 + (callIdx % 7);
