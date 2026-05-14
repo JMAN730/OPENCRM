@@ -55,20 +55,20 @@ export const leadsRouter = createTRPCRouter({
           status: z
             .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
             .optional(),
-          limit: z.number().int().min(1).max(100).default(50),
+          limit: z.number().int().min(1).max(100).default(100),
           // Cursor encodes the last seen lead's id (the primary sort key
           // tie-breaker). Prisma's native cursor pagination handles the
           // composite order against (createdAt DESC, id DESC).
           cursor: z.string().optional(),
         })
         .optional()
-        .default(() => ({ limit: 50 })),
+        .default(() => ({ limit: 100 })),
     )
     .query(async ({ ctx, input }) => {
       const search = input.search?.trim();
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
-      const limit = input.limit ?? 50;
+      const limit = input.limit ?? 100;
 
       const baseScope = await getLeadScope(ctx, userId, role);
 

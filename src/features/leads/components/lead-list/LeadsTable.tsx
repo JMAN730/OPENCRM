@@ -33,10 +33,11 @@ type LeadsTableProps = {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isLoading: boolean;
-  loadMoreRef: React.RefObject<HTMLDivElement | null>;
+  canGoPrevious: boolean;
   onClearStageFilters: () => void;
   onDeleteLead: (leadId: string) => void;
   onFetchNextPage: () => void;
+  onFetchPreviousPage: () => void;
   onOpenLead: (lead: Lead) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (key: LeadSortKey) => void;
@@ -56,10 +57,11 @@ export function LeadsTable({
   hasNextPage,
   isFetchingNextPage,
   isLoading,
-  loadMoreRef,
+  canGoPrevious,
   onClearStageFilters,
   onDeleteLead,
   onFetchNextPage,
+  onFetchPreviousPage,
   onOpenLead,
   onSearchChange,
   onSortChange,
@@ -260,25 +262,25 @@ export function LeadsTable({
         </tbody>
       </table>
 
-      {hasNextPage || isFetchingNextPage ? (
-        <div
-          ref={loadMoreRef}
-          style={{
-            padding: "16px",
-            textAlign: "center",
-            color: "var(--crm-fg-faint)",
-            fontSize: 12,
-          }}
-        >
-          {isFetchingNextPage ? (
-            "Loading more leads..."
-          ) : (
-            <button className="crm-btn ghost sm" onClick={onFetchNextPage} disabled={!hasNextPage}>
-              Load more
-            </button>
-          )}
-        </div>
-      ) : null}
+      <div
+        style={{
+          padding: "16px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <button className="crm-btn ghost sm" onClick={onFetchPreviousPage} disabled={!canGoPrevious || isFetchingNextPage}>
+          Previous
+        </button>
+        <span style={{ color: "var(--crm-fg-faint)", fontSize: 12 }}>
+          {isFetchingNextPage ? "Loading leads..." : "Showing up to 100 leads per page"}
+        </span>
+        <button className="crm-btn ghost sm" onClick={onFetchNextPage} disabled={!hasNextPage || isFetchingNextPage}>
+          Next
+        </button>
+      </div>
     </div>
   );
 }
