@@ -197,6 +197,14 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const deleteNote = trpc.leads.deleteNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note deleted");
+      void utils.leads.getNotes.invalidate({ leadId: lead.id });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   useEffect(() => {
     if (!outcomeOpen) return;
@@ -579,12 +587,22 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   <span className="ts">{relativeTime(lead.createdAt)}</span>
                 </div>
                 {notes.map((note) => (
-                  <div key={note.id} className="crm-tl-row">
+                  <div key={note.id} className="crm-tl-row" style={{ alignItems: "flex-start" }}>
                     <span className="ico">
                       <NotebookPen size={11} />
                     </span>
                     <span className="body">{note.content}</span>
                     <span className="ts">{relativeTime(note.createdAt)}</span>
+                    {(note.userId === currentUserId || isAdminOrManager) && (
+                      <button
+                        title="Delete note"
+                        style={{ marginLeft: 4, opacity: 0.5, lineHeight: 1, flexShrink: 0 }}
+                        onClick={() => deleteNote.mutate({ noteId: note.id })}
+                        disabled={deleteNote.isPending}
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {lead.callNotes ? (

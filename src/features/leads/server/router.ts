@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { Prisma, type LeadStatus, type LeadTemperatureOverride } from "@prisma/client";
 import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
-import { isAdmin } from "@/server/authz";
+import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -22,6 +22,7 @@ const leadInputSchema = z.object({
   email: optionalEmail,
   phone: optionalShortString(40),
   company: optionalShortString(200),
+  city: optionalShortString(100),
   website: optionalUrl,
   rating: optionalRating,
   reviewCount: optionalReviewCount,
@@ -294,6 +295,7 @@ export const leadsRouter = createTRPCRouter({
         if (row.firstName) data.firstName = row.firstName;
         if (row.lastName) data.lastName = row.lastName;
         if (row.company) data.company = row.company;
+        if (row.city) data.city = row.city;
         if (row.website) data.website = row.website;
         if (row.source) data.source = row.source;
         if (typeof row.rating === "number") data.rating = row.rating;
@@ -386,6 +388,22 @@ export const leadsRouter = createTRPCRouter({
         description: `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`,
       });
       return updated;
+    }),
+
+  toggleStar: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+        select: { id: true, starred: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { starred: !lead.starred },
+      });
     }),
 
   /**
@@ -523,6 +541,29 @@ export const leadsRouter = createTRPCRouter({
         take: 50,
         include: { user: { select: { id: true, name: true, email: true, image: true } } },
       });
+    }),
+
+  deleteNote: organizationProcedure
+    .input(z.object({ noteId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const note = await ctx.prisma.note.findFirst({
+        where: { id: input.noteId, lead: { organizationId: ctx.organizationId } },
+        select: { id: true, userId: true, leadId: true },
+      });
+      if (!note) throw new TRPCError({ code: "NOT_FOUND" });
+      const callerId = ctx.session.user.id;
+      const callerRole = ctx.session.user.role;
+      if (note.userId !== callerId && !isManagerOrAdmin(callerRole)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      await ctx.prisma.note.delete({ where: { id: note.id } });
+      await logActivity(ctx.prisma, {
+        leadId: note.leadId,
+        userId: callerId,
+        type: "NOTE_ADDED",
+        description: "Deleted a note",
+      });
+      return { success: true };
     }),
 
   /** Returns activities for a single lead (scope-filtered). */
