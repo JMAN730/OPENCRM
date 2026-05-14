@@ -205,7 +205,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
                 width: "100%",
                 textAlign: "left",
               }}
-              onClick={() => signOut({ callbackUrl: "/auth/signin" })}
+              onClick={() => signOut({ callbackUrl: `${window.location.origin}/auth/signin` })}
             >
               <LogOut size={14} />
               <span>Sign out</span>
