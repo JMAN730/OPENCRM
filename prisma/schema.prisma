@@ -293,8 +293,8 @@ model PasswordResetToken {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scraper feature
-// locations and categories are stored as JSON-encoded strings because
-// SQLite does not support native array columns.
+// locations and categories are stored as JSON-encoded strings in the DB and
+// parsed by the scraper layer when exposing them as string[] values.
 // ─────────────────────────────────────────────────────────────────────────────
 model ScraperJob {
   id     String           @id @default(cuid())
