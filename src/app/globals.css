@@ -666,6 +666,7 @@
 }
 .crm-table.leads td { height: calc(var(--crm-row-h) + 4px); }
 .crm-table td.mono { font-family: var(--crm-font-mono); font-variant-numeric: tabular-nums; color: var(--crm-fg-muted); }
+.crm-table th.right,
 .crm-table td.right { text-align: right; }
 .crm-table td.checkbox-cell { padding-right: 0; width: 32px; }
 
