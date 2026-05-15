@@ -54,6 +54,25 @@ export type LeadTemperature = "hot" | "warm" | "cool";
 export type LeadSortKey = keyof Lead | "score" | "owner";
 export type LeadSort = { key: LeadSortKey; dir: "asc" | "desc" };
 
+export type ScoringRuleConfig = {
+  id: string;
+  factor: string;
+  label: string;
+  maxPoints: number;
+  weight: number;
+  config?: Record<string, number> | null;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+export type ScoreBreakdownItem = {
+  factor: string;
+  label: string;
+  points: number;
+  maxPoints: number;
+  weight: number;
+};
+
 export const LEAD_VISIBLE_COLUMNS = [
   "Lead",
   "Company",
@@ -146,28 +165,89 @@ export function avatarClass(seed: string) {
   return `c${number}`;
 }
 
-export function scoreOf(lead: Lead): number {
-  const rating = typeof lead.rating === "number" ? Math.max(0, Math.min(5, lead.rating)) : null;
-  const reviewCount =
-    typeof lead.reviewCount === "number" ? Math.max(0, Math.floor(lead.reviewCount)) : null;
-
-  const ratingScore = rating == null ? 0 : Math.round((rating / 5) * 40);
-  const volumeScore =
-    reviewCount == null ? 0 : Math.min(25, Math.round(Math.log10(reviewCount + 1) * 12));
-
+function computeFactorPoints(factor: string, lead: Lead, maxPoints: number, weight: number, config?: Record<string, number> | null): number {
   const engagementKey = engagementKeyOf(lead);
-  const engagementScore =
-    engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
-      ? 25
-      : engagementKey === "AI_VOICEMAIL"
-        ? 10
-        : engagementKey === "NOT_CONTACTED"
-          ? 5
-          : engagementKey === "HUNG_UP"
-            ? -10
-            : 0;
 
-  return Math.max(0, Math.min(100, ratingScore + volumeScore + engagementScore));
+  switch (factor) {
+    case "star_rating": {
+      const rating = typeof lead.rating === "number" ? Math.max(0, Math.min(5, lead.rating)) : null;
+      if (rating == null) return 0;
+      return Math.round((rating / 5) * maxPoints * weight);
+    }
+    case "review_count": {
+      const reviewCount = typeof lead.reviewCount === "number" ? Math.max(0, Math.floor(lead.reviewCount)) : null;
+      if (reviewCount == null) return 0;
+      return Math.round(Math.min(maxPoints, Math.log10(reviewCount + 1) * (maxPoints / 2)) * weight);
+    }
+    case "has_website":
+      return lead.website ? Math.round(maxPoints * weight) : 0;
+    case "call_activity": {
+      const map = config ?? { ANSWERED: 25, CONNECTED: 25, AI_VOICEMAIL: 10, NOT_CONTACTED: 5, HUNG_UP: -10, NO_ANSWER: 0 };
+      const raw = map[engagementKey] ?? 0;
+      return Math.round(raw * weight);
+    }
+    case "lead_status": {
+      const map = config ?? { CONNECTED: 15, AI_VOICEMAIL: 8, NO_ANSWER: 3, NOT_CONTACTED: 0, HUNG_UP: -5 };
+      const raw = map[lead.status] ?? 0;
+      return Math.round(raw * weight);
+    }
+    case "last_contacted": {
+      // Proxy recency via updatedAt if available, else full score for contacted leads
+      if (engagementKey === "NOT_CONTACTED" || engagementKey === "HUNG_UP") return 0;
+      // If connected give full points (no updatedAt available in client type)
+      return Math.round(maxPoints * weight);
+    }
+    case "appointment_booked":
+      // Proxy: lead status CONNECTED = appointment likely booked
+      return (lead.status === "CONNECTED" || engagementKey === "ANSWERED") ? Math.round(maxPoints * weight) : 0;
+    case "business_category": {
+      if (!config || !lead.source) return 0;
+      const raw = config[lead.source] ?? 0;
+      return Math.round(raw * weight);
+    }
+    default:
+      return 0;
+  }
+}
+
+export function scoreBreakdown(lead: Lead, rules: ScoringRuleConfig[]): ScoreBreakdownItem[] {
+  return rules
+    .filter((r) => r.isActive)
+    .map((r) => {
+      const raw = computeFactorPoints(r.factor, lead, r.maxPoints, r.weight, r.config);
+      const clamped = Math.min(r.maxPoints * r.weight, Math.max(-(r.maxPoints * r.weight), raw));
+      return { factor: r.factor, label: r.label, points: Math.round(clamped), maxPoints: r.maxPoints, weight: r.weight };
+    });
+}
+
+export function scoreOf(lead: Lead, rules?: ScoringRuleConfig[]): number {
+  if (!rules || rules.length === 0) {
+    // Legacy hardcoded logic for backward compatibility
+    const rating = typeof lead.rating === "number" ? Math.max(0, Math.min(5, lead.rating)) : null;
+    const reviewCount =
+      typeof lead.reviewCount === "number" ? Math.max(0, Math.floor(lead.reviewCount)) : null;
+
+    const ratingScore = rating == null ? 0 : Math.round((rating / 5) * 40);
+    const volumeScore =
+      reviewCount == null ? 0 : Math.min(25, Math.round(Math.log10(reviewCount + 1) * 12));
+
+    const engagementKey = engagementKeyOf(lead);
+    const engagementScore =
+      engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
+        ? 25
+        : engagementKey === "AI_VOICEMAIL"
+          ? 10
+          : engagementKey === "NOT_CONTACTED"
+            ? 5
+            : engagementKey === "HUNG_UP"
+              ? -10
+              : 0;
+
+    return Math.max(0, Math.min(100, ratingScore + volumeScore + engagementScore));
+  }
+
+  const total = scoreBreakdown(lead, rules).reduce((sum, item) => sum + item.points, 0);
+  return Math.max(0, Math.min(100, total));
 }
 
 export function tempOf(score: number): LeadTemperature {

@@ -3,7 +3,8 @@ import type { AppRouter } from "@/server/api/root";
 
 export type TeamsListItem = inferRouterOutputs<AppRouter>["teams"]["list"][number];
 export type OrganizationMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
-export type TeamActivity = inferRouterOutputs<AppRouter>["teams"]["activityFeed"][number];
+export type TeamActivityFeed = inferRouterOutputs<AppRouter>["teams"]["activityFeed"];
+export type TeamActivity = TeamActivityFeed["items"][number];
 export type MyTeam = inferRouterOutputs<AppRouter>["teams"]["myTeam"];
 export type InviteRole = "USER" | "MANAGER" | "ADMIN";
 
