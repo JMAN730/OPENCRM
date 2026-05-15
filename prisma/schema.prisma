@@ -76,14 +76,15 @@ enum UserRole {
 }
 
 model Organization {
-  id          String       @id @default(cuid())
-  name        String
-  users       User[]
-  teams       Team[]
-  leads       Lead[]
-  pipelines   Pipeline[]
-  scraperJobs ScraperJob[]
-  tasks       Task[]
+  id             String          @id @default(cuid())
+  name           String
+  users          User[]
+  teams          Team[]
+  leads          Lead[]
+  pipelines      Pipeline[]
+  scraperJobs    ScraperJob[]
+  tasks          Task[]
+  customOutcomes CustomOutcome[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -130,6 +131,9 @@ model Lead {
 
   assignedToId String?
   assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  customOutcomeId String?
+  customOutcome   CustomOutcome? @relation(fields: [customOutcomeId], references: [id], onDelete: SetNull)
 
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
@@ -234,6 +238,20 @@ enum CallOutcome {
   HUNG_UP
   NO_ANSWER
   AI_VOICEMAIL
+  CUSTOM
+}
+
+model CustomOutcome {
+  id             String       @id @default(cuid())
+  label          String       @db.VarChar(80)
+  hint           String?      @db.VarChar(200)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads          Lead[]
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
 }
 
 model Note {
