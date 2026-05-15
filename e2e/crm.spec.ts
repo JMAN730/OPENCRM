@@ -22,6 +22,8 @@ type MockLead = {
   email: string | null;
   phone: string | null;
   company: string | null;
+  city: string | null;
+  state: string | null;
   website: string | null;
   rating: number | null;
   reviewCount: number | null;
@@ -224,6 +226,8 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
         email: payload.email ?? null,
         phone: payload.phone ?? null,
         company: payload.company ?? null,
+        city: payload.city ?? null,
+        state: payload.state ?? null,
         website: null,
         rating: null,
         reviewCount: null,
@@ -413,6 +417,8 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
         email: "ava@example.com",
         phone: "5551234567",
         company: "Signal Labs",
+        city: "Tampa",
+        state: "FL",
         website: "signallabs.example.com",
         rating: 4.6,
         reviewCount: 128,

@@ -91,6 +91,8 @@ vi.mock("./lead-list/AddLeadForm", () => ({
             company: "Northwind",
             email: "nina@example.com",
             phone: "5551112222",
+            city: "Tampa",
+            state: "FL",
           })
         }
       >
@@ -219,6 +221,8 @@ function makeLead(overrides: Record<string, unknown>) {
     email: "alex@example.com",
     phone: "5551231234",
     company: "Acme Corp",
+    city: "Tampa",
+    state: "FL",
     website: null,
     rating: 4.8,
     reviewCount: 120,
