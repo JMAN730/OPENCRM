@@ -257,15 +257,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   }, [outcomeOpen]);
 
   useEffect(() => {
-    setOutcome(
-      lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
-        ? lead.callOutcome
-        : null,
-    );
-    setCustomOutcomeId(lead.customOutcome?.id ?? null);
-  }, [lead.callOutcome, lead.id, lead.customOutcome?.id]);
-
-  useEffect(() => {
     if (!assignOpen) return;
 
     const handleMouseDown = (event: MouseEvent) => {

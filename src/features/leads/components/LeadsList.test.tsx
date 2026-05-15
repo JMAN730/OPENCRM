@@ -111,6 +111,13 @@ vi.mock("./lead-list/LeadModal", () => ({
   }) => (
     <div>
       <div>Lead modal for {lead.id}</div>
+      <input aria-label="Lead modal text input" />
+      <textarea aria-label="Lead modal notes" />
+      <select aria-label="Lead modal select" defaultValue="one">
+        <option value="one">One</option>
+        <option value="two">Two</option>
+      </select>
+      <div aria-label="Lead modal rich text" contentEditable role="textbox" />
       <button onClick={onClose}>Close lead modal</button>
     </div>
   ),
@@ -487,6 +494,58 @@ describe("LeadsList", () => {
     await waitFor(() => {
       expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
     });
+  });
+
+  it("supports j and k lead navigation from non-editable modal context", async () => {
+    render(<LeadsList />);
+    const allLeadsSection = getAllLeadsSection();
+
+    fireEvent.click(within(allLeadsSection).getByText("Acme Corp"));
+    await waitFor(() => {
+      expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "j" });
+    await waitFor(() => {
+      expect(screen.getByText("Lead modal for lead-2")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "k" });
+    await waitFor(() => {
+      expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
+    });
+  });
+
+  it("does not use j or k as lead navigation while typing in modal inputs", async () => {
+    render(<LeadsList />);
+    const allLeadsSection = getAllLeadsSection();
+
+    fireEvent.click(within(allLeadsSection).getByText("Beta Health"));
+    await waitFor(() => {
+      expect(screen.getByText("Lead modal for lead-2")).toBeInTheDocument();
+    });
+
+    const textInput = screen.getByLabelText("Lead modal text input");
+    fireEvent.keyDown(textInput, { key: "j" });
+    fireEvent.keyDown(textInput, { key: "k" });
+
+    expect(screen.getByText("Lead modal for lead-2")).toBeInTheDocument();
+  });
+
+  it("does not use arrow keys as lead navigation while typing in editable modal controls", async () => {
+    render(<LeadsList />);
+    const allLeadsSection = getAllLeadsSection();
+
+    fireEvent.click(within(allLeadsSection).getByText("Beta Health"));
+    await waitFor(() => {
+      expect(screen.getByText("Lead modal for lead-2")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(screen.getByLabelText("Lead modal notes"), { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByLabelText("Lead modal select"), { key: "ArrowUp" });
+    fireEvent.keyDown(screen.getByLabelText("Lead modal rich text"), { key: "ArrowDown" });
+
+    expect(screen.getByText("Lead modal for lead-2")).toBeInTheDocument();
   });
 
   it("preserves pagination and search wiring against the current useQuery shape", async () => {
