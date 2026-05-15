@@ -41,7 +41,7 @@ export type AssignableUser = {
 };
 
 export type LeadTemperature = "hot" | "warm" | "cool";
-export type LeadSortKey = keyof Lead | "score";
+export type LeadSortKey = keyof Lead | "score" | "owner";
 export type LeadSort = { key: LeadSortKey; dir: "asc" | "desc" };
 
 export const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
