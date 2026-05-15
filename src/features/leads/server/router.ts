@@ -6,6 +6,7 @@ import { Prisma, type LeadStatus, type LeadTemperatureOverride } from "@prisma/c
 import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
+import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -24,6 +25,7 @@ const leadInputSchema = z.object({
   phone: optionalShortString(40),
   company: optionalShortString(200),
   city: optionalShortString(100),
+  state: optionalShortString(40),
   website: optionalUrl,
   rating: optionalRating,
   reviewCount: optionalReviewCount,
@@ -39,6 +41,43 @@ const callOutcomeSchema = z.object({
   callNotes: z.string().max(1000).optional(),
 });
 type CallOutcomeInput = z.infer<typeof callOutcomeSchema>["callOutcome"];
+type LeadInput = z.infer<typeof leadInputSchema>;
+
+function normalizeLeadInput(input: LeadInput): LeadInput {
+  const parsedLocation = parseCityState(input.city);
+  const state = normalizeState(input.state) ?? parsedLocation.state;
+  return {
+    ...input,
+    city: parsedLocation.state ? parsedLocation.city : input.city,
+    state,
+  };
+}
+
+function searchWhere(search?: string): Record<string, unknown> {
+  if (!search) return {};
+
+  const location = parseLocationSearch(search);
+  if (location) {
+    return {
+      AND: [
+        { state: location.state },
+        ...(location.city
+          ? [{ city: { contains: location.city, mode: "insensitive" } }]
+          : []),
+      ],
+    };
+  }
+
+  return {
+    OR: [
+      { company: { contains: search, mode: "insensitive" } },
+      { firstName: { contains: search, mode: "insensitive" } },
+      { lastName: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
+      { phone: { contains: search, mode: "insensitive" } },
+    ],
+  };
+}
 
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
@@ -101,17 +140,7 @@ export const leadsRouter = createTRPCRouter({
 
       const finalWhere: Record<string, unknown> = {
         ...where,
-        ...(search
-          ? {
-              OR: [
-                { company: { contains: search, mode: "insensitive" } },
-                { firstName: { contains: search, mode: "insensitive" } },
-                { lastName: { contains: search, mode: "insensitive" } },
-                { email: { contains: search, mode: "insensitive" } },
-                { phone: { contains: search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
+        ...searchWhere(search),
       };
 
       // take = limit + 1 so we can detect whether another page exists
@@ -199,9 +228,10 @@ export const leadsRouter = createTRPCRouter({
   create: organizationProcedure
     .input(leadInputSchema)
     .mutation(async ({ ctx, input }) => {
+      const data = normalizeLeadInput(input);
       const lead = await ctx.prisma.lead.create({
         data: {
-          ...input,
+          ...data,
           organizationId: ctx.organizationId,
           assignedToId: ctx.session.user.id,
         },
@@ -224,8 +254,9 @@ export const leadsRouter = createTRPCRouter({
       const cleaned = input.map((l) => {
         const email = normalizeEmail(l.email);
         const phone = normalizePhone(l.phone);
+        const normalized = normalizeLeadInput(l);
         return {
-          ...l,
+          ...normalized,
           email: email || undefined,
           phone: phone || undefined,
         };
@@ -299,6 +330,7 @@ export const leadsRouter = createTRPCRouter({
         if (row.lastName) data.lastName = row.lastName;
         if (row.company) data.company = row.company;
         if (row.city) data.city = row.city;
+        if (row.state) data.state = row.state;
         if (row.website) data.website = row.website;
         if (row.source) data.source = row.source;
         if (typeof row.rating === "number") data.rating = row.rating;
