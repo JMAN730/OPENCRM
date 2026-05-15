@@ -5,12 +5,16 @@ import { LeadModal } from "./LeadModal";
 const invalidateLeads = vi.fn();
 const invalidateNotes = vi.fn();
 const invalidateActivities = vi.fn();
+const invalidateTasks = vi.fn();
+const invalidateLeadTasks = vi.fn();
 const outcomeMutate = vi.fn();
 const tempMutate = vi.fn();
 const assignMutate = vi.fn();
 const createNoteMutate = vi.fn();
+const createTaskMutate = vi.fn();
 const deleteNoteMutate = vi.fn();
 const toggleStarMutate = vi.fn();
+let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => void } | undefined;
 
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
@@ -33,6 +37,10 @@ vi.mock("@/app/_trpc/client", () => ({
         getNotes: { invalidate: invalidateNotes },
         getActivities: { invalidate: invalidateActivities },
         customOutcomes: { list: { invalidate: vi.fn() } },
+      },
+      tasks: {
+        getAll: { invalidate: invalidateTasks },
+        getAllForLead: { invalidate: invalidateLeadTasks },
       },
     }),
     leads: {
@@ -63,6 +71,14 @@ vi.mock("@/app/_trpc/client", () => ({
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },
         create: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      },
+    },
+    tasks: {
+      create: {
+        useMutation: vi.fn((options) => {
+          createTaskOptions = options;
+          return { mutate: createTaskMutate, isPending: false };
+        }),
       },
     },
     teams: {
@@ -112,6 +128,7 @@ describe("LeadModal", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createTaskOptions = undefined;
   });
 
   it("renders website as a clickable external link", () => {
@@ -150,5 +167,58 @@ describe("LeadModal", () => {
       id: "lead-1",
       callOutcome: "ANSWERED",
     });
+  });
+
+  it("renders a task button in the lead action row", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("opens the create task dialog with title, due date, and priority fields", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Task" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByLabelText("Due date")).toBeInTheDocument();
+    expect(screen.getByLabelText("Priority")).toHaveValue("MEDIUM");
+  });
+
+  it("creates a task associated with the current lead", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Task" }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Call back owner" } });
+    fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "2026-06-01" } });
+    fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "HIGH" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    expect(createTaskMutate).toHaveBeenCalledWith({
+      leadId: "lead-1",
+      title: "Call back owner",
+      dueDate: "2026-06-01",
+      priority: "HIGH",
+    });
+  });
+
+  it("rejects empty task titles before calling the mutation", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    expect(createTaskMutate).not.toHaveBeenCalled();
+  });
+
+  it("refreshes task and lead activity caches after task creation succeeds", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    createTaskOptions?.onSuccess?.();
+
+    expect(invalidateTasks).toHaveBeenCalled();
+    expect(invalidateLeadTasks).toHaveBeenCalledWith({ leadId: "lead-1" });
+    expect(invalidateActivities).toHaveBeenCalledWith({ leadId: "lead-1" });
   });
 });

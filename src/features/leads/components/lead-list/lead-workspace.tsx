@@ -21,6 +21,7 @@ import {
   NotebookPen,
   Phone,
   Send,
+  SquareCheckBig,
   Star,
   UserRound,
 } from "lucide-react";
@@ -64,6 +65,7 @@ type LeadHeaderProps = {
   customOutcomes: CustomOutcomeOption[];
   onToggleStar: () => void;
   onOutcomeChange: (outcome: string, customOutcomeId?: string) => void;
+  onCreateTask: () => void;
 };
 
 export function LeadHeader({
@@ -74,6 +76,7 @@ export function LeadHeader({
   customOutcomes,
   onToggleStar,
   onOutcomeChange,
+  onCreateTask,
 }: LeadHeaderProps) {
   const name = fullNameOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
@@ -131,6 +134,10 @@ export function LeadHeader({
             <NotebookPen className="h-4 w-4" />
             Log Note
           </a>
+          <Button variant="outline" size="sm" onClick={onCreateTask}>
+            <SquareCheckBig className="h-4 w-4" />
+            Task
+          </Button>
           {websiteHref ? (
             <a href={websiteHref} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <Globe className="h-4 w-4" />
