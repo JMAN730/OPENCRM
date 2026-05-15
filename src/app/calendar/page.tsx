@@ -34,8 +34,6 @@ import {
   subMonths,
   isPast,
   isToday,
-  startOfDay,
-  endOfDay,
 } from "date-fns";
 
 type CalendarTask = inferRouterOutputs<AppRouter>["tasks"]["getCalendar"][number];
@@ -85,16 +83,6 @@ function toDateInputValue(d: Date | string | null | undefined) {
   const parsed = new Date(d);
   if (isNaN(parsed.getTime())) return "";
   return format(parsed, "yyyy-MM-dd");
-}
-
-function toTimeInputValue(d: Date | string | null | undefined) {
-  if (!d) return "";
-  const parsed = new Date(d);
-  if (isNaN(parsed.getTime())) return "";
-  const h = parsed.getHours().toString().padStart(2, "0");
-  const m = parsed.getMinutes().toString().padStart(2, "0");
-  if (h === "00" && m === "00") return "";
-  return `${h}:${m}`;
 }
 
 function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined {
@@ -769,7 +757,7 @@ function DeleteConfirm({
           <div>
             <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Delete Follow-up</h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--crm-fg-muted)" }}>
-              Are you sure you want to delete <strong>"{title}"</strong>? This cannot be undone.
+              Are you sure you want to delete <strong>&quot;{title}&quot;</strong>? This cannot be undone.
             </p>
           </div>
         </div>
