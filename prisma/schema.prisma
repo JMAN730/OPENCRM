@@ -85,6 +85,7 @@ model Organization {
   scraperJobs    ScraperJob[]
   tasks          Task[]
   customOutcomes CustomOutcome[]
+  scoringRules   ScoringRule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,6 +145,7 @@ model Lead {
   activities Activity[]
   tasks      Task[]
   tags       LeadTag[]
+  websites   GeneratedWebsite[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -394,4 +396,34 @@ enum ScraperJobStatus {
   COMPLETED
   FAILED
   STOPPED
+}
+
+model ScoringRule {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  factor         String
+  label          String
+  maxPoints      Float        @default(25)
+  weight         Float        @default(1.0)
+  config         Json?
+  isActive       Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model GeneratedWebsite {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  template  String
+  title     String
+  content   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
 }
