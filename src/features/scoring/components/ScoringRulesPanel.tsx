@@ -10,7 +10,7 @@ import {
   type ScoringRuleConfig,
   type Lead,
 } from "@/features/leads/components/lead-list/shared";
-import { SCORING_FACTORS } from "@/features/scoring/server/router";
+import { SCORING_FACTORS } from "@/features/scoring/shared";
 
 const FACTOR_DESCRIPTIONS: Record<string, string> = {
   star_rating: "Google Maps star rating (0–5 stars)",
