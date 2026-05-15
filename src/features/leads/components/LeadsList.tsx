@@ -13,6 +13,7 @@ import { LeadCardList } from "./lead-list/LeadCardList";
 import { LeadModal } from "./lead-list/LeadModal";
 import { LeadsFocusHero } from "./lead-list/LeadsFocusHero";
 import { LeadsManagementBar } from "./lead-list/LeadsManagementBar";
+import { LeadsTable } from "./lead-list/LeadsTable";
 import {
   buildFocusSpotlightLeads,
   filterLeadByQuickFilter,
@@ -32,16 +33,38 @@ import {
   type LeadVisibleColumn,
 } from "./lead-list/shared";
 
+type LeadsViewMode = "focus" | "classic";
+
 function greetingForHour(hour: number) {
   if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 }
 
+function leadsHref(
+  searchParamsString: string,
+  updates: Partial<Record<"new" | "view", string | null>>,
+) {
+  const nextSearchParams = new URLSearchParams(searchParamsString);
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value == null) {
+      nextSearchParams.delete(key);
+    } else {
+      nextSearchParams.set(key, value);
+    }
+  }
+
+  const query = nextSearchParams.toString();
+  return query ? `/leads?${query}` : "/leads";
+}
+
 export function LeadsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const showAddFromQuery = searchParams.get("new") === "1";
+  const viewMode: LeadsViewMode = searchParams.get("view") === "classic" ? "classic" : "focus";
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -65,11 +88,18 @@ export function LeadsList() {
 
   const debouncedSearch = useDebounce(search, 300);
 
+  const replaceLeadsRoute = useCallback(
+    (updates: Partial<Record<"new" | "view", string | null>>) => {
+      router.replace(leadsHref(searchParamsString, updates));
+    },
+    [router, searchParamsString],
+  );
+
   useEffect(() => {
     if (showAddFromQuery) {
-      router.replace("/leads");
+      replaceLeadsRoute({ new: null });
     }
-  }, [router, showAddFromQuery]);
+  }, [replaceLeadsRoute, showAddFromQuery]);
 
   const { data: session } = useSession();
   const sessionUser = session?.user as SessionUser | undefined;
@@ -197,13 +227,14 @@ export function LeadsList() {
     return rows;
   }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter]);
 
-  const filteredLeads = useMemo(
+  const focusFilteredLeads = useMemo(
     () =>
       scopedLeads.filter((lead) =>
         filterLeadByQuickFilter(lead, quickFilter, dueLeadIds, currentUserId),
       ),
     [currentUserId, dueLeadIds, quickFilter, scopedLeads],
   );
+  const activeLeads = viewMode === "focus" ? focusFilteredLeads : scopedLeads;
 
   const quickFilterCounts = useMemo(
     () => getQuickFilterCounts(scopedLeads, dueLeadIds, currentUserId),
@@ -249,9 +280,9 @@ export function LeadsList() {
 
   const toggleAllSelections = () => {
     const allSelected =
-      filteredLeads.length > 0 && filteredLeads.every((lead) => selected.has(lead.id));
+      activeLeads.length > 0 && activeLeads.every((lead) => selected.has(lead.id));
 
-    setSelected(allSelected ? new Set() : new Set(filteredLeads.map((lead) => lead.id)));
+    setSelected(allSelected ? new Set() : new Set(activeLeads.map((lead) => lead.id)));
     if (allSelected) {
       setShowAssign(false);
     }
@@ -274,20 +305,20 @@ export function LeadsList() {
     ? allLeads.find((lead) => lead.id === selectedLeadId) ?? null
     : null;
   const selectedIndex = selectedLead
-    ? filteredLeads.findIndex((lead) => lead.id === selectedLead.id)
+    ? activeLeads.findIndex((lead) => lead.id === selectedLead.id)
     : -1;
 
   const previousLead = useCallback(() => {
     if (selectedIndex > 0) {
-      setSelectedLeadId(filteredLeads[selectedIndex - 1]?.id ?? null);
+      setSelectedLeadId(activeLeads[selectedIndex - 1]?.id ?? null);
     }
-  }, [filteredLeads, selectedIndex]);
+  }, [activeLeads, selectedIndex]);
 
   const nextLead = useCallback(() => {
-    if (selectedIndex >= 0 && selectedIndex < filteredLeads.length - 1) {
-      setSelectedLeadId(filteredLeads[selectedIndex + 1]?.id ?? null);
+    if (selectedIndex >= 0 && selectedIndex < activeLeads.length - 1) {
+      setSelectedLeadId(activeLeads[selectedIndex + 1]?.id ?? null);
     }
-  }, [filteredLeads, selectedIndex]);
+  }, [activeLeads, selectedIndex]);
 
   useEffect(() => {
     if (!selectedLead) return;
@@ -358,13 +389,15 @@ export function LeadsList() {
 
   const subtitle = useMemo(() => {
     if (dueTodayQuery.isError || overdueQuery.isError) {
-      return `${filteredLeads.length} leads remain available while focus signals reload.`;
+      return `${focusFilteredLeads.length} leads remain available while focus signals reload.`;
     }
     if (focusCards.length === 0) {
-      return `${filteredLeads.length} of ${allLeads.length} leads match the current view.`;
+      return `${focusFilteredLeads.length} of ${allLeads.length} leads match the current view.`;
     }
     return `${focusCards.length} priority lead${focusCards.length === 1 ? "" : "s"} surfaced from your current lead view.`;
-  }, [allLeads.length, dueTodayQuery.isError, filteredLeads.length, focusCards.length, overdueQuery.isError]);
+  }, [allLeads.length, dueTodayQuery.isError, focusCards.length, focusFilteredLeads.length, overdueQuery.isError]);
+
+  const classicSubtitle = `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
 
   return (
     <>
@@ -386,87 +419,178 @@ export function LeadsList() {
       ) : null}
 
       <div className="crm-content">
-        <LeadsFocusHero
-          focusCards={focusCards}
-          isLoading={dueTodayQuery.isLoading || overdueQuery.isLoading}
-          isError={dueTodayQuery.isError || overdueQuery.isError}
-          quickFilter={quickFilter}
-          quickFilterCounts={quickFilterCounts}
-          greeting={greeting}
-          dateLabel={dateLabel}
-          subtitle={subtitle}
-          onOpenFilters={() => {
-            setFilterOpen(true);
-            setColumnsOpen(false);
-          }}
-          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-          onQuickFilterChange={setQuickFilter}
-          onShowNewLead={() => setShowAdd(true)}
-        />
+        <div
+          className="crm-page-head-actions"
+          style={{ justifyContent: "flex-end", marginBottom: 12 }}
+        >
+          <div
+            role="group"
+            aria-label="Lead layout"
+            style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}
+          >
+            <button
+              className="crm-chip"
+              aria-pressed={viewMode === "focus"}
+              onClick={() => replaceLeadsRoute({ view: null })}
+            >
+              Focus view
+            </button>
+            <button
+              className="crm-chip"
+              aria-pressed={viewMode === "classic"}
+              onClick={() => replaceLeadsRoute({ view: "classic" })}
+            >
+              Classic view
+            </button>
+          </div>
+        </div>
 
-        <LeadsManagementBar
-          allLeadsCount={scopedLeads.length}
-          filteredCount={filteredLeads.length}
-          filterOpen={filterOpen}
-          columnsOpen={columnsOpen}
-          importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
-          members={assignableUsers}
-          ownerFilter={ownerFilter}
-          scoreMin={scoreMin}
-          scoreMax={scoreMax}
-          search={search}
-          sortBy={sortBy}
-          stageCounts={stageCounts}
-          stageFilter={stageFilter}
-          visibleColumns={visibleColumns}
-          onClearStageFilters={() => setStageFilter(new Set())}
-          onColumnsOpenChange={setColumnsOpen}
-          onFilterOpenChange={setFilterOpen}
-          onOwnerToggle={toggleOwner}
-          onScoreChange={(min, max) => {
-            setScoreMin(min);
-            setScoreMax(max);
-          }}
-          onSearchChange={(value) => {
-            setSearch(value);
-            setPageCursor(undefined);
-            setCursorHistory([]);
-          }}
-          onSortDirectionToggle={() =>
-            setSortBy((current) => ({
-              ...current,
-              dir: current.dir === "desc" ? "asc" : "desc",
-            }))
-          }
-          onSortKeyChange={(key) =>
-            setSortBy((current) => ({
-              ...current,
-              key,
-            }))
-          }
-          onToggleColumn={toggleVisibleColumn}
-          onToggleStage={toggleStage}
-        />
+        {viewMode === "focus" ? (
+          <>
+            <LeadsFocusHero
+              focusCards={focusCards}
+              isLoading={dueTodayQuery.isLoading || overdueQuery.isLoading}
+              isError={dueTodayQuery.isError || overdueQuery.isError}
+              quickFilter={quickFilter}
+              quickFilterCounts={quickFilterCounts}
+              greeting={greeting}
+              dateLabel={dateLabel}
+              subtitle={subtitle}
+              onOpenFilters={() => {
+                setFilterOpen(true);
+                setColumnsOpen(false);
+              }}
+              onOpenLead={(lead) => setSelectedLeadId(lead.id)}
+              onQuickFilterChange={setQuickFilter}
+              onShowNewLead={() => setShowAdd(true)}
+            />
 
-        <LeadCardList
-          canGoPrevious={cursorHistory.length > 0}
-          filteredLeads={filteredLeads}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          isLoading={isLoading}
-          onDeleteLead={(leadId) => {
-            if (confirm("Delete this lead?")) {
-              deleteLead.mutate({ id: leadId });
-            }
-          }}
-          onFetchNextPage={goToNextPage}
-          onFetchPreviousPage={goToPreviousPage}
-          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-          onToggleRowSelection={toggleSelection}
-          onToggleSelectAllRows={toggleAllSelections}
-          selectedIds={selected}
-          visibleColumns={visibleColumns}
-        />
+            <LeadsManagementBar
+              allLeadsCount={scopedLeads.length}
+              filteredCount={focusFilteredLeads.length}
+              filterOpen={filterOpen}
+              columnsOpen={columnsOpen}
+              importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              members={assignableUsers}
+              ownerFilter={ownerFilter}
+              scoreMin={scoreMin}
+              scoreMax={scoreMax}
+              search={search}
+              sortBy={sortBy}
+              stageCounts={stageCounts}
+              stageFilter={stageFilter}
+              visibleColumns={visibleColumns}
+              onClearStageFilters={() => setStageFilter(new Set())}
+              onColumnsOpenChange={setColumnsOpen}
+              onFilterOpenChange={setFilterOpen}
+              onOwnerToggle={toggleOwner}
+              onScoreChange={(min, max) => {
+                setScoreMin(min);
+                setScoreMax(max);
+              }}
+              onSearchChange={(value) => {
+                setSearch(value);
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
+              onSortDirectionToggle={() =>
+                setSortBy((current) => ({
+                  ...current,
+                  dir: current.dir === "desc" ? "asc" : "desc",
+                }))
+              }
+              onSortKeyChange={(key) =>
+                setSortBy((current) => ({
+                  ...current,
+                  key,
+                }))
+              }
+              onToggleColumn={toggleVisibleColumn}
+              onToggleStage={toggleStage}
+            />
+
+            <LeadCardList
+              canGoPrevious={cursorHistory.length > 0}
+              filteredLeads={focusFilteredLeads}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isLoading={isLoading}
+              onDeleteLead={(leadId) => {
+                if (confirm("Delete this lead?")) {
+                  deleteLead.mutate({ id: leadId });
+                }
+              }}
+              onFetchNextPage={goToNextPage}
+              onFetchPreviousPage={goToPreviousPage}
+              onOpenLead={(lead) => setSelectedLeadId(lead.id)}
+              onToggleRowSelection={toggleSelection}
+              onToggleSelectAllRows={toggleAllSelections}
+              selectedIds={selected}
+              visibleColumns={visibleColumns}
+            />
+          </>
+        ) : (
+          <>
+            <div className="crm-page-head">
+              <div>
+                <h1 className="crm-page-title">Leads</h1>
+                <div className="crm-page-sub">{classicSubtitle}</div>
+              </div>
+              <div className="crm-page-head-actions">
+                <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
+                <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
+                  New lead
+                </button>
+              </div>
+            </div>
+
+            <LeadsTable
+              allLeadsCount={allLeads.length}
+              filteredLeads={scopedLeads}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isLoading={isLoading}
+              canGoPrevious={cursorHistory.length > 0}
+              members={assignableUsers}
+              ownerFilter={ownerFilter}
+              scoreMin={scoreMin}
+              scoreMax={scoreMax}
+              onClearStageFilters={() => setStageFilter(new Set())}
+              onDeleteLead={(leadId) => {
+                if (confirm("Delete this lead?")) {
+                  deleteLead.mutate({ id: leadId });
+                }
+              }}
+              onFetchNextPage={goToNextPage}
+              onFetchPreviousPage={goToPreviousPage}
+              onOpenLead={(lead) => setSelectedLeadId(lead.id)}
+              onOwnerToggle={toggleOwner}
+              onScoreChange={(min, max) => {
+                setScoreMin(min);
+                setScoreMax(max);
+              }}
+              onSearchChange={(value) => {
+                setSearch(value);
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
+              onSortChange={(key) =>
+                setSortBy((current) => ({
+                  key,
+                  dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
+                }))
+              }
+              onToggleRowSelection={toggleSelection}
+              onToggleSelectAllRows={toggleAllSelections}
+              onToggleStage={toggleStage}
+              search={search}
+              selectedIds={selected}
+              sortBy={sortBy}
+              stageCounts={stageCounts}
+              stageFilter={stageFilter}
+            />
+          </>
+        )}
 
         {selected.size > 0 ? (
           <LeadBulkActionBar
