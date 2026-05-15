@@ -18,6 +18,7 @@ export type Lead = {
   starred?: boolean | null;
   createdAt: string;
   assignedToId?: string | null;
+  customOutcomeId?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;

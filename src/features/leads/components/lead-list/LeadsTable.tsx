@@ -33,8 +33,11 @@ import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
 const ALL_COLUMNS = ["Lead", "Company", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
 type ColumnName = typeof ALL_COLUMNS[number];
 
+type CustomOutcomeTab = { id: string; label: string };
+
 type LeadsTableProps = {
   allLeadsCount: number;
+  customOutcomes?: CustomOutcomeTab[];
   filteredLeads: Lead[];
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -65,6 +68,7 @@ type LeadsTableProps = {
 
 export function LeadsTable({
   allLeadsCount,
+  customOutcomes,
   filteredLeads,
   hasNextPage,
   isFetchingNextPage,
@@ -196,6 +200,17 @@ export function LeadsTable({
           >
             {STATUS_LABELS[stage]?.label ?? stage}
             <span className="crm-chip-count">{stageCounts[stage] ?? 0}</span>
+          </button>
+        ))}
+        {customOutcomes?.map((co) => (
+          <button
+            key={co.id}
+            className="crm-chip"
+            aria-pressed={stageFilter.has(`CUSTOM:${co.id}`)}
+            onClick={() => onToggleStage(`CUSTOM:${co.id}`)}
+          >
+            {co.label}
+            <span className="crm-chip-count">{stageCounts[`CUSTOM:${co.id}`] ?? 0}</span>
           </button>
         ))}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
