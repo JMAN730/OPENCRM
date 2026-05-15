@@ -1,7 +1,7 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { Bell, Inbox, Sparkles, Plus, ChevronRight, Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Bell, Inbox, Sparkles, ChevronRight, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -36,7 +36,6 @@ const POPOVER_STYLE: React.CSSProperties = {
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
-  const router = useRouter();
   const title = PAGE_TITLES[pathname] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).find((k) => pathname.startsWith(k)) ?? ""] ?? "Dashboard";
 
   const [openPanel, setOpenPanel] = useState<Panel>(null);
@@ -94,10 +93,6 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <Sparkles size={14} />
           Ask AI
           <span className="crm-kbd">⌘J</span>
-        </button>
-        <button className="crm-btn primary" onClick={() => router.push("/leads?new=1")}>
-          <Plus size={14} />
-          New lead
         </button>
 
         {openPanel === "bell" && (
