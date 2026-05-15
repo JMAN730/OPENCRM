@@ -115,6 +115,7 @@ model Lead {
   phone               String?
   company             String?
   city                String?
+  state               String?
   title               String?
   website             String?
   mapsUrl             String?
@@ -157,6 +158,7 @@ model Lead {
   @@index([organizationId, company, phone])
   // Lead scope filtering for non-admins (assignedToId IN (...)).
   @@index([organizationId, assignedToId])
+  @@index([organizationId, state, city])
 }
 
 enum LeadStatus {
