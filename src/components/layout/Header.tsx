@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Inbox, Sparkles, Plus, ChevronRight, Menu } from "lucide-react";
+import { Bell, Inbox, Sparkles, ChevronRight, Menu } from "lucide-react";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -48,10 +48,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           Ask AI
           <span className="crm-kbd">⌘J</span>
         </button>
-        <button className="crm-btn primary">
-          <Plus size={14} />
-          New lead
-        </button>
+
       </div>
     </div>
   );
