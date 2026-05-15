@@ -16,10 +16,12 @@ import {
 import { useSession } from "next-auth/react";
 import { useState } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
+import Link from "next/link";
 
 function formatDueDate(date: string | Date | null | undefined): string {
   if (!date) return "";
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
   if (isToday(d)) return "Today";
   if (isTomorrow(d)) return "Tomorrow";
   return format(d, "MMM d");
@@ -194,9 +196,9 @@ function TasksCard() {
         <h3>My tasks</h3>
         <span className="crm-sub">· {open} open</span>
         <div className="crm-actions">
-          <button className="crm-btn ghost" style={{ height: 26, padding: "0 8px", fontSize: 12 }}>
+          <Link href="/tasks" className="crm-btn ghost" style={{ height: 26, padding: "0 8px", fontSize: 12 }}>
             <Plus size={12} /> Add
-          </button>
+          </Link>
         </div>
       </div>
       {isLoading ? (
@@ -207,12 +209,14 @@ function TasksCard() {
         <div className="crm-tasks">
           {displayed.map((t) => (
             <div key={t.id} className="crm-task" data-done={t.completed}>
-              <div
+              <button
+                type="button"
                 className="crm-check"
                 onClick={() => update.mutate({ taskId: t.id, completed: !t.completed })}
+                aria-label={t.completed ? `Reopen task ${t.title}` : `Complete task ${t.title}`}
               >
                 {t.completed && <CheckCheck size={11} />}
-              </div>
+              </button>
               <div>
                 <div className="crm-task-label">{t.title}</div>
               </div>
