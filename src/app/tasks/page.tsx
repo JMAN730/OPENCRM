@@ -14,8 +14,8 @@ import {
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths,
-  isPast, isToday,
 } from "date-fns";
+import { getTaskSummaryCounts, isTaskOverdue } from "./task-summary";
 
 type TaskItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
 type OrgMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
@@ -82,9 +82,7 @@ function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined 
 }
 
 function isOverdue(task: Pick<TaskItem, "dueDate" | "completed">) {
-  if (task.completed || !task.dueDate) return false;
-  const due = new Date(task.dueDate);
-  return isPast(due) && !isToday(due);
+  return isTaskOverdue(task);
 }
 
 function leadName(lead: TaskItem["lead"]) {
@@ -857,9 +855,7 @@ export default function TasksPage() {
     updateTask.mutate({ taskId: task.id, status: newCompleted ? "COMPLETED" : "PENDING" });
   }
 
-  const pending = tasks.filter((t) => !t.completed);
-  const completed = tasks.filter((t) => t.completed);
-  const overdue = pending.filter(isOverdue);
+  const counts = getTaskSummaryCounts(tasks);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -876,7 +872,7 @@ export default function TasksPage() {
           <div>
             <h1 className="crm-page-title">Tasks</h1>
             <div className="crm-page-sub">
-              {pending.length} pending · {overdue.length > 0 && <span style={{ color: "#ef4444" }}>{overdue.length} overdue · </span>}{completed.length} completed
+              {counts.pending} pending · {counts.overdue > 0 && <span style={{ color: "#ef4444" }}>{counts.overdue} overdue · </span>}{counts.completed} completed
             </div>
           </div>
           <div className="crm-page-head-actions">
@@ -889,10 +885,10 @@ export default function TasksPage() {
         {/* Summary cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
           {[
-            { label: "Pending", count: pending.length, color: "#3b82f6", icon: <Clock size={16} /> },
-            { label: "Overdue", count: overdue.length, color: "#ef4444", icon: <AlertCircle size={16} /> },
-            { label: "Completed", count: completed.length, color: "#22c55e", icon: <Check size={16} /> },
-            { label: "Total", count: tasks.length, color: "var(--crm-fg-muted)", icon: <List size={16} /> },
+            { label: "Pending", count: counts.pending, color: "#3b82f6", icon: <Clock size={16} /> },
+            { label: "Overdue", count: counts.overdue, color: "#ef4444", icon: <AlertCircle size={16} /> },
+            { label: "Completed", count: counts.completed, color: "#22c55e", icon: <Check size={16} /> },
+            { label: "Total", count: counts.total, color: "var(--crm-fg-muted)", icon: <List size={16} /> },
           ].map((card) => (
             <div key={card.label} className="crm-card" style={{ padding: "14px 18px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
