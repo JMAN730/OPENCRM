@@ -97,13 +97,12 @@ function toTimeInputValue(d: Date | string | null | undefined) {
 
 function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined {
   if (!dateStr) return undefined;
-  const base = new Date(dateStr);
+  const [yearStr, monthStr, dayStr] = dateStr.split("-");
+  const base = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
   if (isNaN(base.getTime())) return undefined;
   if (timeStr) {
     const [h, m] = timeStr.split(":").map(Number);
     base.setHours(h ?? 0, m ?? 0, 0, 0);
-  } else {
-    base.setHours(0, 0, 0, 0);
   }
   return base;
 }
