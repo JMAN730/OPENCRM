@@ -35,7 +35,9 @@ function pipelineIndexForStatus(status: string) {
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const utils = trpc.useUtils();
   const [starred, setStarred] = useState(Boolean(lead.starred));
-  const [temperatureOverride, setTemperatureOverride] = useState(lead.temperatureOverride ?? "");
+  const [temperatureOverride, setTemperatureOverride] = useState<
+    NonNullable<Lead["temperatureOverride"]> | ""
+  >(lead.temperatureOverride ?? "");
   const [composerText, setComposerText] = useState("");
   const [outcome, setOutcome] = useState(lead.callOutcome ?? "NOT_CONTACTED");
 
@@ -48,8 +50,13 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const activities = activitiesRaw as ActivityRow[];
   const notes = notesRaw as LeadNote[];
   const customOutcomes = customOutcomesRaw as CustomOutcomeOption[];
-  const leadForDisplay = useMemo(
-    () => ({ ...lead, starred, temperatureOverride: temperatureOverride || null, callOutcome: outcome }),
+  const leadForDisplay = useMemo<Lead>(
+    () => ({
+      ...lead,
+      starred,
+      temperatureOverride: temperatureOverride || null,
+      callOutcome: outcome,
+    }),
     [lead, outcome, starred, temperatureOverride],
   );
   const score = scoreOf(leadForDisplay);
