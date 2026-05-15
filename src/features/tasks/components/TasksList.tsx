@@ -59,7 +59,12 @@ function EditTaskDialog({ onClose, onSave, pending, task }: EditTaskDialogProps)
       toast.error("Task title is required.");
       return;
     }
-    onSave({ taskId: task.id, title: trimmedTitle, dueDate: dueDate || undefined, priority, status });
+    let parsedDueDate: string | undefined;
+    if (dueDate) {
+      const [y, m, d] = dueDate.split("-").map(Number);
+      parsedDueDate = new Date(y, m - 1, d).toISOString();
+    }
+    onSave({ taskId: task.id, title: trimmedTitle, dueDate: parsedDueDate, priority, status });
   };
 
   const selectStyle: React.CSSProperties = {
