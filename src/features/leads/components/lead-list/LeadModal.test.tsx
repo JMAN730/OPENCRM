@@ -143,7 +143,7 @@ describe("LeadModal", () => {
   it("preserves call outcome mutation wiring", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /log outcome/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /connected/i }));
 
     expect(outcomeMutate).toHaveBeenCalledWith({
