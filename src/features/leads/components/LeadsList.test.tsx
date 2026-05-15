@@ -15,6 +15,7 @@ let searchParamNew: string | null = null;
 let leadQueryCalls: Array<{ search?: string; limit: number; cursor?: string }> = [];
 let leadPages: Record<string, { items: Array<Record<string, unknown>>; nextCursor: string | null }> =
   {};
+let searchParamView: string | null = null;
 let leadQueryState = { isLoading: false, isFetching: false };
 let dueTodayState: { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean } = {
   data: [],
@@ -33,7 +34,17 @@ vi.mock("next/navigation", () => ({
     replace: mockReplace,
   }),
   useSearchParams: () => ({
-    get: (key: string) => (key === "new" ? searchParamNew : null),
+    get: (key: string) => {
+      if (key === "new") return searchParamNew;
+      if (key === "view") return searchParamView;
+      return null;
+    },
+    toString: () => {
+      const params = new URLSearchParams();
+      if (searchParamNew !== null) params.set("new", searchParamNew);
+      if (searchParamView !== null) params.set("view", searchParamView);
+      return params.toString();
+    },
   }),
 }));
 
@@ -272,6 +283,7 @@ describe("LeadsList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamNew = null;
+    searchParamView = null;
     leadQueryCalls = [];
     leadQueryState = { isLoading: false, isFetching: false };
     orgMembersState = [
@@ -367,6 +379,15 @@ describe("LeadsList", () => {
     expect(mockReplace).toHaveBeenCalledWith("/leads");
   });
 
+  it("preserves the selected layout when clearing the ?new=1 route flag", () => {
+    searchParamNew = "1";
+    searchParamView = "classic";
+
+    render(<LeadsList />);
+
+    expect(mockReplace).toHaveBeenCalledWith("/leads?view=classic");
+  });
+
   it("renders the focus layout and filters to due-today leads", async () => {
     render(<LeadsList />);
     const allLeadsSection = getAllLeadsSection();
@@ -380,6 +401,29 @@ describe("LeadsList", () => {
       expect(within(allLeadsSection).getByText("Beta Health")).toBeInTheDocument();
       expect(within(allLeadsSection).queryByText("Acme Corp")).not.toBeInTheDocument();
     });
+  });
+
+  it("renders the classic table layout from the view query param and can switch back", () => {
+    searchParamView = "classic";
+
+    render(<LeadsList />);
+
+    expect(screen.getByRole("heading", { name: "Leads" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Leads - Focus" })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search leads, companies, notes...")).toBeInTheDocument();
+
+    mockReplace.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Focus view" }));
+
+    expect(mockReplace).toHaveBeenCalledWith("/leads");
+  });
+
+  it("switches from focus view to the classic layout route", () => {
+    render(<LeadsList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Classic view" }));
+
+    expect(mockReplace).toHaveBeenCalledWith("/leads?view=classic");
   });
 
   it("supports hot and mine quick filters from the focus header", async () => {
