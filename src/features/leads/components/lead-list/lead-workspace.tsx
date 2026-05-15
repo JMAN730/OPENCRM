@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatLocation } from "@/features/leads/location";
 import { cn } from "@/lib/utils";
 import {
   Activity as ActivityIcon,
@@ -427,11 +428,14 @@ function EmptyState({ label }: { label: string }) {
 }
 
 export function DetailsCard({ lead }: { lead: Lead }) {
+  const location = formatLocation(lead.city, lead.state);
+
   return (
     <Card title="Details">
       {kv("Stage", lead.status)}
       {kv("Owner", lead.assignedTo?.name ?? lead.assignedTo?.email ?? "Unassigned")}
       {kv("Source", lead.source ?? "-")}
+      {kv("Location", location ?? "-")}
       {kv("Phone", lead.phone ?? "-")}
       {kv("Website", lead.website ?? "-")}
       {kv("Reviews", reviewSummary(lead) ?? "-")}

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import Papa from "papaparse";
 import { prisma } from "@/lib/prisma";
+import { parseCityState } from "@/features/leads/location";
 
 export type ScrapedRow = {
   Name?: string;
@@ -121,6 +122,8 @@ export async function importRowsToLeads(opts: {
     phone: string | null;
     website: string | null;
     mapsUrl: string | null;
+    city: string | null;
+    state: string | null;
     rating: number | null;
     reviewCount: number | null;
     source: string;
@@ -143,6 +146,7 @@ export async function importRowsToLeads(opts: {
     const reviewCountRaw = (row.ReviewCount ?? "").trim();
     const rating = ratingRaw ? Number(ratingRaw) : null;
     const reviewCount = reviewCountRaw ? Number(reviewCountRaw) : null;
+    const location = parseCityState(row.Location);
     const key = dedupKey(company, phone);
     const existing = existingKeys.get(key);
     if (existing) {
@@ -177,6 +181,8 @@ export async function importRowsToLeads(opts: {
       phone,
       website,
       mapsUrl,
+      city: location.city ?? null,
+      state: location.state ?? null,
       rating: Number.isFinite(rating) ? rating : null,
       reviewCount: Number.isFinite(reviewCount) ? reviewCount : null,
       source: sourceParts.join(" / "),

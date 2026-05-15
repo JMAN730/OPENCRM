@@ -96,6 +96,8 @@ describe("LeadModal", () => {
     email: "ava@example.com",
     phone: "5551234567",
     company: "Acme",
+    city: "Tampa",
+    state: "FL",
     website: "acme.com",
     rating: 4.6,
     reviewCount: 128,
@@ -125,6 +127,13 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getAllByText(/128 reviews/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows the normalized lead location", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByText("Location")).toBeInTheDocument();
+    expect(screen.getByText("Tampa, FL")).toBeInTheDocument();
   });
 
   it("allows setting a manual temperature override", () => {

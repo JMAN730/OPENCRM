@@ -17,6 +17,7 @@ import {
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { normalizeState, parseCityState } from "@/features/leads/location";
 
 // Maps common CSV/XLSX header variants to our lead fields
 const FIELD_MAP: Record<string, string> = {
@@ -31,6 +32,7 @@ const FIELD_MAP: Record<string, string> = {
   phone: "phone", "phone number": "phone", mobile: "phone", telephone: "phone",
   // Location
   city: "city", "city/town": "city", town: "city", location: "city",
+  state: "state", province: "state", region: "state",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
   rating: "rating", stars: "rating", "star rating": "rating", reviews: "reviewCount",
@@ -46,6 +48,7 @@ type ParsedLead = {
   phone?: string;
   company?: string;
   city?: string;
+  state?: string;
   website?: string;
   rating?: number;
   reviewCount?: number;
@@ -107,8 +110,12 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
   const rawStatus = lead.status?.toUpperCase();
   const rating = lead.rating ? Number(lead.rating) : undefined;
   const reviewCount = lead.reviewCount ? Number(lead.reviewCount) : undefined;
+  const parsedLocation = parseCityState(lead.city);
+  const state = normalizeState(lead.state) ?? parsedLocation.state;
   return {
     ...lead,
+    city: parsedLocation.state ? parsedLocation.city : lead.city,
+    state,
     rating: typeof rating === "number" && Number.isFinite(rating) ? rating : undefined,
     reviewCount:
       typeof reviewCount === "number" && Number.isFinite(reviewCount)
