@@ -85,6 +85,16 @@ function toDateInputValue(d: Date | string | null | undefined) {
   return format(parsed, "yyyy-MM-dd");
 }
 
+function toTimeInputValue(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return "";
+  const h = parsed.getHours().toString().padStart(2, "0");
+  const m = parsed.getMinutes().toString().padStart(2, "0");
+  if (h === "00" && m === "00") return "";
+  return `${h}:${m}`;
+}
+
 function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined {
   if (!dateStr) return undefined;
   const base = new Date(dateStr);
