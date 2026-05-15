@@ -23,6 +23,7 @@ import {
   fullNameOf,
   initials,
   normalizeWebsiteHref,
+  outcomeLabel,
   OUTCOMES,
   relativeTime,
   reviewSummary,
@@ -152,6 +153,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       ? lead.callOutcome
       : null,
   );
+  const [customOutcomeId, setCustomOutcomeId] = useState<string | null>(
+    lead.customOutcome?.id ?? null,
+  );
+  const [addingOutcome, setAddingOutcome] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newHint, setNewHint] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -181,6 +188,20 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       void utils.leads.getAll.invalidate();
     },
     onError: (error) => toast.error(error.message),
+  });
+  const { data: customOutcomes = [] } = trpc.leads.customOutcomes.list.useQuery(undefined, {
+    staleTime: 30_000,
+  });
+  const createCustomOutcome = trpc.leads.customOutcomes.create.useMutation({
+    onSuccess: (created) => {
+      toast.success("Outcome added");
+      setAddingOutcome(false);
+      setNewLabel("");
+      setNewHint("");
+      void utils.leads.customOutcomes.list.invalidate();
+      chooseOutcome("CUSTOM", created.id);
+    },
+    onError: (e) => toast.error(e.message),
   });
   const updateTemperatureOverride = trpc.leads.updateTemperatureOverride.useMutation({
     onSuccess: () => {
@@ -237,7 +258,8 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
         ? lead.callOutcome
         : null,
     );
-  }, [lead.callOutcome, lead.id]);
+    setCustomOutcomeId(lead.customOutcome?.id ?? null);
+  }, [lead.callOutcome, lead.id, lead.customOutcome?.id]);
 
   useEffect(() => {
     if (!assignOpen) return;
