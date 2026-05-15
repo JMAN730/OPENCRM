@@ -343,7 +343,7 @@ export function LeadsTable({
             </th>
             {show("Lead") && renderSortHeader("Lead", "firstName")}
             {show("Company") && renderSortHeader("Company", "company")}
-            {show("Owner") && <th>Owner</th>}
+            {show("Owner") && renderSortHeader("Owner", "owner")}
             {show("Stage") && renderSortHeader("Stage", "status")}
             {show("Score") && renderSortHeader("Score", "score")}
             {show("Touches") && <th>Touches</th>}
