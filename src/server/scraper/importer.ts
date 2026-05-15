@@ -7,6 +7,7 @@ export type ScrapedRow = {
   Name?: string;
   Phone?: string;
   Website?: string;
+  "Google Maps URL"?: string;
   Rating?: string;
   ReviewCount?: string;
   Category?: string;
@@ -119,6 +120,7 @@ export async function importRowsToLeads(opts: {
     company: string;
     phone: string | null;
     website: string | null;
+    mapsUrl: string | null;
     rating: number | null;
     reviewCount: number | null;
     source: string;
@@ -136,6 +138,7 @@ export async function importRowsToLeads(opts: {
     }
     const phone = (row.Phone ?? "").trim() || null;
     const website = (row.Website ?? "").trim() || null;
+    const mapsUrl = (row["Google Maps URL"] ?? "").trim() || null;
     const ratingRaw = (row.Rating ?? "").trim();
     const reviewCountRaw = (row.ReviewCount ?? "").trim();
     const rating = ratingRaw ? Number(ratingRaw) : null;
@@ -173,6 +176,7 @@ export async function importRowsToLeads(opts: {
       company,
       phone,
       website,
+      mapsUrl,
       rating: Number.isFinite(rating) ? rating : null,
       reviewCount: Number.isFinite(reviewCount) ? reviewCount : null,
       source: sourceParts.join(" / "),

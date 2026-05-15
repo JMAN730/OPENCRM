@@ -6,6 +6,8 @@ import { tasksRouter } from "@/features/tasks/server/router";
 import { dashboardRouter } from "@/features/dashboard/server/router";
 import { authRouter } from "@/features/auth/server/router";
 import { teamsRouter } from "@/features/teams/server/router";
+import { scoringRouter } from "@/features/scoring/server/router";
+import { websitesRouter } from "@/features/websites/server/router";
 
 export const appRouter = createTRPCRouter({
   leads: leadsRouter,
@@ -15,6 +17,8 @@ export const appRouter = createTRPCRouter({
   dashboard: dashboardRouter,
   auth: authRouter,
   teams: teamsRouter,
+  scoring: scoringRouter,
+  websites: websitesRouter,
 });
 
 export type AppRouter = typeof appRouter;
