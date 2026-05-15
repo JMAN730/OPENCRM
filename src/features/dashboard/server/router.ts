@@ -1,4 +1,4 @@
-import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
+import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
 
@@ -144,5 +144,151 @@ export const dashboardRouter = createTRPCRouter({
         return { leads, tasks, scraperActive };
       },
     );
+  }),
+
+  getTeamStats: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
+    return cached(
+      { key: `dashboard:team:${organizationId}`, ttl: DASHBOARD_TTL_SECONDS },
+      async () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const sevenDaysAgo = subDays(today, 6);
+
+        const [
+          totalCalls,
+          callsThisWeek,
+          leadsContacted,
+          totalLeads,
+          hotLeads,
+          memberCallRows,
+          memberLeadRows,
+          memberActivityRows,
+        ] = await Promise.all([
+          ctx.prisma.callLog.count({ where: { lead: { organizationId } } }),
+          ctx.prisma.callLog.count({
+            where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } },
+          }),
+          ctx.prisma.lead.count({ where: { organizationId, status: "CONNECTED" } }),
+          ctx.prisma.lead.count({ where: { organizationId } }),
+          ctx.prisma.lead.count({ where: { organizationId, temperatureOverride: "HOT" } }),
+          // Per-member call counts (all time)
+          ctx.prisma.callLog.groupBy({
+            by: ["userId"],
+            where: { lead: { organizationId } },
+            _count: { id: true },
+          }),
+          // Per-member lead assignment counts
+          ctx.prisma.lead.groupBy({
+            by: ["assignedToId"],
+            where: { organizationId, assignedToId: { not: null } },
+            _count: { id: true },
+          }),
+          // Latest activity per member for "last active"
+          ctx.prisma.activity.findMany({
+            where: { user: { organizationId } },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+            select: { userId: true, createdAt: true },
+          }),
+        ]);
+
+        // Resolve user info for all members who have any data
+        const userIds = new Set<string>([
+          ...memberCallRows.map((r) => r.userId),
+          ...memberLeadRows.map((r) => r.assignedToId!),
+          ...memberActivityRows.map((r) => r.userId),
+        ]);
+
+        const users = await ctx.prisma.user.findMany({
+          where: { id: { in: Array.from(userIds) }, organizationId },
+          select: { id: true, name: true, email: true, image: true },
+        });
+
+        const callMap = new Map(memberCallRows.map((r) => [r.userId, r._count.id]));
+        const leadMap = new Map(memberLeadRows.map((r) => [r.assignedToId!, r._count.id]));
+        // Last active: first (most recent) activity per user
+        const lastActiveMap = new Map<string, Date>();
+        for (const a of memberActivityRows) {
+          if (!lastActiveMap.has(a.userId)) lastActiveMap.set(a.userId, a.createdAt);
+        }
+
+        const memberStats = users.map((u) => ({
+          userId: u.id,
+          name: u.name,
+          email: u.email,
+          image: u.image,
+          callCount: callMap.get(u.id) ?? 0,
+          leadsAssigned: leadMap.get(u.id) ?? 0,
+          lastActive: lastActiveMap.get(u.id)?.toISOString() ?? null,
+        }));
+
+        const conversionRate =
+          totalLeads > 0 ? ((leadsContacted / totalLeads) * 100).toFixed(1) : "0.0";
+
+        return {
+          totalCalls,
+          callsThisWeek,
+          leadsContacted,
+          totalLeads,
+          hotLeads,
+          conversionRate: `${conversionRate}%`,
+          memberStats,
+        };
+      },
+    );
+  }),
+
+  getMyStats: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const organizationId = (ctx.session.user as { organizationId?: string }).organizationId;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = subDays(today, 6);
+
+    const [callsToday, callsThisWeek, leadsAssigned, openTasks, recentActivity] = await Promise.all([
+      ctx.prisma.callLog.count({
+        where: { userId, createdAt: { gte: today, lt: tomorrow } },
+      }),
+      ctx.prisma.callLog.count({
+        where: { userId, createdAt: { gte: sevenDaysAgo } },
+      }),
+      organizationId
+        ? ctx.prisma.lead.count({ where: { organizationId, assignedToId: userId } })
+        : Promise.resolve(0),
+      ctx.prisma.task.count({ where: { userId, completed: false } }),
+      ctx.prisma.activity.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: {
+          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
+        },
+      }),
+    ]);
+
+    return {
+      callsToday,
+      callsThisWeek,
+      leadsAssigned,
+      openTasks,
+      recentActivity: recentActivity.map((a) => ({
+        id: a.id,
+        type: a.type,
+        description: a.description,
+        createdAt: a.createdAt.toISOString(),
+        lead: a.lead
+          ? {
+              id: a.lead.id,
+              name:
+                [a.lead.firstName, a.lead.lastName].filter(Boolean).join(" ") ||
+                a.lead.company ||
+                "(lead)",
+            }
+          : null,
+      })),
+    };
   }),
 });

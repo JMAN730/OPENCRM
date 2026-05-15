@@ -9,8 +9,12 @@ import {
   PhoneOutgoing,
   CheckCheck,
   Plus,
+  Flame,
+  TrendingUp,
+  Activity,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useState } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 
 function formatDueDate(date: string | Date | null | undefined): string {
@@ -144,7 +148,6 @@ function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; coun
     );
   }
 
-  // Ensure they appear in the right order
   const orderedData = LEAD_STATUS_ORDER
     .map((s) => leadsByStatus.find((l) => l.status === s))
     .filter((l): l is { status: string; count: number } => !!l && l.count > 0);
@@ -289,9 +292,159 @@ function CallsCard({
   );
 }
 
+/* ── Team Stats Tab ── */
+function TeamStatsTab() {
+  const { data: teamStats, isLoading } = trpc.dashboard.getTeamStats.useQuery();
+
+  if (isLoading) return <div className="crm-empty">Loading team stats…</div>;
+  if (!teamStats) return <div className="crm-empty">No team data available.</div>;
+
+  const { totalCalls, callsThisWeek, leadsContacted, hotLeads, conversionRate, memberStats } = teamStats;
+
+  return (
+    <div>
+      <div className="crm-kpi-grid">
+        <KPICard label="Total calls" icon={Phone} value={totalCalls.toLocaleString()} />
+        <KPICard label="Calls this week" icon={PhoneOutgoing} value={callsThisWeek.toLocaleString()} />
+        <KPICard label="Leads contacted" icon={Users} value={leadsContacted.toLocaleString()} />
+        <KPICard label="Hot leads" icon={Flame} value={hotLeads.toLocaleString()} />
+        <KPICard label="Conversion rate" icon={TrendingUp} value={conversionRate} />
+      </div>
+
+      <div className="crm-card flush" style={{ marginTop: 20 }}>
+        <div className="crm-card-head">
+          <h3>Activity by team member</h3>
+          <span className="crm-sub">· {memberStats.length} members</span>
+        </div>
+        {memberStats.length === 0 ? (
+          <div className="crm-empty">No activity yet.</div>
+        ) : (
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th className="right">Calls</th>
+                <th className="right">Leads assigned</th>
+                <th className="right">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {memberStats
+                .sort((a, b) => (b.callCount ?? 0) - (a.callCount ?? 0))
+                .map((m) => (
+                  <tr key={m.userId}>
+                    <td>
+                      <div className="crm-contact-cell">
+                        <div className="crm-avatar sm c2" style={{ fontSize: 11 }}>
+                          {(m.name ?? m.email ?? "?")
+                            .split(" ")
+                            .map((p: string) => p[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
+                        </div>
+                        <div className="crm-meta">
+                          <span className="crm-n">{m.name || "—"}</span>
+                          <span style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>{m.email}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="right mono">{m.callCount}</td>
+                    <td className="right mono">{m.leadsAssigned}</td>
+                    <td className="right mono" style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                      {m.lastActive
+                        ? formatDistanceToNow(new Date(m.lastActive), { addSuffix: true })
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── My Stats Tab ── */
+const ACTIVITY_LABEL: Record<string, string> = {
+  LEAD_CREATED: "Created lead",
+  LEAD_ASSIGNED: "Assigned lead",
+  CALL_OUTCOME: "Updated call outcome",
+  CALL_LOGGED: "Logged call",
+  TASK_CREATED: "Added task",
+  TASK_COMPLETED: "Completed task",
+  NOTE_ADDED: "Added note",
+};
+
+function MyStatsTab() {
+  const { data: myStats, isLoading } = trpc.dashboard.getMyStats.useQuery();
+
+  if (isLoading) return <div className="crm-empty">Loading your stats…</div>;
+  if (!myStats) return <div className="crm-empty">No data yet.</div>;
+
+  return (
+    <div>
+      <div className="crm-kpi-grid">
+        <KPICard label="Calls today" icon={Phone} value={myStats.callsToday} />
+        <KPICard label="Calls this week" icon={PhoneOutgoing} value={myStats.callsThisWeek} />
+        <KPICard label="Leads assigned" icon={Users} value={myStats.leadsAssigned} />
+        <KPICard label="Open tasks" icon={CheckCheck} value={myStats.openTasks} />
+      </div>
+
+      <div className="crm-card flush" style={{ marginTop: 20 }}>
+        <div className="crm-card-head">
+          <h3>Recent activity</h3>
+          <span className="crm-sub">· last {myStats.recentActivity.length}</span>
+        </div>
+        {myStats.recentActivity.length === 0 ? (
+          <div className="crm-empty">No recent activity yet.</div>
+        ) : (
+          <div>
+            {myStats.recentActivity.map((a) => (
+              <div
+                key={a.id}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: "10px 16px",
+                  borderTop: "1px solid var(--crm-border)",
+                  alignItems: "flex-start",
+                }}
+              >
+                <Activity size={14} style={{ color: "var(--crm-fg-faint)", marginTop: 2, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13 }}>
+                    <span style={{ color: "var(--crm-fg-faint)" }}>
+                      {ACTIVITY_LABEL[a.type] ?? a.type}
+                    </span>
+                    {a.lead ? <> · <strong>{a.lead.name}</strong></> : null}
+                  </div>
+                  {a.description && (
+                    <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)", marginTop: 1 }}>
+                      {a.description}
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", flexShrink: 0 }}>
+                  {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Dashboard Page ── */
+type DashboardTab = "overview" | "team" | "my-stats";
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
@@ -307,6 +460,12 @@ export default function DashboardPage() {
   const leadsByStatus = stats?.leadsByStatus ?? [];
   const recentCalls = stats?.recentCalls ?? [];
   const statusDist = stats?.charts.statusDistribution ?? [];
+
+  const tabs: { id: DashboardTab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "team", label: "Team" },
+    { id: "my-stats", label: "My Stats" },
+  ];
 
   return (
     <DashboardLayout>
@@ -325,21 +484,52 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="crm-kpi-grid">
-          <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} />
-          <KPICard label="Total leads" icon={Users} value={totalLeads} />
-          <KPICard label="Calls today" icon={Phone} value={callsToday} />
+        {/* Tab navigation */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid var(--crm-border)", paddingBottom: 0 }}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "8px 16px",
+                fontSize: 14,
+                fontWeight: activeTab === tab.id ? 600 : 400,
+                color: activeTab === tab.id ? "var(--crm-fg)" : "var(--crm-fg-faint)",
+                background: "none",
+                border: "none",
+                borderBottom: activeTab === tab.id ? "2px solid var(--crm-accent)" : "2px solid transparent",
+                cursor: "pointer",
+                marginBottom: -1,
+                transition: "color 0.15s, border-color 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="crm-grid-row">
-          <CallsCard recentCalls={recentCalls} callsToday={callsToday} />
-          <PhoneReachCard data={statusDist} />
-        </div>
+        {activeTab === "overview" && (
+          <>
+            <div className="crm-kpi-grid">
+              <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} />
+              <KPICard label="Total leads" icon={Users} value={totalLeads} />
+              <KPICard label="Calls today" icon={Phone} value={callsToday} />
+            </div>
 
-        <div className="crm-grid-row">
-          <PipelineCard leadsByStatus={leadsByStatus} />
-          <TasksCard />
-        </div>
+            <div className="crm-grid-row">
+              <CallsCard recentCalls={recentCalls} callsToday={callsToday} />
+              <PhoneReachCard data={statusDist} />
+            </div>
+
+            <div className="crm-grid-row">
+              <PipelineCard leadsByStatus={leadsByStatus} />
+              <TasksCard />
+            </div>
+          </>
+        )}
+
+        {activeTab === "team" && <TeamStatsTab />}
+        {activeTab === "my-stats" && <MyStatsTab />}
       </div>
     </DashboardLayout>
   );

@@ -50,6 +50,7 @@ const NAV_GROUPS = [
     title: null,
     items: [
       { id: "settings", label: "Settings", href: "/settings", icon: Settings },
+      { id: "scoring", label: "Lead Scoring", href: "/settings/scoring", icon: BarChart3 },
     ],
   },
 ];
