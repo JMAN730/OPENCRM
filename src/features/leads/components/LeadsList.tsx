@@ -59,6 +59,13 @@ function leadsHref(
   return query ? `/leads?${query}` : "/leads";
 }
 
+function isEditableShortcutTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+  );
+}
+
 export function LeadsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -327,9 +334,11 @@ export function LeadsList() {
       if (event.key === "Escape") {
         setSelectedLeadId(null);
       } else if (event.key === "ArrowDown" || event.key === "j") {
+        if (isEditableShortcutTarget(event.target)) return;
         event.preventDefault();
         nextLead();
       } else if (event.key === "ArrowUp" || event.key === "k") {
+        if (isEditableShortcutTarget(event.target)) return;
         event.preventDefault();
         previousLead();
       }
