@@ -4,6 +4,7 @@ import { trpc } from "@/app/_trpc/client";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
@@ -26,11 +27,23 @@ export function LeadsList() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [stageFilter, setStageFilter] = useState(new Set<string>());
+  const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
+  const [scoreMin, setScoreMin] = useState<number | null>(null);
+  const [scoreMax, setScoreMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<LeadSort>({ key: "createdAt", dir: "desc" });
   const [selected, setSelected] = useState(new Set<string>());
   const [showAdd, setShowAdd] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowAdd(true);
+      router.replace("/leads");
+    }
+  }, [searchParams, router]);
 
   const { data: session } = useSession();
   const userRole = (session?.user as SessionUser | undefined)?.role;
@@ -118,6 +131,9 @@ export function LeadsList() {
   const filtered = useMemo(() => {
     let rows = allLeads.slice();
     if (stageFilter.size) rows = rows.filter((lead) => stageFilter.has(lead.status));
+    if (ownerFilter.size) rows = rows.filter((lead) => ownerFilter.has(lead.assignedToId ?? ""));
+    if (scoreMin !== null) rows = rows.filter((lead) => scoreOf(lead) >= scoreMin);
+    if (scoreMax !== null) rows = rows.filter((lead) => scoreOf(lead) <= scoreMax);
     rows.sort((left, right) => {
       const leftValue =
         sortBy.key === "score" ? scoreOf(left) : (left[sortBy.key as keyof Lead] ?? "");
@@ -130,7 +146,7 @@ export function LeadsList() {
       return sortBy.dir === "asc" ? comparison : -comparison;
     });
     return rows;
-  }, [allLeads, sortBy, stageFilter]);
+  }, [allLeads, sortBy, stageFilter, ownerFilter, scoreMin, scoreMax]);
 
   const toggleStage = (stage: string) => {
     const next = new Set(stageFilter);
@@ -262,6 +278,10 @@ export function LeadsList() {
           isFetchingNextPage={isFetchingNextPage}
           isLoading={isLoading}
           canGoPrevious={cursorHistory.length > 0}
+          members={assignableUsers}
+          ownerFilter={ownerFilter}
+          scoreMin={scoreMin}
+          scoreMax={scoreMax}
           onClearStageFilters={() => setStageFilter(new Set())}
           onDeleteLead={(leadId) => {
             if (confirm("Delete this lead?")) {
@@ -271,6 +291,16 @@ export function LeadsList() {
           onFetchNextPage={goToNextPage}
           onFetchPreviousPage={goToPreviousPage}
           onOpenLead={(lead) => setSelectedLeadId(lead.id)}
+          onOwnerToggle={(id) => {
+            const next = new Set(ownerFilter);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            setOwnerFilter(next);
+          }}
+          onScoreChange={(min, max) => {
+            setScoreMin(min);
+            setScoreMax(max);
+          }}
           onSearchChange={(value) => {
             setSearch(value);
             setPageCursor(undefined);
