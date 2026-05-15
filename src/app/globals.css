@@ -136,6 +136,7 @@
 .crm-app {
   --crm-bg: oklch(98.6% 0.006 80);
   --crm-surface: #ffffff;
+  --crm-bg-card: #ffffff;
   --crm-surface-2: oklch(97.5% 0.006 80);
   --crm-surface-hover: oklch(96% 0.008 80);
   --crm-border: oklch(91% 0.008 80);
@@ -188,6 +189,20 @@
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
+}
+
+.dark .crm-app {
+  --crm-bg: oklch(14.5% 0 0);
+  --crm-surface: oklch(20.5% 0 0);
+  --crm-bg-card: oklch(20.5% 0 0);
+  --crm-surface-2: oklch(18% 0 0);
+  --crm-surface-hover: oklch(24% 0 0);
+  --crm-border: oklch(100% 0 0 / 10%);
+  --crm-border-soft: oklch(100% 0 0 / 7%);
+  --crm-border-strong: oklch(100% 0 0 / 18%);
+  --crm-fg: oklch(98.5% 0 0);
+  --crm-fg-muted: oklch(70% 0 0);
+  --crm-fg-faint: oklch(50% 0 0);
 }
 
 /* ===== Shell ===== */
