@@ -27,6 +27,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { getLeadStatusColor } from "@/features/leads/utils";
+import { formatLocation } from "@/features/leads/location";
 
 type Lead = {
   id: string;
@@ -36,6 +37,7 @@ type Lead = {
   phone?: string | null;
   company?: string | null;
   city?: string | null;
+  state?: string | null;
   website?: string | null;
   status: string;
   source?: string | null;
@@ -63,6 +65,7 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
   const [callOutcome, setCallOutcome] = useState<CallOutcome>(lead.callOutcome ?? "NOT_CONTACTED");
   const [callNotes, setCallNotes] = useState(lead.callNotes || "");
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
+  const location = formatLocation(lead.city, lead.state);
 
   const utils = trpc.useUtils();
   const updateOutcome = trpc.leads.updateCallOutcome.useMutation({
@@ -168,23 +171,21 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
             </div>
           )}
 
-          {lead.city && (
+          {location && (
             <div className="flex items-start gap-3">
               <MapPin size={15} className="text-muted-foreground mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground">City</p>
+                <p className="text-xs text-muted-foreground">Location</p>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{lead.city}</p>
-                  {(lead.city || lead.company) && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.company, lead.city].filter(Boolean).join(" "))}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline underline-offset-4"
-                    >
-                      View on Maps
-                    </a>
-                  )}
+                  <p className="text-sm font-medium">{location}</p>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.company, location].filter(Boolean).join(" "))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline underline-offset-4"
+                  >
+                    View on Maps
+                  </a>
                 </div>
               </div>
             </div>

@@ -190,6 +190,22 @@ describe("importRowsToLeads", () => {
     expect(inserted.source).toBe("GoogleMaps / Cleaning / Toledo");
   });
 
+  it("parses city and state from scraped locations", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", Location: "Tampa, Florida" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    expect(inserted.city).toBe("Tampa");
+    expect(inserted.state).toBe("FL");
+  });
+
   it("falls back to just 'GoogleMaps' when category and location are missing", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });

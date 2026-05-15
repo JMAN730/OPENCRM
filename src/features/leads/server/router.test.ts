@@ -21,7 +21,7 @@ describe("leadsRouter", () => {
       expect(result).toEqual({ items: [], nextCursor: null });
     });
 
-    it("applies search across company, name, email, phone", async () => {
+    it("applies general search across company, name, email, phone", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
 
       await caller.leads.getAll({ search: "acme" });
@@ -34,6 +34,41 @@ describe("leadsRouter", () => {
         { email: { contains: "acme", mode: "insensitive" } },
         { phone: { contains: "acme", mode: "insensitive" } },
       ]);
+    });
+
+    it("uses city and normalized state only when search includes city plus state", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "Tampa FL" });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toBeUndefined();
+      expect(args.where.AND).toEqual([
+        { state: "FL" },
+        { city: { contains: "Tampa", mode: "insensitive" } },
+      ]);
+    });
+
+    it("normalizes full state names in location search", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "Tampa, Florida" });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.AND).toEqual([
+        { state: "FL" },
+        { city: { contains: "Tampa", mode: "insensitive" } },
+      ]);
+    });
+
+    it("uses state only when search is a state name or abbreviation", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "FL" });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toBeUndefined();
+      expect(args.where.AND).toEqual([{ state: "FL" }]);
     });
 
     it("orders results by (createdAt desc, id desc) for stable cursor pagination", async () => {
