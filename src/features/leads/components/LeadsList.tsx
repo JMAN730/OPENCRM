@@ -135,10 +135,14 @@ export function LeadsList() {
     if (scoreMin !== null) rows = rows.filter((lead) => scoreOf(lead) >= scoreMin);
     if (scoreMax !== null) rows = rows.filter((lead) => scoreOf(lead) <= scoreMax);
     rows.sort((left, right) => {
-      const leftValue =
-        sortBy.key === "score" ? scoreOf(left) : (left[sortBy.key as keyof Lead] ?? "");
-      const rightValue =
-        sortBy.key === "score" ? scoreOf(right) : (right[sortBy.key as keyof Lead] ?? "");
+      const getValue = (lead: Lead) => {
+        if (sortBy.key === "score") return scoreOf(lead);
+        if (sortBy.key === "owner")
+          return lead.assignedTo?.name || lead.assignedTo?.email || "";
+        return lead[sortBy.key as keyof Lead] ?? "";
+      };
+      const leftValue = getValue(left);
+      const rightValue = getValue(right);
       const comparison =
         typeof leftValue === "number" && typeof rightValue === "number"
           ? leftValue - rightValue
