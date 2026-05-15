@@ -18,13 +18,17 @@ const SORT_OPTIONS: Array<{ key: LeadSortKey; label: string }> = [
   { key: "company", label: "Company" },
   { key: "status", label: "Stage" },
   { key: "score", label: "Score" },
+  { key: "starred", label: "Favorites" },
 ];
+
+type CustomOutcomeTab = { id: string; label: string };
 
 type LeadsManagementBarProps = {
   allLeadsCount: number;
   filteredCount: number;
   filterOpen: boolean;
   columnsOpen: boolean;
+  customOutcomes?: CustomOutcomeTab[];
   importAction: ReactNode;
   members: AssignableUser[];
   ownerFilter: Set<string>;
@@ -52,6 +56,7 @@ export function LeadsManagementBar({
   filteredCount,
   filterOpen,
   columnsOpen,
+  customOutcomes,
   importAction,
   members,
   ownerFilter,
@@ -291,6 +296,17 @@ export function LeadsManagementBar({
           >
             {STATUS_LABELS[stage]?.label ?? stage}
             <span className="crm-chip-count">{stageCounts[stage] ?? 0}</span>
+          </button>
+        ))}
+        {customOutcomes?.map((co) => (
+          <button
+            key={co.id}
+            className="crm-chip"
+            aria-pressed={stageFilter.has(`CUSTOM:${co.id}`)}
+            onClick={() => onToggleStage(`CUSTOM:${co.id}`)}
+          >
+            {co.label}
+            <span className="crm-chip-count">{stageCounts[`CUSTOM:${co.id}`] ?? 0}</span>
           </button>
         ))}
       </div>

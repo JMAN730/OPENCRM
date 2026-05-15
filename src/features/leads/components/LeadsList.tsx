@@ -123,6 +123,9 @@ export function LeadsList() {
   } = trpc.leads.getAll.useQuery({ search: debouncedSearch, limit: 100, cursor: pageCursor });
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
+  const { data: customOutcomes } = trpc.leads.customOutcomes.list.useQuery(undefined, {
+    staleTime: 60_000,
+  });
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
@@ -203,13 +206,27 @@ export function LeadsList() {
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const stage of STAGE_ORDER) counts[stage] = 0;
-    for (const lead of allLeads) counts[lead.status] = (counts[lead.status] ?? 0) + 1;
+    for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
+    for (const lead of allLeads) {
+      counts[lead.status] = (counts[lead.status] ?? 0) + 1;
+      if (lead.callOutcome === "CUSTOM" && lead.customOutcomeId) {
+        counts[`CUSTOM:${lead.customOutcomeId}`] = (counts[`CUSTOM:${lead.customOutcomeId}`] ?? 0) + 1;
+      }
+    }
     return counts;
-  }, [allLeads]);
+  }, [allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
     const rows = allLeads
-      .filter((lead) => (stageFilter.size ? stageFilter.has(lead.status) : true))
+      .filter((lead) => {
+        if (!stageFilter.size) return true;
+        const matchesStatus = stageFilter.has(lead.status);
+        const matchesCustom =
+          lead.callOutcome === "CUSTOM" &&
+          lead.customOutcomeId != null &&
+          stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
+        return matchesStatus || matchesCustom;
+      })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
       .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
       .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true));
@@ -218,6 +235,7 @@ export function LeadsList() {
       const getValue = (lead: Lead) => {
         if (sortBy.key === "score") return scoreOf(lead);
         if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
+        if (sortBy.key === "starred") return lead.starred ? 1 : 0;
         return lead[sortBy.key as keyof Lead] ?? "";
       };
 
@@ -479,6 +497,7 @@ export function LeadsList() {
               filteredCount={focusFilteredLeads.length}
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
+              customOutcomes={customOutcomes}
               importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
               members={assignableUsers}
               ownerFilter={ownerFilter}
@@ -555,6 +574,7 @@ export function LeadsList() {
 
             <LeadsTable
               allLeadsCount={allLeads.length}
+              customOutcomes={customOutcomes}
               filteredLeads={scopedLeads}
               hasNextPage={hasNextPage}
               isFetchingNextPage={isFetchingNextPage}
