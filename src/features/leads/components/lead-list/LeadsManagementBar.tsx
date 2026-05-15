@@ -18,6 +18,7 @@ const SORT_OPTIONS: Array<{ key: LeadSortKey; label: string }> = [
   { key: "company", label: "Company" },
   { key: "status", label: "Stage" },
   { key: "score", label: "Score" },
+  { key: "starred", label: "Favorites" },
 ];
 
 type LeadsManagementBarProps = {
