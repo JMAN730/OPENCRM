@@ -5,6 +5,8 @@ import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
+import { UserPlus } from "lucide-react";
+import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
 
 const NAV = ["Profile", "Workspace", "Members", "Integrations", "Billing", "API", "Audit log"];
 
@@ -28,6 +30,40 @@ export default function SettingsPage() {
       toast.error(err.message || "Failed to update profile");
     },
   });
+
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const isAdmin = userRole === "ADMIN";
+
+  const { data: members = [], isLoading: membersLoading } = trpc.teams.organizationMembers.useQuery(
+    undefined,
+    { enabled: active === "Members" },
+  );
+
+  const utils = trpc.useUtils();
+
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteRole, setInviteRole] = useState<InviteRole>("USER");
+
+  const inviteUser = trpc.teams.inviteUser.useMutation({
+    onSuccess: () => {
+      toast.success("User added to organization");
+      setShowInviteForm(false);
+      setInviteName("");
+      setInviteEmail("");
+      setInvitePassword("");
+      setInviteRole("USER");
+      void utils.teams.organizationMembers.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to add user"),
+  });
+
+  const parseInviteRole = (value: string): InviteRole => {
+    if (value === "MANAGER" || value === "ADMIN") return value;
+    return "USER";
+  };
 
   const deleteAccount = trpc.auth.deleteAccount.useMutation({
     onSuccess: async () => {
@@ -54,7 +90,7 @@ export default function SettingsPage() {
   const profileRows: [string, string][] = [
     ["Name",  userName],
     ["Email", userEmail],
-    ["Role",  (session?.user as { role?: string } | undefined)?.role ?? "USER"],
+    ["Role",  userRole ?? "USER"],
   ];
 
   const workspaceRows: [string, string][] = [
@@ -217,6 +253,32 @@ export default function SettingsPage() {
                   </div>
                 )}
               </>
+            ) : active === "Members" ? (
+              <MembersPanel
+                isAdmin={isAdmin}
+                inviteEmail={inviteEmail}
+                inviteIsPending={inviteUser.isPending}
+                inviteName={inviteName}
+                invitePassword={invitePassword}
+                inviteRole={inviteRole}
+                members={members}
+                membersLoading={membersLoading}
+                onInvite={() =>
+                  inviteUser.mutate({
+                    name: inviteName.trim(),
+                    email: inviteEmail.trim(),
+                    password: invitePassword,
+                    role: inviteRole,
+                  })
+                }
+                parseInviteRole={parseInviteRole}
+                setInviteEmail={setInviteEmail}
+                setInviteName={setInviteName}
+                setInvitePassword={setInvitePassword}
+                setInviteRole={setInviteRole}
+                setShowInviteForm={setShowInviteForm}
+                showInviteForm={showInviteForm}
+              />
             ) : (
               <div style={{ padding: "32px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13, borderTop: "1px solid var(--crm-border)" }}>
                 Coming soon
@@ -226,5 +288,149 @@ export default function SettingsPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+type OrganizationMember = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  teamId: string | null;
+  team: { id: string; name: string } | null;
+};
+
+type MembersPanelProps = {
+  isAdmin: boolean;
+  inviteEmail: string;
+  inviteIsPending: boolean;
+  inviteName: string;
+  invitePassword: string;
+  inviteRole: InviteRole;
+  members: OrganizationMember[];
+  membersLoading: boolean;
+  onInvite: () => void;
+  parseInviteRole: (value: string) => InviteRole;
+  setInviteEmail: (v: string) => void;
+  setInviteName: (v: string) => void;
+  setInvitePassword: (v: string) => void;
+  setInviteRole: (v: InviteRole) => void;
+  setShowInviteForm: (v: boolean) => void;
+  showInviteForm: boolean;
+};
+
+const ROLE_BADGE: Record<string, { label: string; color: string }> = {
+  ADMIN:   { label: "Admin",   color: "var(--crm-accent, #6366f1)" },
+  MANAGER: { label: "Manager", color: "var(--crm-pos, #16a34a)" },
+  USER:    { label: "User",    color: "var(--crm-fg-muted)" },
+};
+
+function MembersPanel({
+  isAdmin,
+  inviteEmail,
+  inviteIsPending,
+  inviteName,
+  invitePassword,
+  inviteRole,
+  members,
+  membersLoading,
+  onInvite,
+  parseInviteRole,
+  setInviteEmail,
+  setInviteName,
+  setInvitePassword,
+  setInviteRole,
+  setShowInviteForm,
+  showInviteForm,
+}: MembersPanelProps) {
+  const canInvite =
+    inviteName.trim().length > 0 &&
+    inviteEmail.trim().length > 0 &&
+    invitePassword.length >= 8 &&
+    !inviteIsPending;
+
+  return (
+    <div>
+      {isAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          {showInviteForm ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", padding: "12px 0", borderTop: "1px solid var(--crm-border)" }}>
+              <input
+                autoFocus
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Full name"
+                style={{ flex: "1 1 140px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
+                value={inviteName}
+              />
+              <input
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="Email address"
+                style={{ flex: "1 1 180px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
+                type="email"
+                value={inviteEmail}
+              />
+              <input
+                onChange={(e) => setInvitePassword(e.target.value)}
+                placeholder="Password (min 8 chars)"
+                style={{ flex: "1 1 160px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
+                type="password"
+                value={invitePassword}
+              />
+              <select
+                onChange={(e) => setInviteRole(parseInviteRole(e.target.value))}
+                style={{ padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
+                value={inviteRole}
+              >
+                <option value="USER">User</option>
+                <option value="MANAGER">Manager</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+              <button className="crm-btn primary" disabled={!canInvite} onClick={onInvite} style={{ height: 32, padding: "0 14px" }}>
+                {inviteIsPending ? "Adding…" : "Add user"}
+              </button>
+              <button className="crm-btn" onClick={() => setShowInviteForm(false)} style={{ height: 32, padding: "0 14px" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button className="crm-btn" onClick={() => setShowInviteForm(true)} style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <UserPlus size={13} /> Add member
+            </button>
+          )}
+        </div>
+      )}
+
+      {membersLoading ? (
+        <div style={{ padding: "24px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
+      ) : members.length === 0 ? (
+        <div style={{ padding: "24px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13, borderTop: "1px solid var(--crm-border)" }}>No members found.</div>
+      ) : (
+        <div style={{ borderTop: "1px solid var(--crm-border)" }}>
+          {members.map((member) => {
+            const badge = ROLE_BADGE[member.role] ?? ROLE_BADGE.USER;
+            return (
+              <div
+                key={member.id}
+                style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr auto", gap: 12, alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--crm-border)" }}
+              >
+                <div className={`crm-avatar sm ${avatarClass(member.name)}`} style={{ flexShrink: 0 }}>
+                  {initials(member.name || member.email)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-fg)" }}>{member.name ?? "—"}</div>
+                  <div style={{ fontSize: 12, color: "var(--crm-fg-muted)" }}>{member.email ?? "—"}</div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--crm-fg-muted)" }}>
+                  {member.team?.name ?? <span style={{ color: "var(--crm-fg-faint)" }}>No team</span>}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: badge.color, background: `color-mix(in srgb, ${badge.color} 12%, transparent)`, padding: "2px 8px", borderRadius: 999 }}>
+                  {badge.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
