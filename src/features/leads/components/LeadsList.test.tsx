@@ -184,6 +184,9 @@ vi.mock("@/app/_trpc/client", () => ({
       bulkDelete: {
         useMutation: vi.fn(() => ({ mutateAsync: bulkDeleteMutateAsync, isPending: false })),
       },
+      customOutcomes: {
+        list: { useQuery: vi.fn(() => ({ data: [] })) },
+      },
     },
     tasks: {
       getDueToday: {
