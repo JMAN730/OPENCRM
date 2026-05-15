@@ -1,4 +1,5 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
+import { customOutcomesRouter } from "./customOutcomesRouter";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { Prisma, type LeadStatus, type LeadTemperatureOverride } from "@prisma/client";
@@ -33,13 +34,15 @@ const leadInputSchema = z.object({
 });
 
 const callOutcomeSchema = z.object({
-  callOutcome: z.enum(["NOT_CONTACTED", "ANSWERED", "HUNG_UP", "NO_ANSWER", "AI_VOICEMAIL"]),
+  callOutcome: z.enum(["NOT_CONTACTED", "ANSWERED", "HUNG_UP", "NO_ANSWER", "AI_VOICEMAIL", "CUSTOM"]),
+  customOutcomeId: z.string().optional(),
   callNotes: z.string().max(1000).optional(),
 });
 type CallOutcomeInput = z.infer<typeof callOutcomeSchema>["callOutcome"];
 
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
+  customOutcome: { select: { id: true, label: true, hint: true } },
 } as const;
 
 export const leadsRouter = createTRPCRouter({
@@ -366,12 +369,27 @@ export const leadsRouter = createTRPCRouter({
         where: { id: input.id, ...leadWhereFromScope(scope) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      if (input.callOutcome === "CUSTOM") {
+        if (!input.customOutcomeId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "customOutcomeId is required for CUSTOM outcome." });
+        }
+        const customOutcome = await ctx.prisma.customOutcome.findFirst({
+          where: { id: input.customOutcomeId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!customOutcome) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Custom outcome not found." });
+        }
+      }
+
       const outcomeToStatus: Record<CallOutcomeInput, LeadStatus> = {
         ANSWERED:      "CONNECTED",
         AI_VOICEMAIL:  "AI_VOICEMAIL",
         NO_ANSWER:     "NO_ANSWER",
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
+        CUSTOM:        "CONNECTED",
       };
       const updated = await ctx.prisma.lead.update({
         where: { id: input.id },
@@ -379,6 +397,7 @@ export const leadsRouter = createTRPCRouter({
           callOutcome: input.callOutcome,
           callNotes: input.callNotes,
           status: outcomeToStatus[input.callOutcome],
+          customOutcomeId: input.customOutcomeId ?? null,
         },
       });
       await logActivity(ctx.prisma, {
@@ -588,4 +607,6 @@ export const leadsRouter = createTRPCRouter({
         include: { user: { select: { id: true, name: true, email: true, image: true } } },
       });
     }),
+
+  customOutcomes: customOutcomesRouter,
 });
