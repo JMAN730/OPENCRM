@@ -157,6 +157,7 @@ async def scrape_gmaps(browser_context, search_query, max_results=50):
                 "Website": details["website"],
                 "Rating": details["rating"],
                 "ReviewCount": details["review_count"],
+                "Google Maps URL": place["URL"],
             })
     
     return final_results
@@ -216,6 +217,7 @@ async def process_category(browser_context, http_client, location, category, lim
                 "Website": b.get("Website"),
                 "Rating": b.get("Rating"),
                 "ReviewCount": b.get("ReviewCount"),
+                "Google Maps URL": b.get("Google Maps URL"),
             }
         return None
 

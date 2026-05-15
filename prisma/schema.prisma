@@ -115,6 +115,7 @@ model Lead {
   city                String?
   title               String?
   website             String?
+  mapsUrl             String?
   rating              Float?
   reviewCount         Int?
   status              LeadStatus               @default(NOT_CONTACTED)

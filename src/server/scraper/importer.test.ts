@@ -264,6 +264,36 @@ describe("importRowsToLeads", () => {
     expect(call.where.company.mode).toBe("insensitive");
   });
 
+  it("imports Google Maps URL when present in scraped rows", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", "Google Maps URL": "https://www.google.com/maps/place/acme" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    expect(inserted.mapsUrl).toBe("https://www.google.com/maps/place/acme");
+  });
+
+  it("sets mapsUrl to null when Google Maps URL is absent", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    expect(inserted.mapsUrl).toBeNull();
+  });
+
   it("imports rating and review count when present in scraped rows", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
