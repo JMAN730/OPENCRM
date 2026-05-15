@@ -399,7 +399,7 @@ function DeleteConfirm({ taskTitle, onConfirm, onClose, pending }: { taskTitle: 
           <div>
             <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700 }}>Delete Task</h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--crm-fg-muted)" }}>
-              Are you sure you want to delete <strong>"{taskTitle}"</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>&quot;{taskTitle}&quot;</strong>? This action cannot be undone.
             </p>
           </div>
         </div>
