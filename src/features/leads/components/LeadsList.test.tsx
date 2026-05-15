@@ -472,6 +472,48 @@ describe("LeadsList", () => {
     });
   });
 
+  it("filters favorites to only starred leads from the focus sort control", async () => {
+    leadPages.root.items = [
+      makeLead({
+        id: "lead-starred",
+        company: "Starred Studio",
+        starred: true,
+        createdAt: "2026-05-14T13:00:00.000Z",
+      }),
+      makeLead({
+        id: "lead-unstarred",
+        company: "Unstarred Works",
+        starred: false,
+        createdAt: "2026-05-14T12:00:00.000Z",
+      }),
+      makeLead({
+        id: "lead-null-starred",
+        company: "Null Favorite Co",
+        starred: null,
+        createdAt: "2026-05-14T11:00:00.000Z",
+      }),
+      makeLead({
+        id: "lead-missing-starred",
+        company: "Missing Favorite LLC",
+        createdAt: "2026-05-14T10:00:00.000Z",
+      }),
+    ];
+
+    render(<LeadsList />);
+    const allLeadsSection = getAllLeadsSection();
+
+    fireEvent.change(screen.getByLabelText("Sort leads by"), {
+      target: { value: "starred" },
+    });
+
+    await waitFor(() => {
+      expect(within(allLeadsSection).getByText("Starred Studio")).toBeInTheDocument();
+      expect(within(allLeadsSection).queryByText("Unstarred Works")).not.toBeInTheDocument();
+      expect(within(allLeadsSection).queryByText("Null Favorite Co")).not.toBeInTheDocument();
+      expect(within(allLeadsSection).queryByText("Missing Favorite LLC")).not.toBeInTheDocument();
+    });
+  });
+
   it("supports column toggling, lead actions, and opening a lead from the card list", async () => {
     render(<LeadsList />);
     const allLeadsSection = getAllLeadsSection();

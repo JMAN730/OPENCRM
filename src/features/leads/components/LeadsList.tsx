@@ -212,12 +212,14 @@ export function LeadsList() {
       .filter((lead) => (stageFilter.size ? stageFilter.has(lead.status) : true))
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
       .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
-      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true));
+      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true))
+      .filter((lead) => (sortBy.key === "starred" ? lead.starred === true : true));
 
     rows.sort((left, right) => {
       const getValue = (lead: Lead) => {
         if (sortBy.key === "score") return scoreOf(lead);
         if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
+        if (sortBy.key === "starred") return lead.createdAt;
         return lead[sortBy.key as keyof Lead] ?? "";
       };
 
@@ -228,6 +230,7 @@ export function LeadsList() {
           ? leftValue - rightValue
           : String(leftValue).localeCompare(String(rightValue));
 
+      if (sortBy.key === "starred") return -comparison;
       return sortBy.dir === "asc" ? comparison : -comparison;
     });
 
