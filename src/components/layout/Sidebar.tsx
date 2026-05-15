@@ -13,7 +13,6 @@ import {
   Settings,
   BarChart3,
   Bot,
-  Search,
   ChevronDown,
   LogOut,
   User,
@@ -112,14 +111,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
           <ChevronDown size={12} style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(90deg)", transition: "transform 0.2s" }} />
         </button>
       </div>
-
-      {!collapsed && (
-        <div className="crm-nav-search" role="button" tabIndex={0}>
-          <Search size={14} />
-          <span>Quick find</span>
-          <kbd>⌘K</kbd>
-        </div>
-      )}
 
       {NAV_GROUPS.map((group, gi) => (
         <div key={gi}>
@@ -230,4 +221,3 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
     </aside>
   );
 }
-
