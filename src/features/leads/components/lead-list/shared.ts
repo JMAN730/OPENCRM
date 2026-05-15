@@ -1,3 +1,5 @@
+"use client";
+
 export type Lead = {
   id: string;
   firstName?: string | null;
@@ -22,9 +24,17 @@ export type Lead = {
     email: string | null;
     image: string | null;
   } | null;
+  customOutcome?: {
+    id: string;
+    label: string;
+    hint?: string | null;
+  } | null;
 };
 
-export type SessionUser = { role?: string };
+export type SessionUser = {
+  id?: string;
+  role?: string;
+};
 
 export type LeadNote = {
   id: string;
@@ -43,6 +53,19 @@ export type AssignableUser = {
 export type LeadTemperature = "hot" | "warm" | "cool";
 export type LeadSortKey = keyof Lead | "score" | "owner";
 export type LeadSort = { key: LeadSortKey; dir: "asc" | "desc" };
+
+export const LEAD_VISIBLE_COLUMNS = [
+  "Lead",
+  "Company",
+  "Owner",
+  "Stage",
+  "Score",
+  "Touches",
+  "Next action",
+  "Last touch",
+] as const;
+
+export type LeadVisibleColumn = (typeof LEAD_VISIBLE_COLUMNS)[number];
 
 export const STATUS_LABELS: Record<string, { cls: string; label: string }> = {
   NOT_CONTACTED: { cls: "plain", label: "Not Contacted" },
@@ -93,6 +116,18 @@ export const OUTCOMES = [
   },
 ] as const;
 
+export function outcomeLabel(lead: Lead): string | null {
+  if (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED") return null;
+  if (lead.callOutcome === "CUSTOM") return lead.customOutcome?.label ?? "Custom";
+  return OUTCOMES.find((o) => o.id === lead.callOutcome)?.label ?? null;
+}
+
+function engagementKeyOf(lead: Lead) {
+  return lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
+    ? lead.callOutcome
+    : lead.status;
+}
+
 export function fullNameOf(lead: Lead) {
   return [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.company || "Lead";
 }
@@ -120,10 +155,7 @@ export function scoreOf(lead: Lead): number {
   const volumeScore =
     reviewCount == null ? 0 : Math.min(25, Math.round(Math.log10(reviewCount + 1) * 12));
 
-  const engagementKey = lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
-    ? lead.callOutcome
-    : lead.status;
-
+  const engagementKey = engagementKeyOf(lead);
   const engagementScore =
     engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
       ? 25
@@ -170,11 +202,7 @@ export function reviewSummary(lead: Lead): string | null {
 }
 
 export function tempLabel(temperature: LeadTemperature) {
-  return temperature === "hot"
-    ? "Hot"
-    : temperature === "warm"
-      ? "Warm"
-      : "Cool";
+  return temperature === "hot" ? "Hot" : temperature === "warm" ? "Warm" : "Cool";
 }
 
 export function relativeTime(iso: string | Date) {
@@ -195,6 +223,44 @@ export function relativeTime(iso: string | Date) {
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+export function touchesOf(lead: Lead) {
+  const engagementKey = engagementKeyOf(lead);
+  const baseline =
+    engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
+      ? 5
+      : engagementKey === "AI_VOICEMAIL"
+        ? 3
+        : engagementKey === "NO_ANSWER"
+          ? 2
+          : engagementKey === "HUNG_UP"
+            ? 2
+            : 0;
+
+  const noteBoost = lead.callNotes?.trim() ? 1 : 0;
+  return Math.min(6, baseline + noteBoost);
+}
+
+export function nextActionForLead(
+  lead: Lead,
+): { label?: string; state?: "due" | "today" | "upcoming" } {
+  const engagementKey = engagementKeyOf(lead);
+
+  if (engagementKey === "CONNECTED" || engagementKey === "ANSWERED") {
+    return { label: "Follow up", state: "today" };
+  }
+  if (engagementKey === "AI_VOICEMAIL") {
+    return { label: "Retry voicemail", state: "upcoming" };
+  }
+  if (engagementKey === "NO_ANSWER") {
+    return { label: "Retry call", state: "today" };
+  }
+  if (engagementKey === "HUNG_UP") {
+    return { label: "Re-engage", state: "due" };
+  }
+
+  return { label: "First touch", state: "today" };
 }
 
 export function chunk<T>(items: T[], size: number): T[][] {
