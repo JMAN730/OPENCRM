@@ -27,14 +27,17 @@ import {
   OUTCOMES,
   relativeTime,
   reviewSummary,
+  scoreBreakdown,
   scoreOf,
   SessionUser,
   tempLabel,
   type AssignableUser,
   type Lead,
   type LeadNote,
+  type ScoringRuleConfig,
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
+import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
 
 function LogNoteDialog({
   leadId,
@@ -142,10 +145,14 @@ type LeadModalProps = {
 
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const name = fullNameOf(lead);
-  const score = scoreOf(lead);
-  const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
+
+  const { data: rawRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const rules = (rawRules ?? []) as unknown as ScoringRuleConfig[];
+  const score = scoreOf(lead, rules.length > 0 ? rules : undefined);
+  const temp = effectiveTempOf(lead);
+  const breakdown = rules.length > 0 ? scoreBreakdown(lead, rules.filter((r) => r.isActive)) : [];
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(
@@ -161,6 +168,8 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [newHint, setNewHint] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [websiteGenOpen, setWebsiteGenOpen] = useState(false);
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const assignRef = useRef<HTMLDivElement | null>(null);
 
@@ -293,6 +302,14 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   return (
     <>
       {noteOpen ? <LogNoteDialog leadId={lead.id} onClose={() => setNoteOpen(false)} /> : null}
+      {websiteGenOpen && (
+        <WebsiteGeneratorDialog
+          open={websiteGenOpen}
+          onClose={() => setWebsiteGenOpen(false)}
+          leadId={lead.id}
+          leadName={name}
+        />
+      )}
       <div className="crm-modal-backdrop" onClick={onClose}>
         <div className="crm-modal crm-app" onClick={(event) => event.stopPropagation()}>
           <div className="crm-modal-head">
@@ -324,6 +341,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
             ) : null}
             <button className="crm-btn" onClick={() => setNoteOpen(true)}>
               <NotebookPen size={13} /> Log note
+            </button>
+            <button className="crm-btn" onClick={() => setWebsiteGenOpen(true)} title="Generate website for this lead">
+              <Globe size={13} /> Website
             </button>
 
             <div className="crm-outcome-wrap" ref={popoverRef}>
@@ -654,9 +674,45 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <ScoreBar score={score} temp={temp} />
                       <span style={{ fontSize: 12, color: "var(--crm-fg-muted)" }}>
-                        {tempLabel(temp)}
+                        {score} · {tempLabel(temp)}
                       </span>
+                      {breakdown.length > 0 && (
+                        <button
+                          className="crm-btn ghost"
+                          style={{ fontSize: 11, height: 22, padding: "0 6px", marginLeft: "auto" }}
+                          onClick={() => setShowScoreBreakdown((v) => !v)}
+                        >
+                          {showScoreBreakdown ? "Hide" : "Why?"}
+                        </button>
+                      )}
                     </div>
+                    {showScoreBreakdown && breakdown.length > 0 && (
+                      <div style={{
+                        marginTop: 8,
+                        background: "var(--crm-surface-hover)",
+                        borderRadius: 6,
+                        padding: "8px 10px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}>
+                        {breakdown.map((item) => (
+                          <div key={item.factor} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                            <span style={{ color: "var(--crm-fg-faint)" }}>{item.label}</span>
+                            <span style={{
+                              fontWeight: 500,
+                              color: item.points > 0 ? "var(--crm-fg)" : item.points < 0 ? "oklch(64% 0.18 25)" : "var(--crm-fg-faint)",
+                            }}>
+                              {item.points > 0 ? "+" : ""}{item.points} / {item.maxPoints}
+                            </span>
+                          </div>
+                        ))}
+                        <div style={{ borderTop: "1px solid var(--crm-border)", marginTop: 4, paddingTop: 4, display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600 }}>
+                          <span>Total</span>
+                          <span>{score} / 100</span>
+                        </div>
+                      </div>
+                    )}
                     {reviews ? (
                       <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)", marginTop: 6 }}>
                         {reviews}

@@ -78,13 +78,14 @@ export const teamsRouter = createTRPCRouter({
     return team;
   }),
 
-  /** Recent activities by everyone on the same team as the caller. */
+  /** Recent activities by everyone on the same team as the caller, with cursor pagination. */
   activityFeed: organizationProcedure
     .input(
       z
         .object({
           teamId: z.string().optional(),
           limit: z.number().int().min(1).max(200).optional(),
+          cursor: z.string().optional(),
         })
         .optional()
         .default(() => ({})),
@@ -110,7 +111,7 @@ export const teamsRouter = createTRPCRouter({
             },
           });
 
-      if (!team) return [];
+      if (!team) return { items: [], nextCursor: null };
 
       // Authorization: must be on the team, lead the team, or be ADMIN.
       const memberIds = team.users.map((u) => u.id);
@@ -120,15 +121,25 @@ export const teamsRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
 
-      return ctx.prisma.activity.findMany({
+      const limit = input.limit ?? 10;
+      const items = await ctx.prisma.activity.findMany({
         where: { userId: { in: memberIds } },
         orderBy: { createdAt: "desc" },
-        take: input.limit ?? 50,
+        take: limit + 1,
+        ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
         include: {
           user: { select: { id: true, name: true, email: true, image: true } },
           lead: { select: { id: true, firstName: true, lastName: true, company: true } },
         },
       });
+
+      let nextCursor: string | null = null;
+      if (items.length > limit) {
+        const last = items.pop();
+        nextCursor = last!.id;
+      }
+
+      return { items, nextCursor };
     }),
 
   /**
