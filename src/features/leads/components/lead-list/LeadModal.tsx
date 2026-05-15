@@ -198,8 +198,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       setAddingOutcome(false);
       setNewLabel("");
       setNewHint("");
+      setOutcome("CUSTOM");
+      setCustomOutcomeId(created.id);
+      setOutcomeOpen(false);
       void utils.leads.customOutcomes.list.invalidate();
-      chooseOutcome("CUSTOM", created.id);
+      updateOutcome.mutate({ id: lead.id, callOutcome: "CUSTOM" as never, customOutcomeId: created.id });
     },
     onError: (e) => toast.error(e.message),
   });
@@ -245,6 +248,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     const handleMouseDown = (event: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
         setOutcomeOpen(false);
+        setAddingOutcome(false);
       }
     };
 
@@ -274,16 +278,17 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [assignOpen]);
 
-  const chooseOutcome = (nextOutcome: string | null) => {
+  const chooseOutcome = (nextOutcome: string | null, nextCustomId: string | null = null) => {
     setOutcome(nextOutcome);
+    setCustomOutcomeId(nextCustomId);
     setOutcomeOpen(false);
+    setAddingOutcome(false);
     updateOutcome.mutate({
       id: lead.id,
       callOutcome: (nextOutcome ?? "NOT_CONTACTED") as never,
+      customOutcomeId: nextCustomId ?? undefined,
     });
   };
-
-  const outcomeConfig = OUTCOMES.find((item) => item.id === outcome);
 
   return (
     <>
@@ -332,7 +337,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 {outcome ? (
                   <>
                     <span style={{ color: "var(--crm-fg-faint)" }}>Outcome:</span>
-                    <span style={{ fontWeight: 500 }}>{outcomeConfig?.label}</span>
+                    <span style={{ fontWeight: 500 }}>{outcomeLabel(lead)}</span>
                   </>
                 ) : (
                   <>Log outcome</>
@@ -361,6 +366,25 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                       {outcome === item.id ? <Check size={11} /> : null}
                     </button>
                   ))}
+                  {customOutcomes.length > 0 ? (
+                    <div style={{ borderTop: "1px solid var(--crm-border)", margin: "4px 0" }} />
+                  ) : null}
+                  {customOutcomes.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      className={`crm-outcome-item ${outcome === "CUSTOM" && customOutcomeId === item.id ? "active" : ""}`}
+                      onClick={() => chooseOutcome("CUSTOM", item.id)}
+                    >
+                      <span className="crm-outcome-dot t-cool" />
+                      <span className="lab">
+                        <span className="t">{item.label}</span>
+                        {item.hint ? <span className="h">{item.hint}</span> : null}
+                      </span>
+                      {outcome === "CUSTOM" && customOutcomeId === item.id ? <Check size={11} /> : null}
+                    </button>
+                  ))}
                   {outcome ? (
                     <button
                       type="button"
@@ -370,6 +394,79 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                       Clear outcome
                     </button>
                   ) : null}
+                  {addingOutcome ? (
+                    <div style={{ padding: "8px 10px", borderTop: "1px solid var(--crm-border)" }}>
+                      <input
+                        autoFocus
+                        placeholder="Label (e.g. Left message)"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newLabel.trim()) {
+                            createCustomOutcome.mutate({ label: newLabel.trim(), hint: newHint.trim() || undefined });
+                          }
+                          if (e.key === "Escape") setAddingOutcome(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "5px 8px",
+                          border: "1px solid var(--crm-border)",
+                          borderRadius: "var(--crm-radius-sm)",
+                          background: "var(--crm-surface-2)",
+                          fontSize: 12,
+                          color: "var(--crm-fg)",
+                          outline: "none",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                      <input
+                        placeholder="Hint (optional)"
+                        value={newHint}
+                        onChange={(e) => setNewHint(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setAddingOutcome(false); }}
+                        style={{
+                          width: "100%",
+                          marginTop: 5,
+                          padding: "5px 8px",
+                          border: "1px solid var(--crm-border)",
+                          borderRadius: "var(--crm-radius-sm)",
+                          background: "var(--crm-surface-2)",
+                          fontSize: 12,
+                          color: "var(--crm-fg)",
+                          outline: "none",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+                        <button
+                          type="button"
+                          className="crm-btn ghost"
+                          style={{ fontSize: 11, padding: "3px 8px" }}
+                          onClick={() => setAddingOutcome(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="crm-btn primary"
+                          style={{ fontSize: 11, padding: "3px 8px" }}
+                          disabled={!newLabel.trim() || createCustomOutcome.isPending}
+                          onClick={() => createCustomOutcome.mutate({ label: newLabel.trim(), hint: newHint.trim() || undefined })}
+                        >
+                          {createCustomOutcome.isPending ? "Adding…" : "Add"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="crm-outcome-clear"
+                      style={{ color: "var(--crm-accent-fg, var(--crm-fg-faint))" }}
+                      onClick={() => setAddingOutcome(true)}
+                    >
+                      + Add outcome
+                    </button>
+                  )}
                 </div>
               ) : null}
             </div>

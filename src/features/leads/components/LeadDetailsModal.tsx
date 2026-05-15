@@ -42,15 +42,16 @@ type Lead = {
   callOutcome?: CallOutcome | null;
   callNotes?: string | null;
   createdAt: string;
+  customOutcome?: { id: string; label: string } | null;
 };
 
-const CALL_OUTCOME_OPTIONS = [
+const CALL_OUTCOME_OPTIONS: ReadonlyArray<{ value: CallOutcome; label: string }> = [
   { value: "NOT_CONTACTED", label: "Not Contacted" },
   { value: "ANSWERED", label: "Connected" },
   { value: "HUNG_UP", label: "Hung Up" },
   { value: "NO_ANSWER", label: "No Answer" },
   { value: "AI_VOICEMAIL", label: "AI Voicemail" },
-] as const satisfies ReadonlyArray<{ value: CallOutcome; label: string }>;
+];
 
 interface LeadDetailsModalProps {
   lead: Lead;
@@ -223,6 +224,11 @@ export function LeadDetailsModal({ lead, isOpen, onClose }: LeadDetailsModalProp
               onChange={(e) => setCallOutcome(e.target.value as CallOutcome)}
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
+              {callOutcome === "CUSTOM" ? (
+                <option value="CUSTOM" disabled>
+                  {lead.customOutcome?.label ?? "Custom"}
+                </option>
+              ) : null}
               {CALL_OUTCOME_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}

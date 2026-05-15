@@ -30,6 +30,7 @@ vi.mock("@/app/_trpc/client", () => ({
       leads: {
         getAll: { invalidate: invalidateLeads },
         getNotes: { invalidate: invalidateNotes },
+        customOutcomes: { list: { invalidate: vi.fn() } },
       },
     }),
     leads: {
@@ -53,6 +54,10 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       toggleStar: {
         useMutation: vi.fn(() => ({ mutate: toggleStarMutate, isPending: false })),
+      },
+      customOutcomes: {
+        list: { useQuery: vi.fn(() => ({ data: [] })) },
+        create: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       },
     },
     teams: {
