@@ -1,140 +1,30 @@
 "use client";
 
 import { trpc } from "@/app/_trpc/client";
-import { useSession } from "next-auth/react";
-import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowDown,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Globe,
-  Mail,
-  MoreHorizontal,
-  NotebookPen,
-  Phone,
-  Star,
-  X,
-} from "lucide-react";
-import {
-  avatarClass,
-  effectiveTempOf,
-  fullNameOf,
-  initials,
-  normalizeWebsiteHref,
-  outcomeLabel,
-  OUTCOMES,
-  relativeTime,
-  reviewSummary,
-  scoreBreakdown,
-  scoreOf,
-  SessionUser,
-  tempLabel,
-  type AssignableUser,
-  type Lead,
-  type LeadNote,
-  type ScoringRuleConfig,
-} from "./shared";
-import { ScoreBar, StageTag, TempPill } from "./LeadUi";
-import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
-
-function LogNoteDialog({
-  leadId,
-  onClose,
-}: {
-  leadId: string;
-  onClose: () => void;
-}) {
-  const [text, setText] = useState("");
-  const utils = trpc.useUtils();
-  const createNote = trpc.leads.createNote.useMutation({
-    onSuccess: () => {
-      toast.success("Note saved");
-      void utils.leads.getNotes.invalidate({ leadId });
-      onClose();
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "oklch(15% 0.012 70 / 0.45)",
-        backdropFilter: "blur(2px)",
-        zIndex: 70,
-        display: "grid",
-        placeItems: "center",
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          background: "var(--crm-surface)",
-          border: "1px solid var(--crm-border)",
-          borderRadius: "var(--crm-radius-lg)",
-          padding: 24,
-          width: 440,
-          boxShadow: "var(--crm-shadow-pop)",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3
-          style={{
-            margin: "0 0 14px",
-            fontSize: 15,
-            fontWeight: 600,
-            letterSpacing: "-0.01em",
-            color: "var(--crm-fg)",
-          }}
-        >
-          Log note
-        </h3>
-        <textarea
-          autoFocus
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Write your note..."
-          rows={5}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid var(--crm-border)",
-            borderRadius: "var(--crm-radius-sm)",
-            background: "var(--crm-surface-2)",
-            fontSize: 13,
-            fontFamily: "var(--crm-font-sans)",
-            color: "var(--crm-fg)",
-            outline: "none",
-            resize: "vertical",
-            boxSizing: "border-box",
-          }}
-        />
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button
-            type="button"
-            className="crm-btn ghost"
-            style={{ flex: 1, justifyContent: "center" }}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="crm-btn primary"
-            style={{ flex: 1, justifyContent: "center" }}
-            disabled={!text.trim() || createNote.isPending}
-            onClick={() => createNote.mutate({ leadId, content: text.trim() })}
-          >
-            {createNote.isPending ? "Saving..." : "Save note"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  DetailsCard,
+  EngagementCard,
+  LeadHeader,
+  LeadTabs,
+  PeopleCard,
+  PipelineTracker,
+  type ActivityRow,
+  type CustomOutcomeOption,
+} from "./lead-workspace";
+import { scoreOf, type Lead, type LeadNote } from "./shared";
 
 type LeadModalProps = {
   lead: Lead;
@@ -143,235 +33,295 @@ type LeadModalProps = {
   onNext: () => void;
 };
 
+type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+
+function pipelineIndexForStatus(status: string) {
+  if (status === "CONNECTED" || status === "ANSWERED") return 2;
+  if (status === "AI_VOICEMAIL") return 1;
+  if (status === "NO_ANSWER" || status === "HUNG_UP") return 1;
+  if (status === "CLOSED_WON") return 5;
+  return 0;
+}
+
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
-  const name = fullNameOf(lead);
-  const websiteHref = normalizeWebsiteHref(lead.website);
-  const reviews = reviewSummary(lead);
+  const utils = trpc.useUtils();
+  const [starred, setStarred] = useState(Boolean(lead.starred));
+  const [temperatureOverride, setTemperatureOverride] = useState<
+    NonNullable<Lead["temperatureOverride"]> | ""
+  >(lead.temperatureOverride ?? "");
+  const [composerText, setComposerText] = useState("");
+  const [outcome, setOutcome] = useState(lead.callOutcome ?? "NOT_CONTACTED");
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
-  const { data: rawRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
-  const rules = (rawRules ?? []) as unknown as ScoringRuleConfig[];
-  const score = scoreOf(lead, rules.length > 0 ? rules : undefined);
-  const temp = effectiveTempOf(lead);
-  const breakdown = rules.length > 0 ? scoreBreakdown(lead, rules.filter((r) => r.isActive)) : [];
-
-  const [outcomeOpen, setOutcomeOpen] = useState(false);
-  const [outcome, setOutcome] = useState<string | null>(
-    lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
-      ? lead.callOutcome
-      : null,
-  );
-  const [customOutcomeId, setCustomOutcomeId] = useState<string | null>(
-    lead.customOutcome?.id ?? null,
-  );
-  const [addingOutcome, setAddingOutcome] = useState(false);
-  const [newLabel, setNewLabel] = useState("");
-  const [newHint, setNewHint] = useState("");
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [websiteGenOpen, setWebsiteGenOpen] = useState(false);
-  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-  const assignRef = useRef<HTMLDivElement | null>(null);
-
-  const { data: session } = useSession();
-  const userRole = (session?.user as SessionUser | undefined)?.role;
-  const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
-
-  const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
-  const notes: LeadNote[] = (notesRaw ?? []) as LeadNote[];
-  const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
-  const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
-    enabled: isAdminOrManager,
-    staleTime: 60_000,
+  const { data: activitiesRaw = [] } = trpc.leads.getActivities.useQuery({ leadId: lead.id });
+  const { data: notesRaw = [] } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
+  const { data: customOutcomesRaw = [] } = trpc.leads.customOutcomes.list.useQuery(undefined, {
+    staleTime: 30_000,
   });
 
-  const assignableUsers: AssignableUser[] = (isAdminOrManager
-    ? (orgMembers ?? [])
-    : (myTeam?.users ?? [])) as AssignableUser[];
-  const canAssign = isAdminOrManager || (myTeam?.users ?? []).length > 0;
+  const activities = activitiesRaw as ActivityRow[];
+  const notes = notesRaw as LeadNote[];
+  const customOutcomes = customOutcomesRaw as CustomOutcomeOption[];
+  const leadForDisplay = useMemo<Lead>(
+    () => ({
+      ...lead,
+      starred,
+      temperatureOverride: temperatureOverride || null,
+      callOutcome: outcome,
+    }),
+    [lead, outcome, starred, temperatureOverride],
+  );
+  const score = scoreOf(leadForDisplay);
 
-  const utils = trpc.useUtils();
-  const updateOutcome = trpc.leads.updateCallOutcome.useMutation({
-    onSuccess: () => {
-      toast.success("Outcome saved");
+  const toggleStar = trpc.leads.toggleStar.useMutation({
+    onMutate: () => setStarred((current) => !current),
+    onSuccess: (updated) => {
+      setStarred(Boolean(updated.starred));
       void utils.leads.getAll.invalidate();
+    },
+    onError: () => {
+      setStarred((current) => !current);
+      toast.error("Failed to update favorite");
+    },
+  });
+
+  const createNote = trpc.leads.createNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note saved");
+      setComposerText("");
+      void utils.leads.getNotes.invalidate({ leadId: lead.id });
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
     onError: (error) => toast.error(error.message),
   });
-  const { data: customOutcomes = [] } = trpc.leads.customOutcomes.list.useQuery(undefined, {
-    staleTime: 30_000,
-  });
-  const createCustomOutcome = trpc.leads.customOutcomes.create.useMutation({
-    onSuccess: (created) => {
-      toast.success("Outcome added");
-      setAddingOutcome(false);
-      setNewLabel("");
-      setNewHint("");
-      setOutcome("CUSTOM");
-      setCustomOutcomeId(created.id);
-      setOutcomeOpen(false);
-      void utils.leads.customOutcomes.list.invalidate();
-      updateOutcome.mutate({ id: lead.id, callOutcome: "CUSTOM" as never, customOutcomeId: created.id });
+
+  const createTask = trpc.tasks.create.useMutation({
+    onSuccess: () => {
+      toast.success("Task created");
+      setTaskDialogOpen(false);
+      void utils.tasks.getAll.invalidate();
+      void utils.tasks.getAllForLead.invalidate({ leadId: lead.id });
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
-    onError: (e) => toast.error(e.message),
+    onError: (error) => toast.error(error.message),
   });
+
   const updateTemperatureOverride = trpc.leads.updateTemperatureOverride.useMutation({
     onSuccess: () => {
       toast.success("Temperature updated");
       void utils.leads.getAll.invalidate();
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => {
+      setTemperatureOverride(lead.temperatureOverride ?? "");
+      toast.error(error.message);
+    },
   });
-  const assignMutation = trpc.leads.assign.useMutation({
+
+  const updateOutcome = trpc.leads.updateCallOutcome.useMutation({
     onSuccess: () => {
-      toast.success("Lead reassigned");
-      setAssignOpen(false);
+      toast.success("Outcome saved");
       void utils.leads.getAll.invalidate();
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
-    onError: (error) => toast.error(error.message),
-  });
-  const deleteNote = trpc.leads.deleteNote.useMutation({
-    onSuccess: () => {
-      toast.success("Note deleted");
-      void utils.leads.getNotes.invalidate({ leadId: lead.id });
-    },
-    onError: (error) => toast.error(error.message),
-  });
-  const [starred, setStarred] = useState(lead.starred ?? false);
-  const toggleStar = trpc.leads.toggleStar.useMutation({
-    onMutate: () => setStarred((s) => !s),
-    onSuccess: (updated) => {
-      setStarred(updated.starred);
-      void utils.leads.getAll.invalidate();
-    },
-    onError: () => {
-      setStarred((s) => !s);
-      toast.error("Failed to update star");
+    onError: (error) => {
+      setOutcome(lead.callOutcome ?? "NOT_CONTACTED");
+      toast.error(error.message);
     },
   });
-  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
-
-  useEffect(() => {
-    if (!outcomeOpen) return;
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setOutcomeOpen(false);
-        setAddingOutcome(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [outcomeOpen]);
-
-  useEffect(() => {
-    setOutcome(
-      lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
-        ? lead.callOutcome
-        : null,
-    );
-    setCustomOutcomeId(lead.customOutcome?.id ?? null);
-  }, [lead.callOutcome, lead.id, lead.customOutcome?.id]);
-
-  useEffect(() => {
-    if (!assignOpen) return;
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (assignRef.current && !assignRef.current.contains(event.target as Node)) {
-        setAssignOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [assignOpen]);
-
-  const chooseOutcome = (nextOutcome: string | null, nextCustomId: string | null = null) => {
-    setOutcome(nextOutcome);
-    setCustomOutcomeId(nextCustomId);
-    setOutcomeOpen(false);
-    setAddingOutcome(false);
-    updateOutcome.mutate({
-      id: lead.id,
-      callOutcome: (nextOutcome ?? "NOT_CONTACTED") as never,
-      customOutcomeId: nextCustomId ?? undefined,
-    });
-  };
 
   const handlePostNote = () => {
     const content = composerText.trim();
-    if (!content || createNote.isPending) return;
+    if (!content) return;
     createNote.mutate({ leadId: lead.id, content });
   };
 
-            <div>
-              <h4>Recent activity</h4>
-              <div className="crm-timeline">
-                <div className="crm-tl-row">
-                  <span className="ico">
-                    <NotebookPen size={11} />
-                  </span>
-                  <span className="body">Lead created from {lead.source || "manual entry"}</span>
-                  <span className="ts">{relativeTime(lead.createdAt)}</span>
-                </div>
-                {notes.map((note) => (
-                  <div key={note.id} className="crm-tl-row" style={{ alignItems: "flex-start" }}>
-                    <span className="ico">
-                      <NotebookPen size={11} />
-                    </span>
-                    <span className="body">{note.content}</span>
-                    <span className="ts">{relativeTime(note.createdAt)}</span>
-                    {(note.userId === currentUserId || isAdminOrManager) && (
-                      <button
-                        title="Delete note"
-                        style={{ marginLeft: 4, opacity: 0.5, lineHeight: 1, flexShrink: 0 }}
-                        onClick={() => deleteNote.mutate({ noteId: note.id })}
-                        disabled={deleteNote.isPending}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {lead.callNotes ? (
-                  <div className="crm-tl-row">
-                    <span className="ico">
-                      <Phone size={11} />
-                    </span>
-                    <span className="body">{lead.callNotes}</span>
-                    <span className="ts">-</span>
-                  </div>
-                ) : null}
-                <div className="crm-tl-row">
-                  <span className="ico">
-                    <Globe size={11} />
-                  </span>
-                  <span className="body">
-                    Stage: <StageTag status={lead.status} />
-                  </span>
-                  <span className="ts">now</span>
-                </div>
-              </div>
+  const handleTemperatureChange = (nextValue: string) => {
+    const temperature = nextValue as "HOT" | "WARM" | "COOL" | "";
+    setTemperatureOverride(temperature);
+    updateTemperatureOverride.mutate({
+      id: lead.id,
+      temperatureOverride: temperature || null,
+    });
+  };
+
+  const handleOutcomeChange = (nextOutcome: string, customOutcomeId?: string) => {
+    setOutcome(nextOutcome);
+    updateOutcome.mutate({
+      id: lead.id,
+      callOutcome: nextOutcome as never,
+      customOutcomeId,
+    });
+  };
+
+  const handleCreateTask = (input: { title: string; dueDate?: string; priority: TaskPriority }) => {
+    createTask.mutate({
+      leadId: lead.id,
+      title: input.title,
+      dueDate: input.dueDate || undefined,
+      priority: input.priority,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm">
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto flex min-h-full max-w-[1600px] flex-col gap-4 p-4 md:p-6 lg:p-8">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon-sm" onClick={onPrev} aria-label="Previous lead">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon-sm" onClick={onNext} aria-label="Next lead">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
+            <Button variant="outline" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+              Close
+            </Button>
           </div>
 
-          <div className="crm-modal-foot">
-            <div className="nav">
-              <button className="crm-btn ghost sm icon" onClick={onPrev} title="Previous">
-                <ChevronLeft size={12} />
-              </button>
-              <button className="crm-btn ghost sm icon" onClick={onNext} title="Next">
-                <ChevronRight size={12} />
-              </button>
-              <span style={{ marginLeft: 6 }}>
-                <span className="kb">↑</span>
-                <span className="kb">↓</span> to move · <span className="kb">Esc</span> close
-              </span>
-            </div>
+          <LeadHeader
+            lead={leadForDisplay}
+            score={score}
+            starred={starred}
+            onToggleStar={() => toggleStar.mutate({ id: lead.id })}
+            onOutcomeChange={handleOutcomeChange}
+            onCreateTask={() => setTaskDialogOpen(true)}
+            customOutcomes={customOutcomes}
+            outcome={outcome}
+          />
+          <PipelineTracker activeIndex={pipelineIndexForStatus(leadForDisplay.status)} />
+
+          <div className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <LeadTabs
+              activities={activities}
+              notes={notes}
+              lead={leadForDisplay}
+              composerText={composerText}
+              onComposerTextChange={setComposerText}
+              onPostNote={handlePostNote}
+              isPosting={createNote.isPending}
+            />
+            <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+              <DetailsCard lead={leadForDisplay} />
+              <EngagementCard
+                lead={leadForDisplay}
+                score={score}
+                temperatureOverride={temperatureOverride}
+                onTemperatureChange={handleTemperatureChange}
+                isUpdatingTemperature={updateTemperatureOverride.isPending}
+              />
+              <PeopleCard lead={leadForDisplay} />
+            </aside>
           </div>
         </div>
       </div>
-    </>
+
+      <CreateLeadTaskDialog
+        open={taskDialogOpen}
+        pending={createTask.isPending}
+        onClose={() => setTaskDialogOpen(false)}
+        onCreate={handleCreateTask}
+      />
+    </div>
+  );
+}
+
+function CreateLeadTaskDialog({
+  open,
+  pending,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  pending: boolean;
+  onClose: () => void;
+  onCreate: (input: { title: string; dueDate?: string; priority: TaskPriority }) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
+
+  const resetAndClose = () => {
+    if (pending) return;
+    setTitle("");
+    setDueDate("");
+    setPriority("MEDIUM");
+    onClose();
+  };
+
+  const handleSubmit = () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      toast.error("Task title is required.");
+      return;
+    }
+
+    onCreate({ title: trimmedTitle, dueDate: dueDate || undefined, priority });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && resetAndClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create task</DialogTitle>
+          <DialogDescription>Add a follow-up task for this lead.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <label className="block space-y-1" htmlFor="lead-task-title">
+            <span className="text-sm font-medium">Title</span>
+            <Input
+              autoFocus
+              disabled={pending}
+              id="lead-task-title"
+              maxLength={200}
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleSubmit();
+              }}
+              value={title}
+            />
+          </label>
+
+          <label className="block space-y-1" htmlFor="lead-task-due-date">
+            <span className="text-sm font-medium">Due date</span>
+            <Input
+              disabled={pending}
+              id="lead-task-due-date"
+              onChange={(event) => setDueDate(event.target.value)}
+              type="date"
+              value={dueDate}
+            />
+          </label>
+
+          <label className="block space-y-1" htmlFor="lead-task-priority">
+            <span className="text-sm font-medium">Priority</span>
+            <select
+              className="h-8 w-full rounded-lg border bg-background px-2.5 py-1 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={pending}
+              id="lead-task-priority"
+              onChange={(event) => setPriority(event.target.value as TaskPriority)}
+              value={priority}
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button disabled={pending} onClick={resetAndClose} variant="outline">
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={handleSubmit}>
+            {pending ? "Creating..." : "Create task"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
