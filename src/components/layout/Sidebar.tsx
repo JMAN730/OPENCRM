@@ -13,7 +13,6 @@ import {
   Settings,
   BarChart3,
   Bot,
-  Search,
   ChevronDown,
   LogOut,
   User,
@@ -106,12 +105,6 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         <div style={{ marginLeft: "auto", width: 20, height: 20, borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface-hover)", display: "grid", placeItems: "center", color: "var(--crm-fg-faint)", cursor: "pointer" }}>
           <ChevronDown size={12} />
         </div>
-      </div>
-
-      <div className="crm-nav-search" role="button" tabIndex={0}>
-        <Search size={14} />
-        <span>Quick find</span>
-        <kbd>⌘K</kbd>
       </div>
 
       {NAV_GROUPS.map((group, gi) => (
