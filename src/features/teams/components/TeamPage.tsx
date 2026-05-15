@@ -12,10 +12,6 @@ export function TeamPage() {
   const callerId = session?.user?.id;
 
   const { data: myTeam, isLoading: teamLoading } = trpc.teams.myTeam.useQuery();
-  const { data: feed = [] } = trpc.teams.activityFeed.useQuery(
-    { limit: 50 },
-    { enabled: !!myTeam },
-  );
   const { data: allTeams = [] } = trpc.teams.list.useQuery(undefined, {
     enabled: isAdmin,
   });
@@ -48,7 +44,6 @@ export function TeamPage() {
       {myTeam ? (
         <TeamOverview
           callerId={callerId}
-          feed={feed}
           isAdmin={isAdmin}
           isLeader={isLeader}
           myTeam={myTeam}
