@@ -24,6 +24,7 @@ import {
   MoreHorizontal,
   NotebookPen,
   Phone,
+  SquareCheck,
   Star,
   X,
 } from "lucide-react";
@@ -183,6 +184,14 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
 
   const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
   const notes: LeadNote[] = (notesRaw ?? []) as LeadNote[];
+  const { data: activitiesRaw = [] } = trpc.leads.getActivities.useQuery({ leadId: lead.id });
+
+  const timelineItems = [
+    ...notes.map((n) => ({ kind: "note" as const, date: new Date(n.createdAt).getTime(), note: n })),
+    ...activitiesRaw
+      .filter((a) => a.type !== "LEAD_CREATED")
+      .map((a) => ({ kind: "activity" as const, date: new Date(a.createdAt).getTime(), activity: a })),
+  ].sort((a, b) => a.date - b.date);
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
@@ -259,6 +268,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       setTaskDialogOpen(false);
       void utils.tasks.getAll.invalidate();
       void utils.tasks.getAllForLead.invalidate({ leadId: lead.id });
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -751,25 +761,45 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   <span className="body">Lead created from {lead.source || "manual entry"}</span>
                   <span className="ts">{relativeTime(lead.createdAt)}</span>
                 </div>
-                {notes.map((note) => (
-                  <div key={note.id} className="crm-tl-row" style={{ alignItems: "flex-start" }}>
-                    <span className="ico">
-                      <NotebookPen size={11} />
-                    </span>
-                    <span className="body">{note.content}</span>
-                    <span className="ts">{relativeTime(note.createdAt)}</span>
-                    {(note.userId === currentUserId || isAdminOrManager) && (
-                      <button
-                        title="Delete note"
-                        style={{ marginLeft: 4, opacity: 0.5, lineHeight: 1, flexShrink: 0 }}
-                        onClick={() => deleteNote.mutate({ noteId: note.id })}
-                        disabled={deleteNote.isPending}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {timelineItems.map((item) => {
+                  if (item.kind === "note") {
+                    const note = item.note;
+                    return (
+                      <div key={`note-${note.id}`} className="crm-tl-row" style={{ alignItems: "flex-start" }}>
+                        <span className="ico">
+                          <NotebookPen size={11} />
+                        </span>
+                        <span className="body">{note.content}</span>
+                        <span className="ts">{relativeTime(note.createdAt)}</span>
+                        {(note.userId === currentUserId || isAdminOrManager) && (
+                          <button
+                            title="Delete note"
+                            style={{ marginLeft: 4, opacity: 0.5, lineHeight: 1, flexShrink: 0 }}
+                            onClick={() => deleteNote.mutate({ noteId: note.id })}
+                            disabled={deleteNote.isPending}
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+                  const act = item.activity;
+                  const icon = act.type.startsWith("TASK") ? (
+                    <SquareCheck size={11} />
+                  ) : act.type === "CALL_LOGGED" ? (
+                    <Phone size={11} />
+                  ) : (
+                    <Globe size={11} />
+                  );
+                  return (
+                    <div key={`act-${act.id}`} className="crm-tl-row">
+                      <span className="ico">{icon}</span>
+                      <span className="body">{act.description}</span>
+                      <span className="ts">{relativeTime(act.createdAt)}</span>
+                    </div>
+                  );
+                })}
                 {lead.callNotes ? (
                   <div className="crm-tl-row">
                     <span className="ico">
