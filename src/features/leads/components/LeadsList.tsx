@@ -6,73 +6,90 @@ import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { AddLeadForm } from "./lead-list/AddLeadForm";
 import { LeadBulkActionBar } from "./lead-list/LeadBulkActionBar";
+import { LeadCardList } from "./lead-list/LeadCardList";
 import { LeadModal } from "./lead-list/LeadModal";
-import { LeadsTable } from "./lead-list/LeadsTable";
+import { LeadsFocusHero } from "./lead-list/LeadsFocusHero";
+import { LeadsManagementBar } from "./lead-list/LeadsManagementBar";
+import {
+  buildFocusSpotlightLeads,
+  filterLeadByQuickFilter,
+  getDueLeadIds,
+  getQuickFilterCounts,
+  type FocusQuickFilter,
+} from "./lead-list/focus-view-model";
 import {
   chunk,
+  LEAD_VISIBLE_COLUMNS,
   scoreOf,
   SessionUser,
   STAGE_ORDER,
   type AssignableUser,
   type Lead,
   type LeadSort,
+  type LeadVisibleColumn,
 } from "./lead-list/shared";
 
+function greetingForHour(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export function LeadsList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const showAddFromQuery = searchParams.get("new") === "1";
+
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebounce(search, 300);
   const [stageFilter, setStageFilter] = useState(new Set<string>());
   const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
   const [scoreMin, setScoreMin] = useState<number | null>(null);
   const [scoreMax, setScoreMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<LeadSort>({ key: "createdAt", dir: "desc" });
   const [selected, setSelected] = useState(new Set<string>());
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(showAddFromQuery);
   const [showAssign, setShowAssign] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<FocusQuickFilter>("ALL");
+  const [visibleColumns, setVisibleColumns] = useState<Set<LeadVisibleColumn>>(
+    new Set(LEAD_VISIBLE_COLUMNS),
+  );
+  const [pageCursor, setPageCursor] = useState<string | undefined>(undefined);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
 
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const debouncedSearch = useDebounce(search, 300);
+
   useEffect(() => {
-    if (searchParams.get("new") === "1") {
-      setShowAdd(true);
+    if (showAddFromQuery) {
       router.replace("/leads");
     }
-  }, [searchParams, router]);
+  }, [router, showAddFromQuery]);
 
   const { data: session } = useSession();
-  const userRole = (session?.user as SessionUser | undefined)?.role;
+  const sessionUser = session?.user as SessionUser | undefined;
+  const currentUserId = sessionUser?.id ?? null;
+  const userRole = sessionUser?.role;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const utils = trpc.useUtils();
-  const [pageCursor, setPageCursor] = useState<string | undefined>(undefined);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
 
   const {
     data: leadsPage,
     isLoading,
     isFetching,
-  } = trpc.leads.getAll.useQuery(
-    { search: debouncedSearch, limit: 100, cursor: pageCursor }
-  );
+  } = trpc.leads.getAll.useQuery({ search: debouncedSearch, limit: 100, cursor: pageCursor });
+  const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
+  const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
   const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
     enabled: isAdminOrManager,
     staleTime: 60_000,
-  });
-  const assignMutation = trpc.leads.assign.useMutation({
-    onSuccess: () => {
-      toast.success("Leads reassigned");
-      setSelected(new Set());
-      setShowAssign(false);
-      void utils.leads.getAll.invalidate();
-    },
-    onError: (error) => toast.error(error.message),
   });
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
@@ -88,18 +105,43 @@ export function LeadsList() {
     },
     onError: (error) => toast.error(error.message),
   });
+
   const deleteLead = trpc.leads.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Lead deleted");
+      setSelected((current) => {
+        const next = new Set(current);
+        next.delete(variables.id);
+        return next;
+      });
+      if (selectedLeadId === variables.id) {
+        setSelectedLeadId(null);
+      }
+      void utils.leads.getAll.invalidate();
+      void utils.tasks.getDueToday.invalidate();
+      void utils.tasks.getOverdue.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const assignMutation = trpc.leads.assign.useMutation({
+    onSuccess: () => {
+      toast.success("Leads reassigned");
+      setSelected(new Set());
+      setShowAssign(false);
       void utils.leads.getAll.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
+
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
 
-  const allLeads = useMemo<Lead[]>(
-    () => (leadsPage?.items as Lead[]) ?? [],
-    [leadsPage],
+  const allLeads = useMemo<Lead[]>(() => (leadsPage?.items as Lead[]) ?? [], [leadsPage]);
+  const dueTodayTasks = useMemo(() => dueTodayQuery.data ?? [], [dueTodayQuery.data]);
+  const overdueTasks = useMemo(() => overdueQuery.data ?? [], [overdueQuery.data]);
+  const dueLeadIds = useMemo(
+    () => getDueLeadIds(overdueTasks, dueTodayTasks),
+    [dueTodayTasks, overdueTasks],
   );
 
   const hasNextPage = Boolean(leadsPage?.nextCursor);
@@ -107,14 +149,14 @@ export function LeadsList() {
 
   const goToNextPage = () => {
     if (!leadsPage?.nextCursor) return;
-    setCursorHistory((prev) => [...prev, pageCursor ?? ""]);
+    setCursorHistory((current) => [...current, pageCursor ?? ""]);
     setPageCursor(leadsPage.nextCursor);
   };
 
   const goToPreviousPage = () => {
-    setCursorHistory((prev) => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
+    setCursorHistory((current) => {
+      if (current.length === 0) return current;
+      const next = [...current];
       const previousCursor = next.pop() ?? "";
       setPageCursor(previousCursor || undefined);
       return next;
@@ -128,73 +170,124 @@ export function LeadsList() {
     return counts;
   }, [allLeads]);
 
-  const filtered = useMemo(() => {
-    let rows = allLeads.slice();
-    if (stageFilter.size) rows = rows.filter((lead) => stageFilter.has(lead.status));
-    if (ownerFilter.size) rows = rows.filter((lead) => ownerFilter.has(lead.assignedToId ?? ""));
-    if (scoreMin !== null) rows = rows.filter((lead) => scoreOf(lead) >= scoreMin);
-    if (scoreMax !== null) rows = rows.filter((lead) => scoreOf(lead) <= scoreMax);
+  const scopedLeads = useMemo(() => {
+    const rows = allLeads
+      .filter((lead) => (stageFilter.size ? stageFilter.has(lead.status) : true))
+      .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
+      .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
+      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true));
+
     rows.sort((left, right) => {
       const getValue = (lead: Lead) => {
         if (sortBy.key === "score") return scoreOf(lead);
-        if (sortBy.key === "owner")
-          return lead.assignedTo?.name || lead.assignedTo?.email || "";
+        if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
         return lead[sortBy.key as keyof Lead] ?? "";
       };
+
       const leftValue = getValue(left);
       const rightValue = getValue(right);
       const comparison =
         typeof leftValue === "number" && typeof rightValue === "number"
           ? leftValue - rightValue
           : String(leftValue).localeCompare(String(rightValue));
+
       return sortBy.dir === "asc" ? comparison : -comparison;
     });
+
     return rows;
-  }, [allLeads, sortBy, stageFilter, ownerFilter, scoreMin, scoreMax]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter]);
+
+  const filteredLeads = useMemo(
+    () =>
+      scopedLeads.filter((lead) =>
+        filterLeadByQuickFilter(lead, quickFilter, dueLeadIds, currentUserId),
+      ),
+    [currentUserId, dueLeadIds, quickFilter, scopedLeads],
+  );
+
+  const quickFilterCounts = useMemo(
+    () => getQuickFilterCounts(scopedLeads, dueLeadIds, currentUserId),
+    [currentUserId, dueLeadIds, scopedLeads],
+  );
+
+  const focusCards = useMemo(
+    () =>
+      buildFocusSpotlightLeads({
+        leads: scopedLeads,
+        overdueTasks,
+        dueTodayTasks,
+      }),
+    [dueTodayTasks, overdueTasks, scopedLeads],
+  );
 
   const toggleStage = (stage: string) => {
-    const next = new Set(stageFilter);
-    if (next.has(stage)) {
-      next.delete(stage);
-    } else {
-      next.add(stage);
-    }
-    setStageFilter(next);
+    setStageFilter((current) => {
+      const next = new Set(current);
+      if (next.has(stage)) next.delete(stage);
+      else next.add(stage);
+      return next;
+    });
+  };
+
+  const toggleOwner = (id: string) => {
+    setOwnerFilter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleSelection = (leadId: string) => {
-    const next = new Set(selected);
-    if (next.has(leadId)) {
-      next.delete(leadId);
-    } else {
-      next.add(leadId);
-    }
-    setSelected(next);
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
   };
 
-  const allSelected = filtered.length > 0 && filtered.every((lead) => selected.has(lead.id));
   const toggleAllSelections = () => {
-    setSelected(allSelected ? new Set() : new Set(filtered.map((lead) => lead.id)));
+    const allSelected =
+      filteredLeads.length > 0 && filteredLeads.every((lead) => selected.has(lead.id));
+
+    setSelected(allSelected ? new Set() : new Set(filteredLeads.map((lead) => lead.id)));
+    if (allSelected) {
+      setShowAssign(false);
+    }
+  };
+
+  const toggleVisibleColumn = (column: LeadVisibleColumn) => {
+    setVisibleColumns((current) => {
+      const next = new Set(current);
+      if (next.has(column)) {
+        if (next.size === 1) return current;
+        next.delete(column);
+      } else {
+        next.add(column);
+      }
+      return next;
+    });
   };
 
   const selectedLead = selectedLeadId
     ? allLeads.find((lead) => lead.id === selectedLeadId) ?? null
     : null;
-
   const selectedIndex = selectedLead
-    ? filtered.findIndex((lead) => lead.id === selectedLead.id)
+    ? filteredLeads.findIndex((lead) => lead.id === selectedLead.id)
     : -1;
+
   const previousLead = useCallback(() => {
     if (selectedIndex > 0) {
-      setSelectedLeadId(filtered[selectedIndex - 1]?.id ?? null);
+      setSelectedLeadId(filteredLeads[selectedIndex - 1]?.id ?? null);
     }
-  }, [filtered, selectedIndex]);
+  }, [filteredLeads, selectedIndex]);
 
   const nextLead = useCallback(() => {
-    if (selectedIndex >= 0 && selectedIndex < filtered.length - 1) {
-      setSelectedLeadId(filtered[selectedIndex + 1]?.id ?? null);
+    if (selectedIndex >= 0 && selectedIndex < filteredLeads.length - 1) {
+      setSelectedLeadId(filteredLeads[selectedIndex + 1]?.id ?? null);
     }
-  }, [filtered, selectedIndex]);
+  }, [filteredLeads, selectedIndex]);
 
   useEffect(() => {
     if (!selectedLead) return;
@@ -229,9 +322,16 @@ export function LeadsList() {
           const response = await bulkDelete.mutateAsync({ leadIds });
           total += response.count ?? 0;
         }
-        toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
+
+        if (selectedLeadId && ids.includes(selectedLeadId)) {
+          setSelectedLeadId(null);
+        }
         setSelected(new Set());
-        void utils.leads.getAll.invalidate();
+        setShowAssign(false);
+        toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
+        await utils.leads.getAll.invalidate();
+        await utils.tasks.getDueToday.invalidate();
+        await utils.tasks.getOverdue.invalidate();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to delete selected leads.");
       } finally {
@@ -239,6 +339,32 @@ export function LeadsList() {
       }
     })();
   };
+
+  const greeting = useMemo(() => {
+    const base = greetingForHour(new Date().getHours());
+    const firstName = session?.user?.name?.split(" ")[0];
+    return firstName ? `${base}, ${firstName}` : base;
+  }, [session?.user?.name]);
+
+  const dateLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }).format(new Date()),
+    [],
+  );
+
+  const subtitle = useMemo(() => {
+    if (dueTodayQuery.isError || overdueQuery.isError) {
+      return `${filteredLeads.length} leads remain available while focus signals reload.`;
+    }
+    if (focusCards.length === 0) {
+      return `${filteredLeads.length} of ${allLeads.length} leads match the current view.`;
+    }
+    return `${focusCards.length} priority lead${focusCards.length === 1 ? "" : "s"} surfaced from your current lead view.`;
+  }, [allLeads.length, dueTodayQuery.isError, filteredLeads.length, focusCards.length, overdueQuery.isError]);
 
   return (
     <>
@@ -260,47 +386,43 @@ export function LeadsList() {
       ) : null}
 
       <div className="crm-content">
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">Leads</h1>
-            <div className="crm-page-sub">
-              {filtered.length} of {allLeads.length} leads · sorted by {sortBy.key}
-            </div>
-          </div>
-          <div className="crm-page-head-actions">
-            <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
-            <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
-              <Plus size={13} /> New lead
-            </button>
-          </div>
-        </div>
+        <LeadsFocusHero
+          focusCards={focusCards}
+          isLoading={dueTodayQuery.isLoading || overdueQuery.isLoading}
+          isError={dueTodayQuery.isError || overdueQuery.isError}
+          quickFilter={quickFilter}
+          quickFilterCounts={quickFilterCounts}
+          greeting={greeting}
+          dateLabel={dateLabel}
+          subtitle={subtitle}
+          onOpenFilters={() => {
+            setFilterOpen(true);
+            setColumnsOpen(false);
+          }}
+          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
+          onQuickFilterChange={setQuickFilter}
+          onShowNewLead={() => setShowAdd(true)}
+        />
 
-        <LeadsTable
-          allLeadsCount={allLeads.length}
-          filteredLeads={filtered}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          isLoading={isLoading}
-          canGoPrevious={cursorHistory.length > 0}
+        <LeadsManagementBar
+          allLeadsCount={scopedLeads.length}
+          filteredCount={filteredLeads.length}
+          filterOpen={filterOpen}
+          columnsOpen={columnsOpen}
+          importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
           members={assignableUsers}
           ownerFilter={ownerFilter}
           scoreMin={scoreMin}
           scoreMax={scoreMax}
+          search={search}
+          sortBy={sortBy}
+          stageCounts={stageCounts}
+          stageFilter={stageFilter}
+          visibleColumns={visibleColumns}
           onClearStageFilters={() => setStageFilter(new Set())}
-          onDeleteLead={(leadId) => {
-            if (confirm("Delete this lead?")) {
-              deleteLead.mutate({ id: leadId });
-            }
-          }}
-          onFetchNextPage={goToNextPage}
-          onFetchPreviousPage={goToPreviousPage}
-          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-          onOwnerToggle={(id) => {
-            const next = new Set(ownerFilter);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            setOwnerFilter(next);
-          }}
+          onColumnsOpenChange={setColumnsOpen}
+          onFilterOpenChange={setFilterOpen}
+          onOwnerToggle={toggleOwner}
           onScoreChange={(min, max) => {
             setScoreMin(min);
             setScoreMax(max);
@@ -310,20 +432,40 @@ export function LeadsList() {
             setPageCursor(undefined);
             setCursorHistory([]);
           }}
-          onSortChange={(key) =>
+          onSortDirectionToggle={() =>
             setSortBy((current) => ({
-              key,
-              dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
+              ...current,
+              dir: current.dir === "desc" ? "asc" : "desc",
             }))
           }
+          onSortKeyChange={(key) =>
+            setSortBy((current) => ({
+              ...current,
+              key,
+            }))
+          }
+          onToggleColumn={toggleVisibleColumn}
+          onToggleStage={toggleStage}
+        />
+
+        <LeadCardList
+          canGoPrevious={cursorHistory.length > 0}
+          filteredLeads={filteredLeads}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          isLoading={isLoading}
+          onDeleteLead={(leadId) => {
+            if (confirm("Delete this lead?")) {
+              deleteLead.mutate({ id: leadId });
+            }
+          }}
+          onFetchNextPage={goToNextPage}
+          onFetchPreviousPage={goToPreviousPage}
+          onOpenLead={(lead) => setSelectedLeadId(lead.id)}
           onToggleRowSelection={toggleSelection}
           onToggleSelectAllRows={toggleAllSelections}
-          onToggleStage={toggleStage}
-          search={search}
           selectedIds={selected}
-          sortBy={sortBy}
-          stageCounts={stageCounts}
-          stageFilter={stageFilter}
+          visibleColumns={visibleColumns}
         />
 
         {selected.size > 0 ? (
@@ -335,8 +477,11 @@ export function LeadsList() {
               assignMutation.mutate({ leadIds: Array.from(selected), assigneeId })
             }
             onBulkDelete={handleBulkDelete}
-            onClear={() => setSelected(new Set())}
-            onToggleAssignMenu={() => setShowAssign((value) => !value)}
+            onClear={() => {
+              setSelected(new Set());
+              setShowAssign(false);
+            }}
+            onToggleAssignMenu={() => setShowAssign((current) => !current)}
             selectedCount={selected.size}
             showAssignMenu={showAssign}
           />
