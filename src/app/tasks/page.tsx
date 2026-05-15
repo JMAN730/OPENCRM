@@ -454,11 +454,13 @@ function TaskRow({
 }) {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuPos) return;
     function handle(e: MouseEvent) {
       if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
       setMenuPos(null);
     }
     document.addEventListener("mousedown", handle);
@@ -526,7 +528,7 @@ function TaskRow({
           </span>
         </button>
         {menuPos && (
-          <div style={{
+          <div ref={menuRef} style={{
             position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 200,
             background: "var(--crm-bg-card)", border: "1px solid var(--crm-border)",
             borderRadius: 8, minWidth: 150, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
