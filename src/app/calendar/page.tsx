@@ -519,12 +519,14 @@ type TaskFormData = {
 };
 
 function CreateTaskDialog({
+  mode = "create",
   initial,
   members,
   pending,
   onSave,
   onClose,
 }: {
+  mode?: "create" | "edit";
   initial: Partial<TaskFormData>;
   members: OrgMember[];
   pending: boolean;
@@ -608,7 +610,7 @@ function CreateTaskDialog({
             justifyContent: "space-between",
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>New Follow-up</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{mode === "create" ? "New Follow-up" : "Edit Follow-up"}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -706,7 +708,7 @@ function CreateTaskDialog({
               Cancel
             </button>
             <button type="submit" className="crm-btn primary" disabled={pending}>
-              {pending ? "Saving…" : "Create Follow-up"}
+              {pending ? "Saving…" : mode === "create" ? "Create Follow-up" : "Save Changes"}
             </button>
           </div>
         </form>
@@ -808,6 +810,7 @@ export default function CalendarPage() {
   const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
   const [creating, setCreating] = useState(false);
   const [createDate, setCreateDate] = useState<string>("");
+  const [editingTask, setEditingTask] = useState<CalendarTask | null>(null);
   const [deletingTask, setDeletingTask] = useState<CalendarTask | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("");
 
@@ -851,6 +854,7 @@ export default function CalendarPage() {
     onSuccess: () => {
       invalidate();
       setSelectedTask(null);
+      setEditingTask(null);
       toast.success("Follow-up updated.");
     },
     onError: (e) => toast.error(e.message),
@@ -879,6 +883,19 @@ export default function CalendarPage() {
       dueDate: dueDate ? dueDate.toISOString() : undefined,
       priority: form.priority,
       status: "PENDING",
+    });
+  }
+
+  function handleEditSave(form: TaskFormData) {
+    if (!editingTask) return;
+    const dueDate = combineDateAndTime(form.dueDate, form.dueTime);
+    updateTask.mutate({
+      taskId: editingTask.id,
+      title: form.title.trim(),
+      description: form.description || undefined,
+      assignedToId: form.assignedToId || null,
+      dueDate: dueDate ? dueDate.toISOString() : null,
+      priority: form.priority,
     });
   }
 
@@ -1161,8 +1178,7 @@ export default function CalendarPage() {
           onComplete={handleComplete}
           onEdit={(t) => {
             setSelectedTask(null);
-            setCreateDate(toDateInputValue(t.dueDate));
-            setCreating(true);
+            setEditingTask(t);
           }}
           onDelete={(t) => { setDeletingTask(t); }}
           onClose={() => setSelectedTask(null)}
@@ -1177,6 +1193,25 @@ export default function CalendarPage() {
           pending={createTask.isPending}
           onSave={handleCreate}
           onClose={() => { setCreating(false); setCreateDate(""); }}
+        />
+      )}
+
+      {/* Edit dialog */}
+      {editingTask && (
+        <CreateTaskDialog
+          mode="edit"
+          initial={{
+            title: editingTask.title,
+            description: editingTask.description ?? "",
+            assignedToId: editingTask.assignedTo?.id ?? "",
+            dueDate: toDateInputValue(editingTask.dueDate),
+            dueTime: toTimeInputValue(editingTask.dueDate),
+            priority: (editingTask.priority as TaskFormData["priority"]) ?? "MEDIUM",
+          }}
+          members={members}
+          pending={updateTask.isPending}
+          onSave={handleEditSave}
+          onClose={() => setEditingTask(null)}
         />
       )}
 

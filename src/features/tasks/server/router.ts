@@ -168,7 +168,7 @@ export const tasksRouter = createTRPCRouter({
           leadId: z.string().optional(),
           dateFrom: z.coerce.date().optional(),
           dateTo: z.coerce.date().optional(),
-          limit: z.number().int().min(1).max(100).default(50),
+          limit: z.number().int().min(1).max(500).default(50),
           cursor: z.string().optional(),
         })
         .optional()
