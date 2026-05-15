@@ -4,6 +4,7 @@ import { LeadModal } from "./LeadModal";
 
 const invalidateLeads = vi.fn();
 const invalidateNotes = vi.fn();
+const invalidateActivities = vi.fn();
 const outcomeMutate = vi.fn();
 const tempMutate = vi.fn();
 const assignMutate = vi.fn();
@@ -30,11 +31,15 @@ vi.mock("@/app/_trpc/client", () => ({
       leads: {
         getAll: { invalidate: invalidateLeads },
         getNotes: { invalidate: invalidateNotes },
+        getActivities: { invalidate: invalidateActivities },
         customOutcomes: { list: { invalidate: vi.fn() } },
       },
     }),
     leads: {
       getNotes: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
+      getActivities: {
         useQuery: vi.fn(() => ({ data: [] })),
       },
       updateCallOutcome: {
@@ -138,7 +143,7 @@ describe("LeadModal", () => {
   it("preserves call outcome mutation wiring", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /log outcome/i }));
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /connected/i }));
 
     expect(outcomeMutate).toHaveBeenCalledWith({
