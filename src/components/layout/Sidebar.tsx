@@ -63,7 +63,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
+export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOpen?: boolean; onClose?: () => void; collapsed?: boolean; onToggleCollapse?: () => void }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
@@ -96,20 +96,25 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   }, [menuOpen]);
 
   return (
-    <aside className={`crm-sidebar${isOpen ? " is-open" : ""}`}>
+    <aside className={`crm-sidebar${isOpen ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}`}>
       <div className="crm-brand">
         <div className="crm-brand-mark">
           <span>O</span>
         </div>
-        <div className="crm-brand-name">OpenCRM</div>
-        <div style={{ marginLeft: "auto", width: 20, height: 20, borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface-hover)", display: "grid", placeItems: "center", color: "var(--crm-fg-faint)", cursor: "pointer" }}>
-          <ChevronDown size={12} />
-        </div>
+        {!collapsed && <div className="crm-brand-name">OpenCRM</div>}
+        <button
+          className="crm-sidebar-collapse-btn"
+          onClick={onToggleCollapse}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          style={{ marginLeft: "auto" }}
+        >
+          <ChevronDown size={12} style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(90deg)", transition: "transform 0.2s" }} />
+        </button>
       </div>
 
       {NAV_GROUPS.map((group, gi) => (
         <div key={gi}>
-          {group.title && <div className="crm-nav-section">{group.title}</div>}
+          {group.title && !collapsed && <div className="crm-nav-section">{group.title}</div>}
           {group.items.map((item) => {
             const isActive = pathname.startsWith(item.href);
             const Icon = item.icon;
@@ -117,15 +122,16 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
               <Link
                 key={item.id}
                 href={item.href}
-                className="crm-nav-item"
+                className={`crm-nav-item${collapsed ? " collapsed" : ""}`}
                 aria-current={isActive ? "page" : undefined}
+                title={collapsed ? item.label : undefined}
                 onClick={onClose}
               >
                 <span className="crm-nav-icon">
                   <Icon size={16} />
                 </span>
-                <span>{item.label}</span>
-                {countById[item.id] != null && (
+                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && countById[item.id] != null && (
                   <span className="crm-nav-count">{countById[item.id]}</span>
                 )}
               </Link>
@@ -139,28 +145,32 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         <Link href="/settings" style={{ textDecoration: "none" }}>
           <div
             className="crm-avatar c1"
-            title="View profile"
+            title={collapsed ? userName : "View profile"}
             style={{ cursor: "pointer" }}
           >
             {initials(userName)}
           </div>
         </Link>
-        <div className="crm-userblock">
-          <span className="crm-name">{userName}</span>
-          <span className="crm-role">{userRole}</span>
-        </div>
+        {!collapsed && (
+          <div className="crm-userblock">
+            <span className="crm-name">{userName}</span>
+            <span className="crm-role">{userRole}</span>
+          </div>
+        )}
         {/* Dropdown toggle */}
-        <button
-          className="crm-btn ghost icon"
-          style={{ marginLeft: "auto", width: 24, height: 24, padding: 0, display: "grid", placeItems: "center" }}
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="User menu"
-        >
-          <ChevronDown size={12} style={{ transform: menuOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
-        </button>
+        {!collapsed && (
+          <button
+            className="crm-btn ghost icon"
+            style={{ marginLeft: "auto", width: 24, height: 24, padding: 0, display: "grid", placeItems: "center" }}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="User menu"
+          >
+            <ChevronDown size={12} style={{ transform: menuOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
+          </button>
+        )}
 
         {/* Dropdown menu */}
-        {menuOpen && (
+        {menuOpen && !collapsed && (
           <div
             className="crm-card"
             style={{
@@ -211,4 +221,3 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
     </aside>
   );
 }
-
