@@ -454,16 +454,24 @@ function TaskRow({
   onDelete: (t: TaskItem) => void;
   onComplete: (t: TaskItem) => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (!menuPos) return;
     function handle(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
+      setMenuPos(null);
     }
-    if (menuOpen) document.addEventListener("mousedown", handle);
+    document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
-  }, [menuOpen]);
+  }, [menuPos]);
+
+  function openMenu() {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }
 
   return (
     <tr style={{ borderBottom: "1px solid var(--crm-border)" }}>
@@ -507,37 +515,36 @@ function TaskRow({
       <td style={{ padding: "10px 16px", verticalAlign: "middle" }}><StatusBadge task={task} /></td>
       <td style={{ padding: "10px 16px", verticalAlign: "middle" }}><PriorityBadge priority={task.priority ?? "MEDIUM"} /></td>
       <td style={{ padding: "10px 16px", verticalAlign: "middle" }}>
-        <div ref={menuRef} style={{ position: "relative" }}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((o) => !o)}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: 4, borderRadius: 4, display: "flex", color: "var(--crm-fg-muted)" }}
-          >
-            <span style={{ display: "flex", gap: 2 }}>
-              <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
-              <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
-              <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
-            </span>
-          </button>
-          {menuOpen && (
-            <div style={{
-              position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
-              background: "var(--crm-bg-card)", border: "1px solid var(--crm-border)",
-              borderRadius: 8, minWidth: 150, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            }}>
-              <button type="button" onClick={() => { setMenuOpen(false); onComplete(task); }} style={menuItemStyle}>
-                <Check size={13} /> {task.completed ? "Mark incomplete" : "Mark complete"}
-              </button>
-              <button type="button" onClick={() => { setMenuOpen(false); onEdit(task); }} style={menuItemStyle}>
-                <Pencil size={13} /> Edit
-              </button>
-              <div style={{ borderTop: "1px solid var(--crm-border)" }} />
-              <button type="button" onClick={() => { setMenuOpen(false); onDelete(task); }} style={{ ...menuItemStyle, color: "#ef4444" }}>
-                <Trash2 size={13} /> Delete
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={openMenu}
+          style={{ border: "none", background: "none", cursor: "pointer", padding: 4, borderRadius: 4, display: "flex", color: "var(--crm-fg-muted)" }}
+        >
+          <span style={{ display: "flex", gap: 2 }}>
+            <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
+            <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
+            <span style={{ width: 4, height: 4, borderRadius: 2, background: "currentcolor" }} />
+          </span>
+        </button>
+        {menuPos && (
+          <div style={{
+            position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 200,
+            background: "var(--crm-bg-card)", border: "1px solid var(--crm-border)",
+            borderRadius: 8, minWidth: 150, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          }}>
+            <button type="button" onClick={() => { setMenuPos(null); onComplete(task); }} style={menuItemStyle}>
+              <Check size={13} /> {task.completed ? "Mark incomplete" : "Mark complete"}
+            </button>
+            <button type="button" onClick={() => { setMenuPos(null); onEdit(task); }} style={menuItemStyle}>
+              <Pencil size={13} /> Edit
+            </button>
+            <div style={{ borderTop: "1px solid var(--crm-border)" }} />
+            <button type="button" onClick={() => { setMenuPos(null); onDelete(task); }} style={{ ...menuItemStyle, color: "#ef4444" }}>
+              <Trash2 size={13} /> Delete
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   );
