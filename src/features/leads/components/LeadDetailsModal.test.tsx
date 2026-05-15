@@ -42,6 +42,8 @@ describe('LeadDetailsModal', () => {
     email: 'john@example.com',
     phone: '555-1234',
     company: 'Acme Corp',
+    city: 'Tampa',
+    state: 'FL',
     website: 'acme.com',
     status: 'NOT_CONTACTED',
     source: 'Website',
@@ -110,6 +112,19 @@ describe('LeadDetailsModal', () => {
 
     const textarea = screen.getByPlaceholderText('Add any notes about this call...')
     expect(textarea).toBeInTheDocument()
+  })
+
+  it('renders city and state as a location', () => {
+    render(
+      <LeadDetailsModal
+        lead={mockLead}
+        isOpen={true}
+        onClose={mockOnClose}
+      />
+    )
+
+    expect(screen.getByText('Location')).toBeInTheDocument()
+    expect(screen.getByText('Tampa, FL')).toBeInTheDocument()
   })
 
   it('allows updating notes', () => {
