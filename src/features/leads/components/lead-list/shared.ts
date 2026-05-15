@@ -7,6 +7,8 @@ export type Lead = {
   email?: string | null;
   phone?: string | null;
   company?: string | null;
+  city?: string | null;
+  state?: string | null;
   website?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
