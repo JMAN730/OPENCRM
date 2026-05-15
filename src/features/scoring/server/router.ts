@@ -2,19 +2,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
-
-export const SCORING_FACTORS = [
-  "star_rating",
-  "review_count",
-  "has_website",
-  "lead_status",
-  "call_activity",
-  "business_category",
-  "last_contacted",
-  "appointment_booked",
-] as const;
-
-export type ScoringFactor = (typeof SCORING_FACTORS)[number];
+import { SCORING_FACTORS, type ScoringFactor } from "../shared";
 
 type DefaultRule = {
   factor: string;
