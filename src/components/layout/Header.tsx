@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Inbox, Sparkles, ChevronRight, Menu } from "lucide-react";
+import { Bell, Inbox, Sparkles, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -64,10 +64,6 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         <Menu size={18} />
       </button>
       <div className="crm-crumbs">
-        <span>Sales</span>
-        <span className="crm-sep">
-          <ChevronRight size={12} />
-        </span>
         <span className="crm-current">{title}</span>
       </div>
 
