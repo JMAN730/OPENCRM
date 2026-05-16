@@ -1,15 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
+import { ActivityType } from "@prisma/client";
 
-export type ActivityType =
-  | "LEAD_CREATED"
-  | "LEAD_ASSIGNED"
-  | "LEAD_DELETED"
-  | "CALL_OUTCOME"
-  | "CALL_LOGGED"
-  | "LEAD_TEMPERATURE_OVERRIDE"
-  | "TASK_CREATED"
-  | "TASK_COMPLETED"
-  | "NOTE_ADDED";
+export { ActivityType };
 
 export async function logActivity(
   prisma: PrismaClient,

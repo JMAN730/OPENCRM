@@ -1,7 +1,7 @@
 import { isPast, isToday } from "date-fns";
 
 export type TaskSummaryInput = {
-  completed: boolean;
+  status: string;
   dueDate: Date | string | null | undefined;
 };
 
@@ -13,7 +13,7 @@ export type TaskSummaryCounts = {
 };
 
 export function isTaskOverdue(task: TaskSummaryInput) {
-  if (task.completed || !task.dueDate) return false;
+  if (task.status === "COMPLETED" || !task.dueDate) return false;
   const due = new Date(task.dueDate);
   return isPast(due) && !isToday(due);
 }
@@ -23,7 +23,7 @@ export function getTaskSummaryCounts(tasks: TaskSummaryInput[]): TaskSummaryCoun
     (counts, task) => {
       counts.total += 1;
 
-      if (task.completed) {
+      if (task.status === "COMPLETED") {
         counts.completed += 1;
       } else if (isTaskOverdue(task)) {
         counts.overdue += 1;

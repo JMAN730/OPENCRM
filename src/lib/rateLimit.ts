@@ -61,7 +61,12 @@ export async function assertWithinRateLimit(opts: RateLimitOptions & { message?:
 
 /**
  * Extracts a best-effort client IP from request headers.
- * Honors x-forwarded-for first hop only when TRUSTED_PROXY=true to avoid spoofing.
+ *
+ * Set TRUSTED_PROXY=true when the app runs behind a reverse proxy (Nginx,
+ * Caddy, load balancer) that sets x-forwarded-for. Without it, only
+ * x-real-ip is consulted. If neither header is present, all unauthenticated
+ * requests share the "unknown" rate-limit bucket — configure your proxy to
+ * forward one of these headers to avoid false bucket collisions.
  */
 export function getClientIp(headers: Headers): string {
   const trustProxy = process.env.TRUSTED_PROXY === "true";
@@ -74,5 +79,12 @@ export function getClientIp(headers: Headers): string {
     const real = headers.get("x-real-ip");
     if (real) return real;
   }
-  return headers.get("x-real-ip") ?? "unknown";
+  const real = headers.get("x-real-ip");
+  if (real) return real;
+  console.warn(
+    "[rateLimit] getClientIp: no x-real-ip header found — all clients share " +
+    "the same rate-limit bucket. Set TRUSTED_PROXY=true and configure your " +
+    "reverse proxy to forward x-forwarded-for, or configure it to set x-real-ip."
+  );
+  return "unknown";
 }

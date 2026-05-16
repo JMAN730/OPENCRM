@@ -26,13 +26,13 @@ export default function DialerPage() {
   const [isInCall, setIsInCall] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [queueIdx, setQueueIdx] = useState(0);
+  const [awaitingOutcome, setAwaitingOutcome] = useState(false);
 
-  const { data: leadsRaw, isLoading } = trpc.leads.getAll.useQuery({ limit: 100 });
-  const leads: Lead[] = leadsRaw?.items ?? [];
+  const { data: leadsRaw, isLoading } = trpc.leads.getAll.useQuery({ limit: 100, hasPhone: true });
   const logCall = trpc.calls.logCall.useMutation();
   const utils = trpc.useUtils();
 
-  const queue = leads.filter((l) => l.phone);
+  const queue = leadsRaw?.items ?? [];
   const current = queue[queueIdx];
   const remaining = queue.length - queueIdx;
 
@@ -49,11 +49,21 @@ export default function DialerPage() {
     setIsInCall(false);
     setIsMuted(false);
     if (current) {
-      logCall.mutate({ leadId: current.id, status: "CONNECTED" }, {
+      setAwaitingOutcome(true);
+    } else {
+      toast.info("Call ended");
+    }
+  };
+
+  const logOutcome = (status: "CONNECTED" | "NO_ANSWER" | "BUSY" | "FAILED" | "CANCELED") => {
+    if (current) {
+      logCall.mutate({ leadId: current.id, status }, {
         onSuccess: () => utils.dashboard.getKpiStats.invalidate(),
       });
     }
-    toast.info("Call ended");
+    setAwaitingOutcome(false);
+    setQueueIdx((i) => Math.min(i + 1, queue.length - 1));
+    toast.info("Call logged");
   };
 
   const skip = () => setQueueIdx((i) => Math.min(i + 1, queue.length - 1));
@@ -98,10 +108,39 @@ export default function DialerPage() {
               </div>
             )}
 
-            {isInCall && (
+            {isInCall && !awaitingOutcome && (
               <div style={{ textAlign: "center", marginBottom: 8 }}>
                 <div style={{ fontSize: 13, color: "var(--crm-pos)", fontFamily: "var(--crm-font-mono)" }}>● In call</div>
                 <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4, color: "var(--crm-fg)" }}>{digits || current?.phone || (current ? leadName(current) : "")}</div>
+              </div>
+            )}
+
+            {awaitingOutcome && (
+              <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-fg)", textAlign: "center", marginBottom: 4 }}>
+                  How did the call go?
+                </div>
+                {(
+                  [
+                    { label: "Connected", status: "CONNECTED" as const, color: "var(--crm-pos)" },
+                    { label: "No Answer", status: "NO_ANSWER" as const, color: "var(--crm-fg-muted)" },
+                    { label: "Busy", status: "BUSY" as const, color: "var(--crm-warn)" },
+                    { label: "Failed", status: "FAILED" as const, color: "var(--crm-neg)" },
+                    { label: "Canceled", status: "CANCELED" as const, color: "var(--crm-fg-faint)" },
+                  ] as const
+                ).map(({ label, status, color }) => (
+                  <button
+                    key={status}
+                    onClick={() => logOutcome(status)}
+                    style={{
+                      width: "100%", padding: "10px 16px", borderRadius: "var(--crm-radius-sm)",
+                      border: `1.5px solid ${color}`, background: "var(--crm-surface)",
+                      color, fontSize: 13, fontWeight: 500, cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             )}
 
@@ -145,7 +184,7 @@ export default function DialerPage() {
 
             {/* Call controls */}
             <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-              {isInCall ? (
+              {isInCall && !awaitingOutcome ? (
                 <>
                   <button onClick={() => setIsMuted((m) => !m)} style={{
                     width: 48, height: 48, borderRadius: "50%",
