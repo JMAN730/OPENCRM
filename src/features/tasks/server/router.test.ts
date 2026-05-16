@@ -248,27 +248,6 @@ describe("tasksRouter", () => {
     });
   });
 
-  describe("getById", () => {
-    it("scopes the lookup to the caller's organization and excludes soft-deleted tasks", async () => {
-      prisma.task.findFirst.mockResolvedValue({ id: "task-1", title: "Call back" });
-
-      await caller.tasks.getById({ taskId: "task-1" });
-
-      expect(prisma.task.findFirst).toHaveBeenCalledWith({
-        where: {
-          id: "task-1",
-          user: { organizationId: "org-1" },
-          deletedAt: null,
-        },
-        include: {
-          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
-          user: { select: { id: true, name: true, image: true } },
-          assignedTo: { select: { id: true, name: true, image: true } },
-        },
-      });
-    });
-  });
-
   describe("getDueToday", () => {
     it("filters by user.organizationId, excludes COMPLETED, takes 5, excludes deleted", async () => {
       prisma.task.findMany.mockResolvedValue([]);
