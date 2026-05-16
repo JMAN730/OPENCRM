@@ -355,4 +355,32 @@ describe("tasksRouter", () => {
       expect(args.where.dueDate).toMatchObject({ lt: expect.any(Date) });
     });
   });
+
+  describe("getUpcomingFollowUps", () => {
+    it("filters to open future tasks scoped to the org and only with a leadId", async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+
+      await caller.tasks.getUpcomingFollowUps();
+
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.where.user).toEqual({ organizationId: "org-1" });
+      expect(args.where.status).toEqual({ not: "COMPLETED" });
+      expect(args.where.deletedAt).toBe(null);
+      expect(args.where.leadId).toEqual({ not: null });
+      expect(args.where.dueDate).toMatchObject({ gte: expect.any(Date) });
+      expect(args.orderBy).toEqual({ dueDate: "asc" });
+    });
+
+    it("returns only the earliest task per lead", async () => {
+      prisma.task.findMany.mockResolvedValue([
+        { id: "early", leadId: "lead-a", dueDate: new Date("2026-06-01") },
+        { id: "later", leadId: "lead-a", dueDate: new Date("2026-06-05") },
+        { id: "other", leadId: "lead-b", dueDate: new Date("2026-06-03") },
+      ]);
+
+      const result = await caller.tasks.getUpcomingFollowUps();
+
+      expect(result.map((t: { id: string }) => t.id)).toEqual(["early", "other"]);
+    });
+  });
 });
