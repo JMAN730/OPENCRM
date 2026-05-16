@@ -80,7 +80,7 @@ function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined 
   return base;
 }
 
-function isOverdue(task: Pick<TaskItem, "dueDate" | "completed">) {
+function isOverdue(task: Pick<TaskItem, "dueDate" | "status">) {
   return isTaskOverdue(task);
 }
 
@@ -479,18 +479,18 @@ function TaskRow({
           <button
             type="button"
             onClick={() => onComplete(task)}
-            title={task.completed ? "Mark incomplete" : "Mark complete"}
+            title={task.status === "COMPLETED" ? "Mark incomplete" : "Mark complete"}
             style={{
               width: 18, height: 18, borderRadius: 4, border: "1.5px solid",
-              borderColor: task.completed ? "#22c55e" : "var(--crm-border)",
-              background: task.completed ? "#22c55e" : "transparent",
+              borderColor: task.status === "COMPLETED" ? "#22c55e" : "var(--crm-border)",
+              background: task.status === "COMPLETED" ? "#22c55e" : "transparent",
               display: "flex", alignItems: "center", justifyContent: "center",
               cursor: "pointer", flexShrink: 0,
             }}
           >
-            {task.completed && <Check size={11} color="#fff" strokeWidth={2.5} />}
+            {task.status === "COMPLETED" && <Check size={11} color="#fff" strokeWidth={2.5} />}
           </button>
-          <span style={{ fontSize: 13, fontWeight: 500, textDecoration: task.completed ? "line-through" : "none", color: task.completed ? "var(--crm-fg-muted)" : "var(--crm-fg)" }}>
+          <span style={{ fontSize: 13, fontWeight: 500, textDecoration: task.status === "COMPLETED" ? "line-through" : "none", color: task.status === "COMPLETED" ? "var(--crm-fg-muted)" : "var(--crm-fg)" }}>
             {task.title}
           </span>
         </div>
@@ -533,7 +533,7 @@ function TaskRow({
             borderRadius: 8, minWidth: 150, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
           }}>
             <button type="button" onClick={() => { setMenuPos(null); onComplete(task); }} style={menuItemStyle}>
-              <Check size={13} /> {task.completed ? "Mark incomplete" : "Mark complete"}
+              <Check size={13} /> {task.status === "COMPLETED" ? "Mark incomplete" : "Mark complete"}
             </button>
             <button type="button" onClick={() => { setMenuPos(null); onEdit(task); }} style={menuItemStyle}>
               <Pencil size={13} /> Edit
@@ -621,7 +621,7 @@ function CalendarView({ tasks, onTaskClick }: { tasks: TaskItem[]; onTaskClick: 
                 {format(day, "d")}
               </div>
               {dayTasks.slice(0, 3).map((task) => {
-                const color = task.completed ? "#22c55e" : isOverdue(task) ? "#ef4444" : PRIORITY_COLORS[task.priority ?? "MEDIUM"];
+                const color = task.status === "COMPLETED" ? "#22c55e" : isOverdue(task) ? "#ef4444" : PRIORITY_COLORS[task.priority ?? "MEDIUM"];
                 return (
                   <button
                     key={task.id}
@@ -695,7 +695,7 @@ function TaskDetailSidebar({ task, onEdit, onDelete, onComplete, onClose }: {
         </div>
         <div style={{ padding: "16px 24px", borderTop: "1px solid var(--crm-border)", display: "flex", gap: 8 }}>
           <button type="button" className="crm-btn" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }} onClick={() => onComplete(task)}>
-            <Check size={13} /> {task.completed ? "Reopen" : "Complete"}
+            <Check size={13} /> {task.status === "COMPLETED" ? "Reopen" : "Complete"}
           </button>
           <button type="button" className="crm-btn" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={() => onEdit(task)}>
             <Pencil size={13} /> Edit
@@ -852,8 +852,7 @@ export default function TasksPage() {
   }
 
   function handleComplete(task: TaskItem) {
-    const newCompleted = !task.completed;
-    updateTask.mutate({ taskId: task.id, status: newCompleted ? "COMPLETED" : "PENDING" });
+    updateTask.mutate({ taskId: task.id, status: task.status !== "COMPLETED" ? "COMPLETED" : "PENDING" });
   }
 
   const counts = getTaskSummaryCounts(tasks);

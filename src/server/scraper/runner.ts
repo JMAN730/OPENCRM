@@ -70,9 +70,17 @@ export function isJobRunning(jobId: string): boolean {
   return running.has(jobId);
 }
 
+// Throttle reconciliation to at most once per 60s so the scraper list query
+// doesn't issue a DB write on every page load.
+let lastReconcileAt = 0;
+
 export async function reconcileOrphanedJobs(): Promise<void> {
+  const now = Date.now();
+  if (now - lastReconcileAt < 60_000) return;
+  lastReconcileAt = now;
+
   // Mark any RUNNING jobs that aren't in our in-memory registry as FAILED.
-  // Called on first list/start to clean up after server restarts.
+  // Cleans up after server restarts.
   const stale = await prisma.scraperJob.findMany({
     where: { status: "RUNNING" },
     select: { id: true },
