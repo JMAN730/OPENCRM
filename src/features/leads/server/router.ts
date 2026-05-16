@@ -97,6 +97,7 @@ export const leadsRouter = createTRPCRouter({
           status: z
             .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
             .optional(),
+          hasPhone: z.boolean().optional(),
           limit: z.number().int().min(1).max(100).default(100),
           // Cursor encodes the last seen lead's id (the primary sort key
           // tie-breaker). Prisma's native cursor pagination handles the
@@ -136,6 +137,10 @@ export const leadsRouter = createTRPCRouter({
 
       if (input.status) {
         where.status = input.status;
+      }
+
+      if (input.hasPhone) {
+        where.phone = { not: null };
       }
 
       const finalWhere: Record<string, unknown> = {
@@ -611,7 +616,7 @@ export const leadsRouter = createTRPCRouter({
       await logActivity(ctx.prisma, {
         leadId: note.leadId,
         userId: callerId,
-        type: "NOTE_ADDED",
+        type: "NOTE_DELETED",
         description: "Deleted a note",
       });
       return { success: true };

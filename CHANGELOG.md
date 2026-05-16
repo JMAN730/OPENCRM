@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lead management system with pipeline tracking
 - Dashboard with real-time sales metrics
 - Task management system
-- Smart dialer integration with Twilio
-- AI-powered analytics with OpenAI
+- Power dialer with call queue and outcome logging (simulated — Twilio not yet integrated)
+- Analytics dashboard with call charts and pipeline breakdown
+- Template-based website generator per lead
 - Multi-tenant architecture with organization isolation
 - Authentication with NextAuth.js
 - Comprehensive test suite with Vitest

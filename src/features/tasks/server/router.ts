@@ -29,20 +29,16 @@ export const tasksRouter = createTRPCRouter({
         }
       }
 
-      const assignedToId = input.assignedToId ?? ctx.session.user.id;
-      const status = input.status;
-
       const task = await ctx.prisma.task.create({
         data: {
           title: input.title,
           description: input.description,
           leadId: input.leadId,
           userId: ctx.session.user.id,
-          assignedToId,
+          assignedToId: input.assignedToId ?? ctx.session.user.id,
           dueDate: input.dueDate,
           priority: input.priority,
-          status,
-          completed: status === "COMPLETED",
+          status: input.status,
           organizationId: ctx.organizationId,
         },
       });
@@ -69,6 +65,7 @@ export const tasksRouter = createTRPCRouter({
       dueDate: z.coerce.date().nullable().optional(),
       priority: prioritySchema.optional(),
       status: statusSchema.optional(),
+      // Legacy boolean for compatibility with UI components that pass completed:bool
       completed: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -91,15 +88,10 @@ export const tasksRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
       }
 
-      // Sync completed <-> status
-      let completed = input.completed;
+      // Derive status from the legacy completed boolean if status wasn't provided
       let status = input.status;
-      if (status === "COMPLETED") {
-        completed = true;
-      } else if (status !== undefined) {
-        completed = false;
-      } else if (completed !== undefined) {
-        status = completed ? "COMPLETED" : "PENDING";
+      if (status === undefined && input.completed !== undefined) {
+        status = input.completed ? "COMPLETED" : "PENDING";
       }
 
       const updated = await ctx.prisma.task.update({
@@ -112,7 +104,6 @@ export const tasksRouter = createTRPCRouter({
           dueDate: input.dueDate,
           priority: input.priority,
           status,
-          completed,
         },
       });
 
@@ -161,7 +152,6 @@ export const tasksRouter = createTRPCRouter({
     .input(
       z
         .object({
-          completed: z.boolean().optional(),
           status: statusSchema.optional(),
           priority: prioritySchema.optional(),
           assignedToId: z.string().optional(),
@@ -183,7 +173,6 @@ export const tasksRouter = createTRPCRouter({
         deletedAt: null,
       };
 
-      if (typeof input.completed === "boolean") where.completed = input.completed;
       if (input.status) where.status = input.status;
       if (input.priority) where.priority = input.priority;
       if (input.assignedToId) where.assignedToId = input.assignedToId;
@@ -196,7 +185,8 @@ export const tasksRouter = createTRPCRouter({
 
       const rows = await ctx.prisma.task.findMany({
         where,
-        orderBy: [{ completed: "asc" }, { dueDate: "asc" }, { id: "asc" }],
+        // Sort incomplete tasks first, then by due date
+        orderBy: [{ status: "asc" }, { dueDate: "asc" }, { id: "asc" }],
         include: {
           lead: { select: { id: true, firstName: true, lastName: true, company: true } },
           user: { select: { id: true, name: true, image: true } },
@@ -268,7 +258,7 @@ export const tasksRouter = createTRPCRouter({
       where: {
         user: { organizationId: ctx.organizationId },
         dueDate: { gte: today, lt: tomorrow },
-        completed: false,
+        status: { not: "COMPLETED" },
         deletedAt: null,
       },
       take: 5,
@@ -288,7 +278,7 @@ export const tasksRouter = createTRPCRouter({
       where: {
         user: { organizationId: ctx.organizationId },
         dueDate: { lt: now },
-        completed: false,
+        status: { not: "COMPLETED" },
         deletedAt: null,
       },
       take: 10,
