@@ -55,14 +55,16 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
   CANCELED:  { label: "Canceled",   color: "oklch(70% 0.04 80)" },
 };
 
-function PhoneReachCard({ data }: { data: { status: string; count: number }[] }) {
+function PhoneReachCard({ data, isLoading }: { data: { status: string; count: number }[]; isLoading: boolean }) {
   const total = data.reduce((s, d) => s + d.count, 0);
 
   if (total === 0) {
     return (
       <div className="crm-card flush">
         <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· 30 days</span></div>
-        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>No calls logged yet</div>
+        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+          {isLoading ? "Loading…" : "No calls logged yet"}
+        </div>
       </div>
     );
   }
@@ -137,7 +139,7 @@ const LEAD_STATUS_LABEL: Record<string, string> = {
 
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 
-function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; count: number }[] }) {
+function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: string; count: number }[]; isLoading: boolean }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);
   const max = Math.max(...leadsByStatus.map((p) => p.count), 1);
 
@@ -145,7 +147,9 @@ function PipelineCard({ leadsByStatus }: { leadsByStatus: { status: string; coun
     return (
       <div className="crm-card flush">
         <div className="crm-card-head"><h3>Pipeline</h3></div>
-        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>No leads yet — add your first lead to see the pipeline</div>
+        <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+          {isLoading ? "Loading…" : "No leads yet — add your first lead to see the pipeline"}
+        </div>
       </div>
     );
   }
@@ -241,18 +245,20 @@ const CALL_STATUS_MAP: Record<string, { label: string; cls: string }> = {
 function CallsCard({
   recentCalls,
   callsToday,
+  isLoading,
 }: {
   recentCalls: { id: string; phone: string; status: string; duration?: number | null; createdAt: string }[];
   callsToday: number;
+  isLoading: boolean;
 }) {
   return (
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Recent calls</h3>
-        <span className="crm-sub">· {callsToday} today</span>
+        <span className="crm-sub">· {isLoading ? "—" : callsToday} today</span>
       </div>
       {recentCalls.length === 0 ? (
-        <div className="crm-empty">No calls logged yet.</div>
+        <div className="crm-empty">{isLoading ? "Loading…" : "No calls logged yet."}</div>
       ) : (
         <table className="crm-table">
           <thead>
@@ -447,17 +453,20 @@ type DashboardTab = "overview" | "team" | "my-stats";
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
+  const { data: stats, isLoading: statsLoading } = trpc.dashboard.getKpiStats.useQuery();
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const revenue = stats?.monthlyRevenue
+  const placeholder = statsLoading ? "—" : null;
+  const revenue = stats?.monthlyRevenue != null
     ? "$" + (stats.monthlyRevenue / 1000).toFixed(1) + "K"
-    : "$0";
-  const totalLeads = stats?.totalLeads?.toLocaleString() ?? "0";
+    : (placeholder ?? "$0");
+  const totalLeads = stats?.totalLeads != null
+    ? stats.totalLeads.toLocaleString()
+    : (placeholder ?? "0");
 
   const followupsDue = stats?.followupsDue ?? 0;
   const callsToday = stats?.callsToday ?? 0;
@@ -478,12 +487,18 @@ export default function DashboardPage() {
           <div>
             <h1 className="crm-page-title">{greeting}, {firstName}</h1>
             <div className="crm-page-sub">
-              {callsToday > 0 && (
-                <><strong style={{ color: "var(--crm-fg)" }}>{callsToday}</strong> call{callsToday !== 1 ? "s" : ""} logged today · </>
+              {statsLoading ? (
+                "Loading your activity…"
+              ) : (
+                <>
+                  {callsToday > 0 && (
+                    <><strong style={{ color: "var(--crm-fg)" }}>{callsToday}</strong> call{callsToday !== 1 ? "s" : ""} logged today · </>
+                  )}
+                  {followupsDue > 0
+                    ? <><strong style={{ color: "var(--crm-fg)" }}>{followupsDue}</strong> follow-up{followupsDue !== 1 ? "s" : ""} due</>
+                    : "No follow-ups due today"}
+                </>
               )}
-              {followupsDue > 0
-                ? <><strong style={{ color: "var(--crm-fg)" }}>{followupsDue}</strong> follow-up{followupsDue !== 1 ? "s" : ""} due</>
-                : "No follow-ups due today"}
             </div>
           </div>
         </div>
@@ -517,16 +532,16 @@ export default function DashboardPage() {
             <div className="crm-kpi-grid">
               <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} />
               <KPICard label="Total leads" icon={Users} value={totalLeads} />
-              <KPICard label="Calls today" icon={Phone} value={callsToday} />
+              <KPICard label="Calls today" icon={Phone} value={!stats && statsLoading ? "—" : callsToday} />
             </div>
 
             <div className="crm-grid-row">
-              <CallsCard recentCalls={recentCalls} callsToday={callsToday} />
-              <PhoneReachCard data={statusDist} />
+              <CallsCard recentCalls={recentCalls} callsToday={callsToday} isLoading={statsLoading} />
+              <PhoneReachCard data={statusDist} isLoading={statsLoading} />
             </div>
 
             <div className="crm-grid-row">
-              <PipelineCard leadsByStatus={leadsByStatus} />
+              <PipelineCard leadsByStatus={leadsByStatus} isLoading={statsLoading} />
               <TasksCard />
             </div>
           </>
