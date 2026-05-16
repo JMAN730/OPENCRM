@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Bell, Inbox, Sparkles, Menu, Sun, Moon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -35,6 +35,10 @@ const POPOVER_STYLE: React.CSSProperties = {
   animation: "crm-fade-in 0.12s ease-out",
 };
 
+const subscribeToClientMounted = () => () => {};
+const getClientMountedSnapshot = () => true;
+const getServerMountedSnapshot = () => false;
+
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const title = PAGE_TITLES[pathname] ?? PAGE_TITLES[Object.keys(PAGE_TITLES).find((k) => pathname.startsWith(k)) ?? ""] ?? "Dashboard";
@@ -42,8 +46,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToClientMounted,
+    getClientMountedSnapshot,
+    getServerMountedSnapshot,
+  );
   const isDark = mounted && resolvedTheme === "dark";
 
   useEffect(() => {
