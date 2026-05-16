@@ -417,6 +417,9 @@ export function LeadsList() {
   );
 
   const subtitle = useMemo(() => {
+    if (isLoading) {
+      return "Loading your leads…";
+    }
     if (dueTodayQuery.isError || overdueQuery.isError) {
       return `${focusFilteredLeads.length} leads remain available while focus signals reload.`;
     }
@@ -424,9 +427,11 @@ export function LeadsList() {
       return `${focusFilteredLeads.length} of ${allLeads.length} leads match the current view.`;
     }
     return `${focusCards.length} priority lead${focusCards.length === 1 ? "" : "s"} surfaced from your current lead view.`;
-  }, [allLeads.length, dueTodayQuery.isError, focusCards.length, focusFilteredLeads.length, overdueQuery.isError]);
+  }, [allLeads.length, dueTodayQuery.isError, focusCards.length, focusFilteredLeads.length, isLoading, overdueQuery.isError]);
 
-  const classicSubtitle = `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
+  const classicSubtitle = isLoading
+    ? "Loading your leads…"
+    : `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
 
   return (
     <>
