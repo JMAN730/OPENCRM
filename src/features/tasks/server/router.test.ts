@@ -24,7 +24,6 @@ describe("tasksRouter", () => {
           leadId: undefined,
           priority: "MEDIUM",
           status: "PENDING",
-          completed: false,
           organizationId: "org-1",
         }),
       });
@@ -90,13 +89,13 @@ describe("tasksRouter", () => {
       ).rejects.toThrow();
     });
 
-    it("sets completed=true when status is COMPLETED", async () => {
+    it("passes status=COMPLETED through to Prisma", async () => {
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.create({ title: "Done already", status: "COMPLETED" });
 
       const data = prisma.task.create.mock.calls[0][0].data;
-      expect(data.completed).toBe(true);
+      expect(data.status).toBe("COMPLETED");
     });
   });
 
@@ -117,7 +116,7 @@ describe("tasksRouter", () => {
       });
       expect(prisma.task.update).toHaveBeenCalledWith({
         where: { id: "t1" },
-        data: expect.objectContaining({ completed: true, status: "COMPLETED" }),
+        data: expect.objectContaining({ status: "COMPLETED" }),
       });
     });
 
@@ -165,14 +164,13 @@ describe("tasksRouter", () => {
       ).rejects.toThrow();
     });
 
-    it("syncs completed=false when status changes to PENDING", async () => {
+    it("passes status=PENDING through to Prisma on status update", async () => {
       prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1", leadId: null, title: "t" });
       prisma.task.update.mockResolvedValue({ id: "t1", title: "t" });
 
       await caller.tasks.update({ taskId: "t1", status: "PENDING" });
 
       const data = prisma.task.update.mock.calls[0][0].data;
-      expect(data.completed).toBe(false);
       expect(data.status).toBe("PENDING");
     });
   });
@@ -251,14 +249,14 @@ describe("tasksRouter", () => {
   });
 
   describe("getDueToday", () => {
-    it("filters by user.organizationId, completed=false, takes 5, excludes deleted", async () => {
+    it("filters by user.organizationId, excludes COMPLETED, takes 5, excludes deleted", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
       await caller.tasks.getDueToday();
 
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.where.user).toEqual({ organizationId: "org-1" });
-      expect(args.where.completed).toBe(false);
+      expect(args.where.status).toEqual({ not: "COMPLETED" });
       expect(args.where.deletedAt).toBe(null);
       expect(args.take).toBe(5);
     });
@@ -282,14 +280,14 @@ describe("tasksRouter", () => {
       expect(result).toEqual({ items: [], nextCursor: null });
     });
 
-    it("orders by (completed asc, dueDate asc, id asc) for stable cursor paging", async () => {
+    it("orders by (status asc, dueDate asc, id asc) for stable cursor paging", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
       await caller.tasks.getAll();
 
       const args = prisma.task.findMany.mock.calls[0][0];
       expect(args.orderBy).toEqual([
-        { completed: "asc" },
+        { status: "asc" },
         { dueDate: "asc" },
         { id: "asc" },
       ]);
@@ -307,13 +305,13 @@ describe("tasksRouter", () => {
       expect(result.nextCursor).toBe("t-50");
     });
 
-    it("filters by completed flag when supplied", async () => {
+    it("filters by status when supplied", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
-      await caller.tasks.getAll({ completed: false });
+      await caller.tasks.getAll({ status: "PENDING" });
 
       const args = prisma.task.findMany.mock.calls[0][0];
-      expect(args.where.completed).toBe(false);
+      expect(args.where.status).toBe("PENDING");
     });
 
     it("filters by assignedToId when supplied", async () => {
@@ -346,13 +344,13 @@ describe("tasksRouter", () => {
   });
 
   describe("getOverdue", () => {
-    it("filters by completed=false, dueDate before today, excludes deleted", async () => {
+    it("filters by status not COMPLETED, dueDate before today, excludes deleted", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
       await caller.tasks.getOverdue();
 
       const args = prisma.task.findMany.mock.calls[0][0];
-      expect(args.where.completed).toBe(false);
+      expect(args.where.status).toEqual({ not: "COMPLETED" });
       expect(args.where.deletedAt).toBe(null);
       expect(args.where.dueDate).toMatchObject({ lt: expect.any(Date) });
     });

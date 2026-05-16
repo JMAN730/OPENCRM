@@ -34,7 +34,7 @@ export const dashboardRouter = createTRPCRouter({
             where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.task.count({
-            where: { user: { organizationId }, completed: false, dueDate: { gte: today, lt: tomorrow } },
+            where: { user: { organizationId }, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.lead.aggregate({
             where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
@@ -135,7 +135,7 @@ export const dashboardRouter = createTRPCRouter({
         const [leads, tasks, scraperActive] = await Promise.all([
           ctx.prisma.lead.count({ where: { organizationId } }),
           ctx.prisma.task.count({
-            where: { user: { organizationId }, completed: false },
+            where: { user: { organizationId }, status: { not: "COMPLETED" } },
           }),
           ctx.prisma.scraperJob.count({
             where: { organizationId, status: { in: ["PENDING", "RUNNING"] } },
@@ -258,7 +258,7 @@ export const dashboardRouter = createTRPCRouter({
       organizationId
         ? ctx.prisma.lead.count({ where: { organizationId, assignedToId: userId } })
         : Promise.resolve(0),
-      ctx.prisma.task.count({ where: { userId, completed: false } }),
+      ctx.prisma.task.count({ where: { userId, status: { not: "COMPLETED" } } }),
       ctx.prisma.activity.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" },
