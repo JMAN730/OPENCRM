@@ -36,16 +36,42 @@ describe("leadsRouter", () => {
       ]);
     });
 
-    it("uses city and normalized state only when search includes city plus state", async () => {
+    it("keeps general search active for state-only queries while matching normalized state", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "FL" });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toEqual([
+        { company: { contains: "FL", mode: "insensitive" } },
+        { firstName: { contains: "FL", mode: "insensitive" } },
+        { lastName: { contains: "FL", mode: "insensitive" } },
+        { email: { contains: "FL", mode: "insensitive" } },
+        { phone: { contains: "FL", mode: "insensitive" } },
+        { AND: [{ state: "FL" }] },
+        { city: { contains: "FL", mode: "insensitive" } },
+      ]);
+    });
+
+    it("uses normalized state and city matching when search includes city plus state", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
 
       await caller.leads.getAll({ search: "Tampa FL" });
 
       const args = prisma.lead.findMany.mock.calls[0][0];
-      expect(args.where.OR).toBeUndefined();
-      expect(args.where.AND).toEqual([
-        { state: "FL" },
-        { city: { contains: "Tampa", mode: "insensitive" } },
+      expect(args.where.OR).toEqual([
+        { company: { contains: "Tampa FL", mode: "insensitive" } },
+        { firstName: { contains: "Tampa FL", mode: "insensitive" } },
+        { lastName: { contains: "Tampa FL", mode: "insensitive" } },
+        { email: { contains: "Tampa FL", mode: "insensitive" } },
+        { phone: { contains: "Tampa FL", mode: "insensitive" } },
+        {
+          AND: [
+            { state: "FL" },
+            { city: { contains: "Tampa", mode: "insensitive" } },
+          ],
+        },
+        { city: { contains: "Tampa FL", mode: "insensitive" } },
       ]);
     });
 
@@ -55,20 +81,31 @@ describe("leadsRouter", () => {
       await caller.leads.getAll({ search: "Tampa, Florida" });
 
       const args = prisma.lead.findMany.mock.calls[0][0];
-      expect(args.where.AND).toEqual([
-        { state: "FL" },
-        { city: { contains: "Tampa", mode: "insensitive" } },
+      expect(args.where.OR).toEqual([
+        { company: { contains: "Tampa, Florida", mode: "insensitive" } },
+        { firstName: { contains: "Tampa, Florida", mode: "insensitive" } },
+        { lastName: { contains: "Tampa, Florida", mode: "insensitive" } },
+        { email: { contains: "Tampa, Florida", mode: "insensitive" } },
+        { phone: { contains: "Tampa, Florida", mode: "insensitive" } },
+        {
+          AND: [
+            { state: "FL" },
+            { city: { contains: "Tampa", mode: "insensitive" } },
+          ],
+        },
+        { city: { contains: "Tampa, Florida", mode: "insensitive" } },
       ]);
     });
 
-    it("uses state only when search is a state name or abbreviation", async () => {
+    it("includes a legacy city fallback when searching by city plus state", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
 
-      await caller.leads.getAll({ search: "FL" });
+      await caller.leads.getAll({ search: "Tampa, Florida" });
 
       const args = prisma.lead.findMany.mock.calls[0][0];
-      expect(args.where.OR).toBeUndefined();
-      expect(args.where.AND).toEqual([{ state: "FL" }]);
+      expect(args.where.OR).toContainEqual({
+        city: { contains: "Tampa, Florida", mode: "insensitive" },
+      });
     });
 
     it("orders results by (createdAt desc, id desc) for stable cursor pagination", async () => {
