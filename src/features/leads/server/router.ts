@@ -56,26 +56,34 @@ function normalizeLeadInput(input: LeadInput): LeadInput {
 function searchWhere(search?: string): Record<string, unknown> {
   if (!search) return {};
 
+  const generalSearch = [
+    { company: { contains: search, mode: "insensitive" } },
+    { firstName: { contains: search, mode: "insensitive" } },
+    { lastName: { contains: search, mode: "insensitive" } },
+    { email: { contains: search, mode: "insensitive" } },
+    { phone: { contains: search, mode: "insensitive" } },
+  ];
+
   const location = parseLocationSearch(search);
   if (location) {
     return {
-      AND: [
-        { state: location.state },
-        ...(location.city
-          ? [{ city: { contains: location.city, mode: "insensitive" } }]
-          : []),
+      OR: [
+        ...generalSearch,
+        {
+          AND: [
+            { state: location.state },
+            ...(location.city
+              ? [{ city: { contains: location.city, mode: "insensitive" } }]
+              : []),
+          ],
+        },
+        { city: { contains: search, mode: "insensitive" } },
       ],
     };
   }
 
   return {
-    OR: [
-      { company: { contains: search, mode: "insensitive" } },
-      { firstName: { contains: search, mode: "insensitive" } },
-      { lastName: { contains: search, mode: "insensitive" } },
-      { email: { contains: search, mode: "insensitive" } },
-      { phone: { contains: search, mode: "insensitive" } },
-    ],
+    OR: generalSearch,
   };
 }
 
