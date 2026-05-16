@@ -90,6 +90,10 @@ function searchWhere(search?: string): Record<string, unknown> {
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
   customOutcome: { select: { id: true, label: true, hint: true } },
+  // _count is what drives the "Touches" count in the UI — it must reflect
+  // real interactions (CallLog rows, Notes), not derived data like
+  // Activity entries or call outcome heuristics.
+  _count: { select: { calls: true, notes: true } },
 } as const;
 
 export const leadsRouter = createTRPCRouter({

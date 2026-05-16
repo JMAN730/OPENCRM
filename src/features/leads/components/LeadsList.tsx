@@ -123,6 +123,7 @@ export function LeadsList() {
   } = trpc.leads.getAll.useQuery({ search: debouncedSearch, limit: 100, cursor: pageCursor });
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
+  const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
   const { data: customOutcomes } = trpc.leads.customOutcomes.list.useQuery(undefined, {
     staleTime: 60_000,
   });
@@ -160,6 +161,7 @@ export function LeadsList() {
       void utils.leads.getAll.invalidate();
       void utils.tasks.getDueToday.invalidate();
       void utils.tasks.getOverdue.invalidate();
+      void utils.tasks.getUpcomingFollowUps.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -179,6 +181,10 @@ export function LeadsList() {
   const allLeads = useMemo<Lead[]>(() => (leadsPage?.items as Lead[]) ?? [], [leadsPage]);
   const dueTodayTasks = useMemo(() => dueTodayQuery.data ?? [], [dueTodayQuery.data]);
   const overdueTasks = useMemo(() => overdueQuery.data ?? [], [overdueQuery.data]);
+  const upcomingFollowUpTasks = useMemo(
+    () => upcomingFollowUpsQuery.data ?? [],
+    [upcomingFollowUpsQuery.data],
+  );
   const dueLeadIds = useMemo(
     () => getDueLeadIds(overdueTasks, dueTodayTasks),
     [dueTodayTasks, overdueTasks],
@@ -274,8 +280,9 @@ export function LeadsList() {
         leads: scopedLeads,
         overdueTasks,
         dueTodayTasks,
+        upcomingFollowUpTasks,
       }),
-    [dueTodayTasks, overdueTasks, scopedLeads],
+    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks],
   );
 
   const toggleStage = (stage: string) => {
@@ -392,6 +399,7 @@ export function LeadsList() {
         await utils.leads.getAll.invalidate();
         await utils.tasks.getDueToday.invalidate();
         await utils.tasks.getOverdue.invalidate();
+        await utils.tasks.getUpcomingFollowUps.invalidate();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to delete selected leads.");
       } finally {

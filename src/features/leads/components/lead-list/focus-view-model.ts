@@ -80,16 +80,24 @@ function sortTasksAgainstLeadMap(left: FocusTask, right: FocusTask, leadMap: Map
 }
 
 function buildFocusCard(lead: Lead, urgency: FocusUrgency, rank: number, task?: FocusTask): FocusLeadCard {
+  let reason: string;
+  if (urgency === "overdue") {
+    reason = "Overdue follow-up";
+  } else if (urgency === "today") {
+    reason = formatTaskDueLabel(task!);
+  } else if (task) {
+    // Hot lead with a scheduled future follow-up: surface the schedule
+    // instead of the stale "no scheduled follow-up" warning.
+    reason = `Follow-up scheduled - ${formatTaskDueLabel(task)}`;
+  } else {
+    reason = "Hot lead with no scheduled follow-up";
+  }
+
   return {
     lead,
     rank,
     urgency,
-    reason:
-      urgency === "overdue"
-        ? "Overdue follow-up"
-        : urgency === "today"
-          ? formatTaskDueLabel(task!)
-          : "Hot lead with no scheduled follow-up",
+    reason,
     dueLabel: task ? formatTaskDueLabel(task) : null,
     score: scoreOf(lead),
     touches: touchesOf(lead),
@@ -133,16 +141,30 @@ export function buildFocusSpotlightLeads({
   leads,
   overdueTasks,
   dueTodayTasks,
+  upcomingFollowUpTasks = [],
   limit = 3,
 }: {
   leads: Lead[];
   overdueTasks: FocusTask[];
   dueTodayTasks: FocusTask[];
+  upcomingFollowUpTasks?: FocusTask[];
   limit?: number;
 }) {
   const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
   const usedLeadIds = new Set<string>();
   const spotlight: FocusLeadCard[] = [];
+
+  // Build a leadId -> earliest upcoming task map so hot-lead cards can
+  // surface "Follow-up scheduled" instead of "no scheduled follow-up".
+  const upcomingByLead = new Map<string, FocusTask>();
+  for (const task of upcomingFollowUpTasks) {
+    const leadId = taskLeadId(task);
+    if (!leadId) continue;
+    const existing = upcomingByLead.get(leadId);
+    if (!existing || taskDueTime(task) < taskDueTime(existing)) {
+      upcomingByLead.set(leadId, task);
+    }
+  }
 
   const sortedOverdue = [...overdueTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap));
   const sortedDueToday = [...dueTodayTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap));
@@ -176,7 +198,8 @@ export function buildFocusSpotlightLeads({
     .sort(sortByScoreThenFreshness);
 
   for (const lead of hotLeads) {
-    spotlight.push(buildFocusCard(lead, "hot", spotlight.length + 1));
+    const upcoming = upcomingByLead.get(lead.id);
+    spotlight.push(buildFocusCard(lead, "hot", spotlight.length + 1, upcoming));
     usedLeadIds.add(lead.id);
     if (spotlight.length >= limit) return spotlight;
   }
