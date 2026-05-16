@@ -205,23 +205,6 @@ export const tasksRouter = createTRPCRouter({
       return { items: rows, nextCursor };
     }),
 
-  getById: organizationProcedure
-    .input(z.object({ taskId: z.string() }))
-    .query(({ ctx, input }) => {
-      return ctx.prisma.task.findFirst({
-        where: {
-          id: input.taskId,
-          user: { organizationId: ctx.organizationId },
-          deletedAt: null,
-        },
-        include: {
-          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
-          user: { select: { id: true, name: true, image: true } },
-          assignedTo: { select: { id: true, name: true, image: true } },
-        },
-      });
-    }),
-
   getCalendar: organizationProcedure
     .input(z.object({
       from: z.coerce.date(),
