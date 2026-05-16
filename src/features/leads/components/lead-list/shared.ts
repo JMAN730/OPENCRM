@@ -32,6 +32,10 @@ export type Lead = {
     label: string;
     hint?: string | null;
   } | null;
+  _count?: {
+    calls?: number;
+    notes?: number;
+  } | null;
 };
 
 export type SessionUser = {
@@ -309,20 +313,16 @@ export function relativeTime(iso: string | Date) {
 }
 
 export function touchesOf(lead: Lead) {
-  const engagementKey = engagementKeyOf(lead);
-  const baseline =
-    engagementKey === "CONNECTED" || engagementKey === "ANSWERED"
-      ? 5
-      : engagementKey === "AI_VOICEMAIL"
-        ? 3
-        : engagementKey === "NO_ANSWER"
-          ? 2
-          : engagementKey === "HUNG_UP"
-            ? 2
-            : 0;
-
-  const noteBoost = lead.callNotes?.trim() ? 1 : 0;
-  return Math.min(6, baseline + noteBoost);
+  // Touches = real, recorded interactions with the lead. CallLog rows are
+  // the canonical source (each Twilio dial creates exactly one row, and
+  // `CallLog.twilioCallSid` is unique so the same Twilio call cannot be
+  // counted twice). Notes count as a second kind of explicit touch.
+  // Status changes, task creation, page views, and Activity log entries
+  // are intentionally NOT counted — Activity rows can be duplicated by
+  // bulk operations and don't represent a real interaction with the lead.
+  const calls = lead._count?.calls ?? 0;
+  const notes = lead._count?.notes ?? 0;
+  return calls + notes;
 }
 
 export function nextActionForLead(

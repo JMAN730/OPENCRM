@@ -6,6 +6,7 @@ const mockReplace = vi.fn();
 const invalidateLeads = vi.fn();
 const invalidateDueToday = vi.fn();
 const invalidateOverdue = vi.fn();
+const invalidateUpcomingFollowUps = vi.fn();
 const createLeadMutate = vi.fn();
 const deleteLeadMutate = vi.fn();
 const assignLeadMutate = vi.fn();
@@ -23,6 +24,15 @@ let dueTodayState: { data: Array<Record<string, unknown>>; isLoading: boolean; i
   isError: false,
 };
 let overdueState: { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean } = {
+  data: [],
+  isLoading: false,
+  isError: false,
+};
+let upcomingFollowUpsState: {
+  data: Array<Record<string, unknown>>;
+  isLoading: boolean;
+  isError: boolean;
+} = {
   data: [],
   isLoading: false,
   isError: false,
@@ -155,6 +165,7 @@ vi.mock("@/app/_trpc/client", () => ({
       tasks: {
         getDueToday: { invalidate: invalidateDueToday },
         getOverdue: { invalidate: invalidateOverdue },
+        getUpcomingFollowUps: { invalidate: invalidateUpcomingFollowUps },
       },
     }),
     leads: {
@@ -196,6 +207,9 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       getOverdue: {
         useQuery: vi.fn(() => overdueState),
+      },
+      getUpcomingFollowUps: {
+        useQuery: vi.fn(() => upcomingFollowUpsState),
       },
     },
     teams: {
@@ -377,6 +391,11 @@ describe("LeadsList", () => {
           },
         }),
       ],
+      isLoading: false,
+      isError: false,
+    };
+    upcomingFollowUpsState = {
+      data: [],
       isLoading: false,
       isError: false,
     };
