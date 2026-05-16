@@ -4,7 +4,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, Calendar, List, ChevronLeft, ChevronRight,
@@ -777,6 +778,8 @@ function FilterBar({ filters, members, onChange }: { filters: Filters; members: 
 
 export default function TasksPage() {
   const utils = trpc.useUtils();
+  const searchParams = useSearchParams();
+  const linkedTaskId = searchParams.get("taskId");
 
   const [view, setView] = useState<"list" | "calendar">("list");
   const [filters, setFilters] = useState<Filters>({ assignedToId: "", status: "", priority: "", search: "" });
@@ -794,7 +797,15 @@ export default function TasksPage() {
 
   const { data: members = [] } = trpc.teams.organizationMembers.useQuery();
 
-  const allTasks = tasksData?.items ?? [];
+  const allTasks = useMemo(() => tasksData?.items ?? [], [tasksData?.items]);
+  const linkedTaskFromList = useMemo(
+    () => linkedTaskId ? allTasks.find((task) => task.id === linkedTaskId) ?? null : null,
+    [allTasks, linkedTaskId],
+  );
+  const { data: linkedTask } = trpc.tasks.getById.useQuery(
+    { taskId: linkedTaskId ?? "" },
+    { enabled: Boolean(linkedTaskId && !linkedTaskFromList) },
+  );
 
   const tasks = filters.search
     ? allTasks.filter((t) => {
@@ -803,9 +814,21 @@ export default function TasksPage() {
       })
     : allTasks;
 
+  const closeSelectedTask = useCallback(() => {
+    setSelectedTask(null);
+
+    if (!linkedTaskId || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("taskId");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/tasks?${query}` : "/tasks");
+  }, [linkedTaskId, searchParams]);
+
   const invalidate = useCallback(() => {
     void utils.tasks.getAll.invalidate();
     void utils.tasks.getDueToday.invalidate();
+    void utils.tasks.getById.invalidate();
   }, [utils]);
 
   const createTask = trpc.tasks.create.useMutation({
@@ -819,7 +842,7 @@ export default function TasksPage() {
   });
 
   const deleteTask = trpc.tasks.delete.useMutation({
-    onSuccess: () => { invalidate(); setDeletingTask(null); setSelectedTask(null); toast.success("Task deleted."); },
+    onSuccess: () => { invalidate(); setDeletingTask(null); closeSelectedTask(); toast.success("Task deleted."); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -856,6 +879,8 @@ export default function TasksPage() {
   }
 
   const counts = getTaskSummaryCounts(tasks);
+  const activeLinkedTask = linkedTaskId ? linkedTaskFromList ?? linkedTask ?? null : null;
+  const visibleSelectedTask = selectedTask ?? activeLinkedTask;
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -986,13 +1011,13 @@ export default function TasksPage() {
         />
       )}
 
-      {selectedTask && !editingTask && !deletingTask && (
+      {visibleSelectedTask && !editingTask && !deletingTask && (
         <TaskDetailSidebar
-          task={selectedTask}
+          task={visibleSelectedTask}
           onEdit={(t) => { setSelectedTask(null); setEditingTask(t); }}
           onDelete={(t) => { setSelectedTask(null); setDeletingTask(t); }}
           onComplete={handleComplete}
-          onClose={() => setSelectedTask(null)}
+          onClose={closeSelectedTask}
         />
       )}
     </DashboardLayout>
