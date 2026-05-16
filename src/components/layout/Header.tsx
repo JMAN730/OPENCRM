@@ -42,6 +42,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [openPanel, setOpenPanel] = useState<Panel>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!openPanel) return;
@@ -86,14 +88,22 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         >
           <Inbox size={15} />
         </button>
-        <button
-          className="crm-btn ghost icon"
-          title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-          aria-label={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {resolvedTheme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-        </button>
+        {/* Render a hidden placeholder until client mounts to avoid SSR/hydration mismatch
+            (next-themes leaves resolvedTheme undefined on the server). */}
+        {mounted ? (
+          <button
+            className="crm-btn ghost icon"
+            title={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            aria-label={resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {resolvedTheme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+        ) : (
+          <button className="crm-btn ghost icon" aria-hidden style={{ visibility: "hidden" }}>
+            <Moon size={15} />
+          </button>
+        )}
         <div style={{ width: 1, height: 20, background: "var(--crm-border)", margin: "0 4px" }} />
         <button className="crm-btn" aria-pressed={openPanel === "ai"} onClick={() => toggle("ai")}>
           <Sparkles size={14} />
