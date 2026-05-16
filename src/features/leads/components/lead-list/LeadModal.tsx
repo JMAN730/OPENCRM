@@ -933,7 +933,12 @@ function CreateLeadTaskDialog({
       toast.error("Task title is required.");
       return;
     }
-    onCreate({ title: trimmedTitle, dueDate: dueDate || undefined, priority });
+    let parsedDueDate: string | undefined;
+    if (dueDate) {
+      const [y, m, d] = dueDate.split("-").map(Number);
+      parsedDueDate = new Date(y, m - 1, d).toISOString();
+    }
+    onCreate({ title: trimmedTitle, dueDate: parsedDueDate, priority });
   };
 
   return (
