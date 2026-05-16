@@ -397,9 +397,16 @@ export function PipelineBoard() {
   const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
 
   function filterLeads(leads: Lead[]): Lead[] {
-    if (activeFilter === "mine")  return leads.filter((l) => l.assignedTo?.id === userId);
-    if (activeFilter === "hot")   return leads.filter((l) => l.temperatureOverride === "HOT");
-    if (activeFilter === "idle")  return leads.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
+    if (activeFilter === "mine")    return leads.filter((l) => l.assignedTo?.id === userId);
+    if (activeFilter === "hot")     return leads.filter((l) => l.temperatureOverride === "HOT");
+    if (activeFilter === "idle")    return leads.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
+    if (activeFilter === "closing") {
+      const now = new Date();
+      return leads.filter((l) => {
+        const d = new Date(l.updatedAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+    }
     return leads;
   }
 
