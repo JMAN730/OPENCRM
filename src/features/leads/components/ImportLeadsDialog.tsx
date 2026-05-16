@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import readXlsxFile from "read-excel-file/browser";
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,9 +56,12 @@ type ParsedLead = {
   status?: "NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP";
 };
 
+type RawCell = string | number | boolean | Date | null;
+
 // Normalizes a cell value to a clean string, handling Excel numeric types
 function cellToString(value: unknown): string {
   if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().split("T")[0] ?? "";
   if (typeof value === "number") {
     // Excel stores phone numbers as floats — strip decimal and convert
     return Number.isInteger(value) ? String(value) : String(Math.round(value));
@@ -138,7 +141,8 @@ export function ImportLeadsDialog({ onImported }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheetName, setSheetName] = useState<string>("");
-  const [xlsxBytes, setXlsxBytes] = useState<Uint8Array | null>(null);
+  // Store all parsed sheets so switching doesn't require re-reading the file
+  const [allSheets, setAllSheets] = useState<{ sheet: string; data: RawCell[][] }[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bulkCreate = trpc.leads.bulkCreate.useMutation({
@@ -152,38 +156,18 @@ export function ImportLeadsDialog({ onImported }: Props) {
     onError: (err) => toast.error(err.message),
   });
 
-  const parseWorkbook = (wb: XLSX.WorkBook, requestedSheetName?: string) => {
-    const names = wb.SheetNames ?? [];
-    setSheetNames(names);
-
-    // If no sheet was explicitly chosen, pick the sheet with the most rows.
-    let activeSheet =
-      requestedSheetName && wb.Sheets[requestedSheetName]
-        ? requestedSheetName
-        : "";
-    if (!activeSheet) {
-      let bestName = names[0] ?? "";
-      let bestCount = -1;
-      for (const name of names) {
-        const ws = wb.Sheets[name];
-        if (!ws) continue;
-        const count = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws).length;
-        if (count > bestCount) {
-          bestCount = count;
-          bestName = name;
-        }
-      }
-      activeSheet = bestName;
-    }
-
-    setSheetName(activeSheet);
-
-    const ws = wb.Sheets[activeSheet];
-    if (!ws) {
-      toast.error("Failed to find a worksheet in this file.");
+  const applyRawRows = (rawRows: RawCell[][]) => {
+    const [headerRow, ...dataRows] = rawRows;
+    if (!headerRow || headerRow.length === 0) {
+      toast.error("No valid leads found. Check your column headers.");
       return;
     }
-    const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+    const headers = headerRow.map(h => String(h ?? "").trim());
+    const jsonRows: Record<string, unknown>[] = dataRows.map(row => {
+      const obj: Record<string, unknown> = {};
+      headers.forEach((h, i) => { if (h) obj[h] = row[i] ?? null; });
+      return obj;
+    });
     const parsed = jsonRows.map(normalizeRow).filter(
       (r) => r.company || r.firstName || r.lastName || r.email || r.phone
     );
@@ -194,19 +178,32 @@ export function ImportLeadsDialog({ onImported }: Props) {
     setRows(parsed);
   };
 
-  const parseXlsx = (file: File, requestedSheetName?: string) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        setXlsxBytes(data);
-        const wb = XLSX.read(data, { type: "array" });
-        parseWorkbook(wb, requestedSheetName);
-      } catch {
-        toast.error("Failed to parse Excel file. Please check the file format.");
+  const parseXlsx = async (file: File, requestedSheetName?: string) => {
+    try {
+      const sheets = await readXlsxFile(file);
+      const names = sheets.map((s) => s.sheet);
+      setSheetNames(names);
+      setAllSheets(sheets as { sheet: string; data: RawCell[][] }[]);
+
+      // Pick the sheet with the most rows by default, or the requested one
+      let activeSheet = requestedSheetName && names.includes(requestedSheetName)
+        ? requestedSheetName
+        : "";
+      if (!activeSheet) {
+        let bestName = names[0] ?? "";
+        let bestCount = -1;
+        for (const s of sheets) {
+          if (s.data.length > bestCount) { bestCount = s.data.length; bestName = s.sheet; }
+        }
+        activeSheet = bestName;
       }
-    };
-    reader.readAsArrayBuffer(file);
+      setSheetName(activeSheet);
+      const target = sheets.find((s) => s.sheet === activeSheet);
+      if (!target) { toast.error("Failed to find a worksheet in this file."); return; }
+      applyRawRows(target.data as RawCell[][]);
+    } catch {
+      toast.error("Failed to parse Excel file. Please check the file format.");
+    }
   };
 
   const parseCsv = (file: File) => {
@@ -227,14 +224,14 @@ export function ImportLeadsDialog({ onImported }: Props) {
   };
 
   const parseFile = (file: File) => {
-    const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isXlsx = file.name.endsWith(".xlsx");
     const isCsv = file.name.endsWith(".csv");
     if (!isXlsx && !isCsv) {
       toast.error("Please upload a .csv or .xlsx file");
       return;
     }
     setFileName(file.name);
-    if (isXlsx) parseXlsx(file);
+    if (isXlsx) void parseXlsx(file);
     else parseCsv(file);
   };
 
@@ -257,7 +254,7 @@ export function ImportLeadsDialog({ onImported }: Props) {
     setFileName("");
     setSheetNames([]);
     setSheetName("");
-    setXlsxBytes(null);
+    setAllSheets(null);
   };
 
   return (
@@ -292,7 +289,7 @@ export function ImportLeadsDialog({ onImported }: Props) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -327,9 +324,8 @@ export function ImportLeadsDialog({ onImported }: Props) {
                   onChange={(e) => {
                     const next = e.target.value;
                     setSheetName(next);
-                    if (!xlsxBytes) return;
-                    const wb = XLSX.read(xlsxBytes, { type: "array" });
-                    parseWorkbook(wb, next);
+                    const target = allSheets?.find((s) => s.sheet === next);
+                    if (target) applyRawRows(target.data as RawCell[][]);
                   }}
                 >
                   {sheetNames.map((n) => (

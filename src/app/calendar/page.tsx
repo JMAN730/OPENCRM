@@ -54,8 +54,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function isOverdue(task: Pick<CalendarTask, "dueDate" | "completed">) {
-  if (task.completed || !task.dueDate) return false;
+function isOverdue(task: Pick<CalendarTask, "dueDate" | "status">) {
+  if (task.status === "COMPLETED" || !task.dueDate) return false;
   const due = new Date(task.dueDate);
   return isPast(due) && !isToday(due);
 }
@@ -110,7 +110,7 @@ function combineDateAndTime(dateStr: string, timeStr: string): Date | undefined 
 // ── Task Chip ─────────────────────────────────────────────────────────────────
 
 function TaskChip({ task, onClick }: { task: CalendarTask; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
-  const color = task.completed
+  const color = task.status === "COMPLETED"
     ? "#22c55e"
     : isOverdue(task)
       ? "#ef4444"
@@ -166,8 +166,8 @@ function DayPanel({
   onCreateForDay: (date: Date) => void;
   onClose: () => void;
 }) {
-  const pending = tasks.filter((t) => !t.completed);
-  const done = tasks.filter((t) => t.completed);
+  const pending = tasks.filter((t) => t.status !== "COMPLETED");
+  const done = tasks.filter((t) => t.status === "COMPLETED");
 
   return (
     <div
@@ -286,7 +286,7 @@ function DayPanel({
 }
 
 function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => void }) {
-  const color = task.completed
+  const color = task.status === "COMPLETED"
     ? "#22c55e"
     : isOverdue(task)
       ? "#ef4444"
@@ -314,8 +314,8 @@ function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => voi
         style={{
           fontSize: 13,
           fontWeight: 600,
-          color: task.completed ? "var(--crm-fg-muted)" : "var(--crm-fg)",
-          textDecoration: task.completed ? "line-through" : "none",
+          color: task.status === "COMPLETED" ? "var(--crm-fg-muted)" : "var(--crm-fg)",
+          textDecoration: task.status === "COMPLETED" ? "line-through" : "none",
         }}
       >
         {task.title}
@@ -437,7 +437,7 @@ function TaskDrawer({
             style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
             onClick={() => onComplete(task)}
           >
-            <Check size={13} /> {task.completed ? "Reopen" : "Complete"}
+            <Check size={13} /> {task.status === "COMPLETED" ? "Reopen" : "Complete"}
           </button>
           <button
             type="button"
@@ -868,7 +868,7 @@ export default function CalendarPage() {
   });
 
   function handleComplete(task: CalendarTask) {
-    updateTask.mutate({ taskId: task.id, status: task.completed ? "PENDING" : "COMPLETED" });
+    updateTask.mutate({ taskId: task.id, status: task.status === "COMPLETED" ? "PENDING" : "COMPLETED" });
   }
 
   function handleCreate(form: TaskFormData) {
@@ -904,7 +904,7 @@ export default function CalendarPage() {
 
   const totalForMonth = calendarTasks.length;
   const overdueCount = calendarTasks.filter(isOverdue).length;
-  const completedCount = calendarTasks.filter((t) => t.completed).length;
+  const completedCount = calendarTasks.filter((t) => t.status === "COMPLETED").length;
 
   const today = new Date();
 

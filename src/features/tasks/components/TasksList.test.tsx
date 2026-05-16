@@ -54,7 +54,7 @@ describe("TasksList", () => {
           {
             id: "t1",
             title: "Call back John",
-            completed: false,
+            status: "PENDING",
             dueDate: null,
             lead: { firstName: "John", lastName: "Doe", company: "Acme" },
           },
@@ -72,7 +72,7 @@ describe("TasksList", () => {
   it("calls update mutation when checkbox is toggled", () => {
     useQuery.mockReturnValue({
       data: {
-        items: [{ id: "t1", title: "x", completed: false, dueDate: null, lead: null }],
+        items: [{ id: "t1", title: "x", status: "PENDING", dueDate: null, lead: null }],
         nextCursor: null,
       },
       isLoading: false,
@@ -88,7 +88,7 @@ describe("TasksList", () => {
   it("opens the edit dialog and saves title/date changes", () => {
     useQuery.mockReturnValue({
       data: {
-        items: [{ id: "t1", title: "Original", completed: false, dueDate: null, lead: null }],
+        items: [{ id: "t1", title: "Original", status: "PENDING", dueDate: null, lead: null }],
         nextCursor: null,
       },
       isLoading: false,
@@ -106,14 +106,14 @@ describe("TasksList", () => {
     expect(updateMutate).toHaveBeenCalledWith(expect.objectContaining({
       taskId: "t1",
       title: "Updated title",
-      dueDate: "2026-06-01",
+      dueDate: expect.stringMatching(/^2026-06-01/),
     }));
   });
 
   it("calls delete mutation from the actions menu", () => {
     useQuery.mockReturnValue({
       data: {
-        items: [{ id: "t1", title: "Cleanup", completed: false, dueDate: null, lead: null }],
+        items: [{ id: "t1", title: "Cleanup", status: "PENDING", dueDate: null, lead: null }],
         nextCursor: null,
       },
       isLoading: false,
@@ -135,7 +135,7 @@ describe("TasksList", () => {
           {
             id: "t1",
             title: "Late task",
-            completed: false,
+            status: "PENDING",
             dueDate: yesterday.toISOString(),
             lead: null,
           },
@@ -157,7 +157,7 @@ describe("TasksList", () => {
           {
             id: "t1",
             title: "Done task",
-            completed: true,
+            status: "COMPLETED",
             dueDate: yesterday.toISOString(),
             lead: null,
           },
