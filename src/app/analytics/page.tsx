@@ -31,10 +31,6 @@ function KPICard({ label, value, note }: { label: string; value: string | number
 export default function AnalyticsPage() {
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
 
-  const revenue = stats?.monthlyRevenue
-    ? "$" + (stats.monthlyRevenue >= 1000 ? (stats.monthlyRevenue / 1000).toFixed(1) + "K" : stats.monthlyRevenue.toFixed(0))
-    : "$0";
-
   const callsPerDay = stats?.charts?.callsPerDay ?? [];
   const maxCalls = Math.max(...callsPerDay.map((d) => d.count), 1);
 
@@ -55,12 +51,12 @@ export default function AnalyticsPage() {
         <div className="crm-page-head">
           <div>
             <h1 className="crm-page-title">Analytics</h1>
-            <div className="crm-page-sub">Pipeline, activity, and revenue metrics</div>
+            <div className="crm-page-sub">Pipeline and call activity metrics</div>
           </div>
         </div>
 
         <div className="crm-kpi-grid">
-          <KPICard label="Revenue · 30d" value={revenue} note="Won deals" />
+          <KPICard label="Connected · 30d" value={(stats?.connectedLast30d ?? 0).toLocaleString()} note="Leads in CONNECTED status" />
           <KPICard label="Total leads" value={(stats?.totalLeads ?? 0).toLocaleString()} note={`${stats?.conversionRate ?? "0.0%"} conversion rate`} />
           <KPICard label="Calls today" value={stats?.callsToday ?? 0} note={`${totalCalls} calls · 30d`} />
         </div>

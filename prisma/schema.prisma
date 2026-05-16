@@ -64,6 +64,7 @@ model User {
   assignedTasks  Task[]       @relation("TaskAssignee")
   activities     Activity[]
   scraperJobs    ScraperJob[]
+  invitationsSent Invitation[] @relation("InvitationInviter")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -81,12 +82,14 @@ model Organization {
   users          User[]
   teams          Team[]
   leads          Lead[]
-  pipelines      Pipeline[]
+  notes          Note[]
+  activities     Activity[]
   scraperJobs    ScraperJob[]
   tasks          Task[]
   customOutcomes CustomOutcome[]
   scoringRules   ScoringRule[]
   leadTags       LeadTag[]
+  invitations    Invitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -101,6 +104,8 @@ model Team {
 
   leaderId String?
   leader   User?   @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+
+  invitations Invitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -125,7 +130,6 @@ model Lead {
   status              LeadStatus               @default(NOT_CONTACTED)
   temperatureOverride LeadTemperatureOverride?
   source              String?
-  value               Float?
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?
   starred             Boolean                  @default(false)
@@ -138,9 +142,6 @@ model Lead {
 
   customOutcomeId String?
   customOutcome   CustomOutcome? @relation(fields: [customOutcomeId], references: [id], onDelete: SetNull)
-
-  pipelineStageId String?
-  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
 
   calls      CallLog[]
   notes      Note[]
@@ -187,29 +188,6 @@ model LeadTag {
   @@unique([name, organizationId])
 }
 
-model Pipeline {
-  id             String          @id @default(cuid())
-  name           String
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  stages         PipelineStage[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model PipelineStage {
-  id         String   @id @default(cuid())
-  name       String
-  order      Int
-  pipelineId String
-  pipeline   Pipeline @relation(fields: [pipelineId], references: [id])
-  leads      Lead[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model CallLog {
   id     String @id @default(cuid())
   leadId String
@@ -220,7 +198,6 @@ model CallLog {
   duration     Int?
   status       CallStatus
   recordingUrl String?
-  disposition  String?
 
   twilioCallSid String? @unique
 
@@ -271,10 +248,19 @@ model Note {
   userId  String
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Denormalized from Lead.organizationId so org-wide queries can hit a
+  // covering index instead of joining through Lead. Nullable for now because
+  // this column was added to an existing table — new rows always populate it
+  // and `scripts/backfill-org-id.ts` fills in legacy rows. After backfill
+  // verification, a follow-up should change this to required.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([leadId])
+  @@index([organizationId, createdAt])
 }
 
 enum ActivityType {
@@ -299,9 +285,16 @@ model Activity {
   userId      String
   user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Denormalized from Lead.organizationId so org-wide activity feeds (team
+  // activityFeed, dashboard "last active") avoid a join through Lead.
+  // Nullable for now — see note on Note.organizationId.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
 
   @@index([leadId])
+  @@index([organizationId, createdAt])
 }
 
 enum TaskPriority {
@@ -367,6 +360,37 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// Email-token invitation flow. An admin invites by email; the recipient gets
+// a one-time link to set their own password. The DB only ever stores the
+// SHA-256 hash of the raw token, so a DB leak alone can't be used to claim
+// pending invitations.
+model Invitation {
+  id             String           @id @default(cuid())
+  tokenHash      String           @unique
+  email          String
+  name           String?
+  role           UserRole         @default(USER)
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teamId         String?
+  team           Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  invitedById    String?
+  invitedBy      User?            @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  status         InvitationStatus @default(PENDING)
+  expires        DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, status])
+  @@index([email])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

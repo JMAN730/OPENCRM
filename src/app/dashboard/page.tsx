@@ -3,7 +3,6 @@
 import { trpc } from "@/app/_trpc/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
-  DollarSign,
   Users,
   Phone,
   PhoneOutgoing,
@@ -12,6 +11,7 @@ import {
   Flame,
   TrendingUp,
   Activity,
+  CheckCircle2,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
@@ -464,9 +464,9 @@ export default function DashboardPage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const placeholder = statsLoading ? "—" : null;
-  const revenue = stats?.monthlyRevenue != null
-    ? "$" + (stats.monthlyRevenue / 1000).toFixed(1) + "K"
-    : (placeholder ?? "$0");
+  const connected30d = stats?.connectedLast30d != null
+    ? stats.connectedLast30d.toLocaleString()
+    : (placeholder ?? "0");
   const totalLeads = stats?.totalLeads != null
     ? stats.totalLeads.toLocaleString()
     : (placeholder ?? "0");
@@ -533,7 +533,7 @@ export default function DashboardPage() {
         {activeTab === "overview" && (
           <>
             <div className="crm-kpi-grid">
-              <KPICard label="Revenue · 30d" icon={DollarSign} value={revenue} />
+              <KPICard label="Connected · 30d" icon={CheckCircle2} value={connected30d} />
               <KPICard label="Total leads" icon={Users} value={totalLeads} />
               <KPICard label="Calls today" icon={Phone} value={!stats && statsLoading ? "—" : callsToday} />
             </div>
