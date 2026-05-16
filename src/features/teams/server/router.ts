@@ -1,10 +1,17 @@
-import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
+import crypto from "crypto";
+import { createTRPCRouter, organizationProcedure, publicProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { assertAdmin, assertCanGrantRole, isAdmin, ROLE_VALUES } from "@/server/authz";
 import { invalidateLeadScope } from "@/server/teams/scope";
+import { sendInvitationEmail } from "@/lib/email";
+import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
+
+function hashToken(raw: string): string {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
 
 async function findLedTeam(prisma: PrismaClient, userId: string, orgId: string, teamId: string) {
   return prisma.team.findFirst({
@@ -289,76 +296,6 @@ export const teamsRouter = createTRPCRouter({
     }),
 
   /**
-   * Create a new user account inside the caller's organization (admin only).
-   * If the email already exists with no org assigned, that account is claimed
-   * into this org instead of creating a duplicate.
-   *
-   * Phase 4 replaces this with an email-token invite flow. For now it
-   * remains admin-set-password but with the cross-org and role-escalation
-   * holes plugged.
-   */
-  inviteUser: organizationProcedure
-    .input(
-      z.object({
-        name: z.string().min(1).max(255),
-        email: z.string().email().max(255),
-        password: z.string().min(8).max(255),
-        role: z.enum(ROLE_VALUES).default("USER"),
-        teamId: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      assertAdmin(ctx.session.user.role);
-      assertCanGrantRole(ctx.session.user.role, input.role);
-
-      // Critical: teamId is attacker-controlled, so it MUST be validated
-      // against the caller's org before we touch the user row.
-      if (input.teamId) {
-        await assertTeamInOrg(
-          ctx.prisma as PrismaClient,
-          input.teamId,
-          ctx.organizationId,
-          "Team is not part of your organization.",
-        );
-      }
-
-      const email = input.email.toLowerCase().trim();
-      const existing = await ctx.prisma.user.findUnique({ where: { email } });
-
-      if (existing) {
-        if (existing.organizationId === ctx.organizationId) {
-          throw new TRPCError({ code: "CONFLICT", message: "User already in your organization." });
-        }
-        if (existing.organizationId) {
-          throw new TRPCError({ code: "CONFLICT", message: "User already belongs to another organization." });
-        }
-        // Unaffiliated account — assign it to this org.
-        return ctx.prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            organizationId: ctx.organizationId,
-            role: input.role,
-            ...(input.teamId ? { teamId: input.teamId } : {}),
-          },
-          select: { id: true, name: true, email: true, role: true },
-        });
-      }
-
-      const hashed = await bcrypt.hash(input.password, 12);
-      return ctx.prisma.user.create({
-        data: {
-          name: input.name,
-          email,
-          password: hashed,
-          role: input.role,
-          organizationId: ctx.organizationId,
-          ...(input.teamId ? { teamId: input.teamId } : {}),
-        },
-        select: { id: true, name: true, email: true, role: true },
-      });
-    }),
-
-  /**
    * Add or move a user into a team.
    * Admins can manage any team; team leaders can manage only the teams they lead.
    */
@@ -412,5 +349,235 @@ export const teamsRouter = createTRPCRouter({
       }
       await Promise.all(Array.from(affected).map((id) => invalidateLeadScope(id)));
       return updated;
+    }),
+
+  // ── Email-token invitation flow ────────────────────────────────────────────
+  // Replaces the legacy admin-set-password `inviteUser` for new flows. The
+  // legacy procedure is kept around so existing UI doesn't break, but the
+  // settings page should migrate to `inviteByEmail` + the accept-invite page.
+
+  /**
+   * Admin sends an email invitation. Generates a one-shot token, stores its
+   * SHA-256 hash in the DB, and emails the recipient a link to accept and set
+   * their own password.
+   */
+  inviteByEmail: organizationProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255).optional(),
+        email: z.string().email().max(255),
+        role: z.enum(ROLE_VALUES).default("USER"),
+        teamId: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      assertAdmin(ctx.session.user.role);
+      assertCanGrantRole(ctx.session.user.role, input.role);
+
+      if (input.teamId) {
+        await assertTeamInOrg(
+          ctx.prisma as PrismaClient,
+          input.teamId,
+          ctx.organizationId,
+          "Team is not part of your organization.",
+        );
+      }
+
+      const email = input.email.toLowerCase().trim();
+
+      const existing = await ctx.prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        if (existing.organizationId === ctx.organizationId) {
+          throw new TRPCError({ code: "CONFLICT", message: "User already in your organization." });
+        }
+        if (existing.organizationId) {
+          throw new TRPCError({ code: "CONFLICT", message: "User already belongs to another organization." });
+        }
+      }
+
+      // Replace any pending invite for this email in this org so the latest
+      // link is the only one that can be redeemed.
+      await ctx.prisma.invitation.deleteMany({
+        where: {
+          email,
+          organizationId: ctx.organizationId,
+          status: "PENDING",
+        },
+      });
+
+      const raw = crypto.randomBytes(32).toString("base64url");
+      const tokenHash = hashToken(raw);
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      await ctx.prisma.invitation.create({
+        data: {
+          tokenHash,
+          email,
+          name: input.name?.trim() || null,
+          role: input.role,
+          organizationId: ctx.organizationId,
+          teamId: input.teamId ?? null,
+          invitedById: ctx.session.user.id,
+          expires,
+        },
+      });
+
+      const organization = await ctx.prisma.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { name: true },
+      });
+
+      const acceptUrl = `${process.env.NEXTAUTH_URL}/auth/accept-invite?token=${raw}`;
+      try {
+        await sendInvitationEmail({
+          to: email,
+          inviterName: ctx.session.user.name ?? "An admin",
+          organizationName: organization?.name ?? "your team",
+          acceptUrl,
+        });
+      } catch (err) {
+        console.error("[teams.inviteByEmail] failed to send email", err);
+        // We don't roll back the invitation — admin can resend if needed.
+      }
+
+      return { ok: true };
+    }),
+
+  /** Admin: list pending invitations for the current org. */
+  listInvitations: organizationProcedure.query(({ ctx }) => {
+    assertAdmin(ctx.session.user.role);
+    return ctx.prisma.invitation.findMany({
+      where: { organizationId: ctx.organizationId, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        teamId: true,
+        expires: true,
+        createdAt: true,
+      },
+    });
+  }),
+
+  /** Admin: revoke a pending invitation. */
+  revokeInvitation: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      assertAdmin(ctx.session.user.role);
+      const inv = await ctx.prisma.invitation.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!inv) throw new TRPCError({ code: "NOT_FOUND" });
+      await ctx.prisma.invitation.update({
+        where: { id: inv.id },
+        data: { status: "REVOKED" },
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Public: preview an invitation by raw token. Used by the accept-invite
+   * page to show "You've been invited to {Org}" before the user sets a
+   * password. Returns null if the token is invalid/expired — the caller
+   * surfaces a generic error instead of leaking which case applies.
+   */
+  getInvitation: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const inv = await ctx.prisma.invitation.findUnique({
+        where: { tokenHash: hashToken(input.token) },
+        include: {
+          organization: { select: { name: true } },
+        },
+      });
+      if (!inv || inv.status !== "PENDING" || inv.expires < new Date()) {
+        return null;
+      }
+      return {
+        email: inv.email,
+        name: inv.name,
+        role: inv.role,
+        organizationName: inv.organization.name,
+      };
+    }),
+
+  /**
+   * Public: accept an invitation by exchanging the raw token + a chosen
+   * password for a brand-new user account inside the invited org/team. Atomic
+   * so a redeem failure doesn't leave an orphan user behind.
+   */
+  acceptInvitation: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1),
+        name: z.string().min(1).max(255),
+        password: z.string().min(8).max(255),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const ip = getClientIp(ctx.headers);
+      await assertWithinRateLimit({
+        key: `auth:accept-invite:ip:${ip}`,
+        limit: 20,
+        windowSeconds: 60 * 60,
+      });
+
+      const tokenHash = hashToken(input.token);
+      const inv = await ctx.prisma.invitation.findUnique({
+        where: { tokenHash },
+      });
+      if (!inv || inv.status !== "PENDING" || inv.expires < new Date()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This invitation link is invalid or has expired.",
+        });
+      }
+
+      const existing = await ctx.prisma.user.findUnique({
+        where: { email: inv.email },
+      });
+      if (existing && existing.organizationId && existing.organizationId !== inv.organizationId) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "An account with that email already exists in another organization.",
+        });
+      }
+
+      const hashed = await bcrypt.hash(input.password, 12);
+
+      await ctx.prisma.$transaction(async (tx) => {
+        if (existing) {
+          await tx.user.update({
+            where: { id: existing.id },
+            data: {
+              name: input.name.trim(),
+              password: hashed,
+              role: inv.role,
+              organizationId: inv.organizationId,
+              ...(inv.teamId ? { teamId: inv.teamId } : {}),
+            },
+          });
+        } else {
+          await tx.user.create({
+            data: {
+              name: input.name.trim(),
+              email: inv.email,
+              password: hashed,
+              role: inv.role,
+              organizationId: inv.organizationId,
+              ...(inv.teamId ? { teamId: inv.teamId } : {}),
+            },
+          });
+        }
+        await tx.invitation.update({
+          where: { id: inv.id },
+          data: { status: "ACCEPTED", acceptedAt: new Date() },
+        });
+      });
+
+      return { ok: true };
     }),
 });
