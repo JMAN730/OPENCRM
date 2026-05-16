@@ -192,6 +192,98 @@
   font-feature-settings: "ss01", "cv11";
 }
 
+/* ============================================================
+   Dark-mode overrides for the OpenCRM design system
+   Applied when next-themes adds .dark to <html>
+   ============================================================ */
+
+.dark .crm-app {
+  /* Surfaces */
+  --crm-bg:             oklch(13% 0.008 70);
+  --crm-surface:        oklch(18% 0.008 70);
+  --crm-surface-2:      oklch(15% 0.008 70);
+  --crm-surface-hover:  oklch(23% 0.008 70);
+  --crm-bg-card:        oklch(18% 0.008 70);
+
+  /* Borders */
+  --crm-border:         oklch(30% 0.008 70);
+  --crm-border-soft:    oklch(24% 0.008 70);
+  --crm-border-strong:  oklch(42% 0.008 70);
+
+  /* Foreground */
+  --crm-fg:             oklch(92% 0.006 70);
+  --crm-fg-muted:       oklch(68% 0.006 70);
+  --crm-fg-faint:       oklch(50% 0.006 70);
+  --crm-fg-onaccent:    #ffffff;
+
+  /* Accent */
+  --crm-accent:         oklch(64% 0.18 280);
+  --crm-accent-hover:   oklch(68% 0.18 280);
+  --crm-accent-soft:    oklch(22% 0.09 280);
+  --crm-accent-fg:      oklch(76% 0.16 280);
+
+  /* Semantic colours */
+  --crm-pos:            oklch(64% 0.14 155);
+  --crm-pos-soft:       oklch(18% 0.06 155);
+  --crm-neg:            oklch(66% 0.18 25);
+  --crm-neg-soft:       oklch(18% 0.07 25);
+  --crm-warn:           oklch(74% 0.13 70);
+  --crm-warn-soft:      oklch(18% 0.07 70);
+  --crm-hot:            oklch(70% 0.20 35);
+  --crm-hot-soft:       oklch(19% 0.08 40);
+  --crm-cool:           oklch(66% 0.13 220);
+  --crm-cool-soft:      oklch(18% 0.05 220);
+
+  /* Shadows — heavier / darker in dark mode */
+  --crm-shadow-modal:
+    0 32px 80px -20px oklch(0% 0 0 / 0.65),
+    0 8px 24px -8px oklch(0% 0 0 / 0.45);
+  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.30);
+  --crm-shadow-soft:
+    0 1px 2px oklch(0% 0 0 / 0.25),
+    0 4px 12px -4px oklch(0% 0 0 / 0.30);
+  --crm-shadow-pop:
+    0 12px 32px -10px oklch(0% 0 0 / 0.55),
+    0 2px 6px -2px oklch(0% 0 0 / 0.35);
+}
+
+/* Fix gradient backgrounds that mix with white (looks wrong on dark surfaces) */
+.dark .focus-shell,
+.dark .focus-management,
+.dark .focus-all-leads {
+  background:
+    radial-gradient(circle at top right, oklch(22% 0.025 280 / 0.5), transparent 36%),
+    linear-gradient(180deg, oklch(20% 0.010 70), var(--crm-surface));
+}
+
+.dark .focus-spot-card {
+  background: linear-gradient(180deg, oklch(22% 0.010 70), var(--crm-surface));
+}
+.dark .focus-spot-card.t-overdue {
+  background: linear-gradient(180deg, var(--crm-neg-soft), var(--crm-surface));
+}
+.dark .focus-spot-card.t-today {
+  background: linear-gradient(180deg, var(--crm-warn-soft), var(--crm-surface));
+}
+.dark .focus-spot-card.t-hot {
+  background: linear-gradient(180deg, var(--crm-hot-soft), var(--crm-surface));
+}
+
+.dark .focus-fallback {
+  background: var(--crm-surface-2);
+}
+.dark .focus-fallback.error {
+  background: var(--crm-neg-soft);
+}
+
+.dark .focus-list-state {
+  background: var(--crm-surface-2);
+}
+
+.dark .focus-search {
+  background: var(--crm-surface);
+}
+
 /* ===== Shell ===== */
 .crm-app {
   display: grid;
