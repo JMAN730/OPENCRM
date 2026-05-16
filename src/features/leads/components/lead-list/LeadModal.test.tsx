@@ -189,7 +189,7 @@ describe("LeadModal", () => {
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
   });
 
-  it("shows the earliest open task due date as a calendar link", () => {
+  it("shows the earliest open task due date as a task page link", () => {
     leadTasksMock = [
       {
         id: "task-later",
@@ -209,7 +209,7 @@ describe("LeadModal", () => {
 
     expect(screen.getByText("Next task")).toBeInTheDocument();
     const taskLink = screen.getByRole("link", { name: "Jun 1, 2026" });
-    expect(taskLink).toHaveAttribute("href", "/calendar?date=2026-06-01");
+    expect(taskLink).toHaveAttribute("href", "/tasks?taskId=task-next");
     expect(taskLink).toHaveStyle({ color: "#2563eb" });
   });
 
@@ -234,7 +234,7 @@ describe("LeadModal", () => {
     expect(screen.queryByRole("link", { name: "Jun 1, 2026" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Jun 5, 2026" })).toHaveAttribute(
       "href",
-      "/calendar?date=2026-06-05",
+      "/tasks?taskId=task-open",
     );
   });
 
