@@ -306,4 +306,38 @@ export const tasksRouter = createTRPCRouter({
       },
     });
   }),
+
+  // Open tasks scheduled after today, used by the Focus view to detect
+  // whether a hot lead already has a scheduled follow-up. Org-scoped via
+  // the task's owner; only one (earliest) task per lead is returned so
+  // callers can build a leadId -> next-followup map without dedup work.
+  getUpcomingFollowUps: organizationProcedure.query(async ({ ctx }) => {
+    const tomorrow = new Date();
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const tasks = await ctx.prisma.task.findMany({
+      where: {
+        user: { organizationId: ctx.organizationId },
+        leadId: { not: null },
+        dueDate: { gte: tomorrow },
+        status: { not: "COMPLETED" },
+        deletedAt: null,
+      },
+      orderBy: { dueDate: "asc" },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true, company: true } },
+        assignedTo: { select: { id: true, name: true } },
+      },
+    });
+
+    const seen = new Set<string>();
+    const earliest: typeof tasks = [];
+    for (const task of tasks) {
+      if (!task.leadId || seen.has(task.leadId)) continue;
+      seen.add(task.leadId);
+      earliest.push(task);
+    }
+    return earliest;
+  }),
 });

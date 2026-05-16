@@ -23,6 +23,7 @@ import {
   scoreOf,
   STAGE_ORDER,
   STATUS_LABELS,
+  touchesOf,
   type AssignableUser,
   type Lead,
   type LeadSort,
@@ -386,7 +387,7 @@ export function LeadsTable({
               const checked = selectedIds.has(lead.id);
               const score = scoreOf(lead);
               const temp = effectiveTempOf(lead);
-              const touches = lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED" ? 1 : 0;
+              const touches = touchesOf(lead);
               const reviews = reviewSummary(lead);
 
               return (
