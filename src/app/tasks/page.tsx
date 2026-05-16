@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -776,7 +776,7 @@ function FilterBar({ filters, members, onChange }: { filters: Filters; members: 
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function TasksPage() {
+function TasksPageContent() {
   const utils = trpc.useUtils();
   const searchParams = useSearchParams();
   const linkedTaskId = searchParams.get("taskId");
@@ -1021,5 +1021,25 @@ export default function TasksPage() {
         />
       )}
     </DashboardLayout>
+  );
+}
+
+function TasksPageFallback() {
+  return (
+    <DashboardLayout>
+      <div className="crm-content">
+        <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+          Loading tasks...
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={<TasksPageFallback />}>
+      <TasksPageContent />
+    </Suspense>
   );
 }
