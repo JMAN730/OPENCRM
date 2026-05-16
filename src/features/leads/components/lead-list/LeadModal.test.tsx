@@ -15,6 +15,7 @@ const createTaskMutate = vi.fn();
 const deleteNoteMutate = vi.fn();
 const toggleStarMutate = vi.fn();
 let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => void } | undefined;
+let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
 
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
@@ -74,6 +75,9 @@ vi.mock("@/app/_trpc/client", () => ({
       },
     },
     tasks: {
+      getAllForLead: {
+        useQuery: vi.fn(() => ({ data: leadTasksMock })),
+      },
       create: {
         useMutation: vi.fn((options) => {
           createTaskOptions = options;
@@ -131,6 +135,7 @@ describe("LeadModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createTaskOptions = undefined;
+    leadTasksMock = [];
   });
 
   it("renders website as a clickable external link", () => {
@@ -146,11 +151,10 @@ describe("LeadModal", () => {
     expect(screen.getAllByText(/128 reviews/i).length).toBeGreaterThan(0);
   });
 
-  it("shows the normalized lead location", () => {
+  it("shows the company and source context", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
-    expect(screen.getByText("Location")).toBeInTheDocument();
-    expect(screen.getByText("Tampa, FL")).toBeInTheDocument();
+    expect(screen.getByText("Acme · GoogleMaps")).toBeInTheDocument();
   });
 
   it("allows setting a manual temperature override", () => {
@@ -169,7 +173,7 @@ describe("LeadModal", () => {
   it("preserves call outcome mutation wiring", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /log outcome/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /connected/i }));
 
     expect(outcomeMutate).toHaveBeenCalledWith({
@@ -182,6 +186,77 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("shows the earliest open task due date as a task page link", () => {
+    leadTasksMock = [
+      {
+        id: "task-later",
+        title: "Later follow up",
+        dueDate: "2026-06-10T12:00:00.000Z",
+        status: "PENDING",
+      },
+      {
+        id: "task-next",
+        title: "Next follow up",
+        dueDate: "2026-06-01T12:00:00.000Z",
+        status: "IN_PROGRESS",
+      },
+    ];
+
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByText("Next task")).toBeInTheDocument();
+    const taskLink = screen.getByRole("link", { name: "Jun 1, 2026" });
+    expect(taskLink).toHaveAttribute("href", "/tasks?taskId=task-next");
+    expect(taskLink).toHaveStyle({ color: "#2563eb" });
+  });
+
+  it("ignores completed tasks when showing the next task due date", () => {
+    leadTasksMock = [
+      {
+        id: "task-complete",
+        title: "Already done",
+        dueDate: "2026-06-01T12:00:00.000Z",
+        status: "COMPLETED",
+      },
+      {
+        id: "task-open",
+        title: "Open follow up",
+        dueDate: "2026-06-05T12:00:00.000Z",
+        status: "PENDING",
+      },
+    ];
+
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.queryByRole("link", { name: "Jun 1, 2026" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Jun 5, 2026" })).toHaveAttribute(
+      "href",
+      "/tasks?taskId=task-open",
+    );
+  });
+
+  it("does not show a next task row when there are no open dated tasks", () => {
+    leadTasksMock = [
+      {
+        id: "task-complete",
+        title: "Already done",
+        dueDate: "2026-06-01T12:00:00.000Z",
+        status: "COMPLETED",
+      },
+      {
+        id: "task-undated",
+        title: "Needs scheduling",
+        dueDate: null,
+        status: "PENDING",
+      },
+    ];
+
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.queryByText("Next task")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /2026/i })).not.toBeInTheDocument();
   });
 
   it("opens the create task dialog with title, due date, and priority fields", () => {
