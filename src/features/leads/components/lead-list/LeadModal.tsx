@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Globe,
   Mail,
+  MapPin,
   MoreHorizontal,
   NotebookPen,
   Phone,
@@ -689,6 +690,22 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                         ) : (
                           lead.website
                         )}
+                      </span>
+                    </>
+                  ) : null}
+                  {lead.mapsUrl ? (
+                    <>
+                      <span className="crm-k">Maps</span>
+                      <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>
+                        <a
+                          href={lead.mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                        >
+                          <MapPin size={11} />
+                          View on Maps
+                        </a>
                       </span>
                     </>
                   ) : null}
