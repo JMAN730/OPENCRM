@@ -2,10 +2,6 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@/server/api/root";
-
-type Lead = inferRouterOutputs<AppRouter>["leads"]["getAll"]["items"][number];
 
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 const LEAD_STATUS_LABEL: Record<string, string> = {
@@ -34,8 +30,6 @@ function KPICard({ label, value, note }: { label: string; value: string | number
 
 export default function AnalyticsPage() {
   const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
-  const { data: leadsRaw } = trpc.leads.getAll.useQuery({ limit: 100 });
-  const leads: Lead[] = leadsRaw?.items ?? [];
 
   const revenue = stats?.monthlyRevenue
     ? "$" + (stats.monthlyRevenue >= 1000 ? (stats.monthlyRevenue / 1000).toFixed(1) + "K" : stats.monthlyRevenue.toFixed(0))
@@ -47,9 +41,12 @@ export default function AnalyticsPage() {
   const statusDist = stats?.charts?.statusDistribution ?? [];
   const totalCalls = statusDist.reduce((s: number, d: { status: string; count: number }) => s + d.count, 0);
 
-  const leadCounts: Record<string, number> = {};
-  leads.forEach((l) => { leadCounts[l.status] = (leadCounts[l.status] ?? 0) + 1; });
-  const pipelineRows = LEAD_STATUS_ORDER.map((s) => ({ status: s, count: leadCounts[s] ?? 0 })).filter((r) => r.count > 0);
+  // Use server-side groupBy from getKpiStats so all leads in the org are counted,
+  // not just the first page of a paginated client-side fetch.
+  const leadsByStatus = stats?.leadsByStatus ?? [];
+  const pipelineRows = LEAD_STATUS_ORDER
+    .map((s) => ({ status: s, count: leadsByStatus.find((r) => r.status === s)?.count ?? 0 }))
+    .filter((r) => r.count > 0);
   const maxLeads = Math.max(...pipelineRows.map((r) => r.count), 1);
 
   return (
@@ -64,7 +61,7 @@ export default function AnalyticsPage() {
 
         <div className="crm-kpi-grid">
           <KPICard label="Revenue · 30d" value={revenue} note="Won deals" />
-          <KPICard label="Total leads" value={leads.length.toLocaleString()} note={`${stats?.conversionRate ?? "0.0%"} conversion rate`} />
+          <KPICard label="Total leads" value={(stats?.totalLeads ?? 0).toLocaleString()} note={`${stats?.conversionRate ?? "0.0%"} conversion rate`} />
           <KPICard label="Calls today" value={stats?.callsToday ?? 0} note={`${totalCalls} calls · 30d`} />
         </div>
 

@@ -204,20 +204,20 @@ export function TasksList() {
         {tasks.map((task) => (
           <div
             key={task.id}
-            className={`flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-opacity ${task.completed ? "opacity-60" : ""}`}
+            className={`flex items-center justify-between rounded-lg border border-border bg-card p-4 transition-opacity ${task.status === "COMPLETED" ? "opacity-60" : ""}`}
           >
             <div className="flex items-center gap-4">
               <Checkbox
-                checked={task.completed}
+                checked={task.status === "COMPLETED"}
                 onCheckedChange={(checked) => toggleTask(task.id, !!checked)}
               />
               <div className="space-y-1">
-                <p className={`font-medium ${task.completed ? "line-through text-muted-foreground" : ""}`}>
+                <p className={`font-medium ${task.status === "COMPLETED" ? "line-through text-muted-foreground" : ""}`}>
                   {task.title}
                 </p>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   {task.dueDate && (
-                    <span className={`flex items-center gap-1 ${!task.completed && isOverdue(task.dueDate) ? "text-destructive" : ""}`}>
+                    <span className={`flex items-center gap-1 ${task.status !== "COMPLETED" && isOverdue(task.dueDate) ? "text-destructive" : ""}`}>
                       <CalendarIcon size={12} />
                       {new Date(task.dueDate).toLocaleDateString()}
                     </span>
@@ -245,7 +245,7 @@ export function TasksList() {
             </div>
 
             <div className="flex items-center gap-2">
-              {task.completed ? (
+              {task.status === "COMPLETED" ? (
                 <Badge variant="outline" className="border-green-500/20 bg-green-500/10 text-green-500">
                   Completed
                 </Badge>

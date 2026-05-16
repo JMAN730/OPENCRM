@@ -188,7 +188,7 @@ function TasksCard() {
 
   const taskList = data?.items ?? [];
   const displayed = taskList.slice(0, 5);
-  const open = taskList.filter((t: { completed: boolean }) => !t.completed).length;
+  const open = taskList.filter((t: { status: string }) => t.status !== "COMPLETED").length;
 
   return (
     <div className="crm-card flush">
@@ -208,14 +208,14 @@ function TasksCard() {
       ) : (
         <div className="crm-tasks">
           {displayed.map((t) => (
-            <div key={t.id} className="crm-task" data-done={t.completed}>
+            <div key={t.id} className="crm-task" data-done={t.status === "COMPLETED"}>
               <button
                 type="button"
                 className="crm-check"
-                onClick={() => update.mutate({ taskId: t.id, completed: !t.completed })}
-                aria-label={t.completed ? `Reopen task ${t.title}` : `Complete task ${t.title}`}
+                onClick={() => update.mutate({ taskId: t.id, status: t.status !== "COMPLETED" ? "COMPLETED" : "PENDING" })}
+                aria-label={t.status === "COMPLETED" ? `Reopen task ${t.title}` : `Complete task ${t.title}`}
               >
-                {t.completed && <CheckCheck size={11} />}
+                {t.status === "COMPLETED" && <CheckCheck size={11} />}
               </button>
               <div>
                 <div className="crm-task-label">{t.title}</div>
