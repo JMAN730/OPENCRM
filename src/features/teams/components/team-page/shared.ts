@@ -42,7 +42,9 @@ export const ACTIVITY_VERB: Record<string, string> = {
   LEAD_DELETED: "deleted lead",
   CALL_OUTCOME: "updated call outcome on",
   CALL_LOGGED: "logged call on",
+  LEAD_TEMPERATURE_OVERRIDE: "set temperature on",
   TASK_CREATED: "added task on",
   TASK_COMPLETED: "completed task on",
   NOTE_ADDED: "added note on",
+  NOTE_DELETED: "deleted note on",
 };
