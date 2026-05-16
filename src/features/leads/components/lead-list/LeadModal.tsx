@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -50,16 +51,13 @@ import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
 
-function taskDueDateParts(dueDate: Date | string) {
+function taskDueDateParts(task: { id: string; dueDate: Date | string }) {
+  const { dueDate } = task;
   const parsed = new Date(dueDate);
   if (Number.isNaN(parsed.getTime())) return null;
 
-  const year = parsed.getFullYear();
-  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
-  const day = `${parsed.getDate()}`.padStart(2, "0");
-
   return {
-    href: `/calendar?date=${year}-${month}-${day}`,
+    href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
     label: parsed.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -210,7 +208,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const nextOpenTaskDueDate = useMemo(() => {
     return leadTasks
       .filter((task) => task.status !== "COMPLETED" && task.dueDate)
-      .map((task) => taskDueDateParts(task.dueDate!))
+      .map((task) => taskDueDateParts({ id: task.id, dueDate: task.dueDate! }))
       .filter((task): task is NonNullable<typeof task> => task != null)
       .sort((left, right) => left.time - right.time)[0] ?? null;
   }, [leadTasks]);
@@ -712,12 +710,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     <>
                       <span className="crm-k">Next task</span>
                       <span className="crm-v">
-                        <a
+                        <Link
                           href={nextOpenTaskDueDate.href}
                           style={{ color: "#2563eb", textDecoration: "underline" }}
                         >
                           {nextOpenTaskDueDate.label}
-                        </a>
+                        </Link>
                       </span>
                     </>
                   ) : null}
