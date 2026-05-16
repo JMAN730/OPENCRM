@@ -62,6 +62,7 @@ describe("jwt callback", () => {
   it("hydrates token with id/role/organizationId from DB on first sign-in", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: "u1",
+      name: "Fresh User",
       email: "x@y.com",
       role: "ADMIN",
       organizationId: "org-1",
@@ -75,14 +76,20 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
-      select: { id: true, email: true, role: true, organizationId: true, teamId: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
     });
-    expect(token).toMatchObject({ id: "u1", role: "ADMIN", organizationId: "org-1" });
+    expect(token).toMatchObject({
+      id: "u1",
+      name: "Fresh User",
+      role: "ADMIN",
+      organizationId: "org-1",
+    });
   });
 
   it("normalizes the email to lowercase before looking up the user", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: "u1",
+      name: "Fresh User",
       email: "x@y.com",
       role: "ADMIN",
       organizationId: "org-1",
@@ -99,9 +106,10 @@ describe("jwt callback", () => {
     );
   });
 
-  it("re-fetches the user on subsequent refreshes so role/org changes take effect", async () => {
+  it("re-fetches the user on subsequent refreshes so profile and role/org changes take effect", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: "u1",
+      name: "Updated Name",
       email: "x@y.com",
       role: "MANAGER",
       organizationId: "org-2",
@@ -114,9 +122,13 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: "u1" },
-      select: { id: true, email: true, role: true, organizationId: true, teamId: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
     });
-    expect(token).toMatchObject({ role: "MANAGER", organizationId: "org-2" });
+    expect(token).toMatchObject({
+      name: "Updated Name",
+      role: "MANAGER",
+      organizationId: "org-2",
+    });
   });
 
   it("returns an empty token when the user no longer exists (ghost session)", async () => {
