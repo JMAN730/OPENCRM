@@ -10,6 +10,7 @@ export type Lead = {
   city?: string | null;
   state?: string | null;
   website?: string | null;
+  mapsUrl?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
   status: string;
