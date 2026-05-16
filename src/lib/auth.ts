@@ -16,6 +16,7 @@ const DUMMY_HASH = "$2a$10$CwTycUXWue0Thq9StjUM0uJ8X.7w//OAYg8K7HbI4Z0sSb4uSv9.K
 
 type CachedUser = {
   id: string;
+  name: string | null;
   email: string | null;
   role: UserRole;
   organizationId: string | null;
@@ -38,6 +39,7 @@ async function readCachedUser(userId: string): Promise<CachedUser | null> {
   try {
     const parsed = JSON.parse(raw) as CachedUser;
     if (!parsed?.id) return null;
+    if (!("name" in parsed)) return null;
     return parsed;
   } catch {
     return null;
@@ -60,12 +62,13 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, role: true, organizationId: true, teamId: true },
+    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
   });
   if (!dbUser) return null;
 
   const snapshot: CachedUser = {
     id: dbUser.id,
+    name: dbUser.name,
     email: dbUser.email,
     role: normalizeRole(dbUser.role),
     organizationId: dbUser.organizationId,
@@ -158,16 +161,18 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: (user.email ?? "").toLowerCase() || undefined },
-            select: { id: true, email: true, role: true, organizationId: true, teamId: true },
+            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
           });
           if (dbUser) {
             token.id = dbUser.id;
+            token.name = dbUser.name ?? undefined;
             token.email = dbUser.email ?? undefined;
             token.role = normalizeRole(dbUser.role);
             token.organizationId = dbUser.organizationId;
             token.teamId = dbUser.teamId;
             await writeCachedUser({
               id: dbUser.id,
+              name: dbUser.name,
               email: dbUser.email,
               role: normalizeRole(dbUser.role),
               organizationId: dbUser.organizationId,
@@ -193,6 +198,7 @@ export const authOptions: NextAuthOptions = {
             // client gets bounced to /auth/signin on the next request.
             return {} as typeof token;
           }
+          token.name = snapshot.name ?? undefined;
           token.email = snapshot.email ?? undefined;
           token.role = snapshot.role;
           token.organizationId = snapshot.organizationId;
