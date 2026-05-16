@@ -35,7 +35,6 @@ export function AdminTeamsPanel({
   const [creatingUser, setCreatingUser] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState<InviteRole>("USER");
 
   const [addMemberFor, setAddMemberFor] = useState<{ id: string; name: string } | null>(null);
@@ -81,13 +80,12 @@ export function AdminTeamsPanel({
     onError: (error) => toast.error(error.message),
   });
 
-  const inviteUser = trpc.teams.inviteUser.useMutation({
+  const inviteByEmail = trpc.teams.inviteByEmail.useMutation({
     onSuccess: () => {
-      toast.success("User added to organization");
+      toast.success("Invitation email sent");
       setCreatingUser(false);
       setInviteName("");
       setInviteEmail("");
-      setInvitePassword("");
       setInviteRole("USER");
       void utils.teams.organizationMembers.invalidate();
     },
@@ -118,7 +116,7 @@ export function AdminTeamsPanel({
           <h3>Teams (admin)</h3>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
             <button className="crm-btn" onClick={() => setCreatingUser((value) => !value)}>
-              <UserPlus size={13} /> Create user account
+              <UserPlus size={13} /> Invite user
             </button>
             <button className="crm-btn primary" onClick={() => setCreating((value) => !value)}>
               <Plus size={13} /> New team
@@ -144,12 +142,12 @@ export function AdminTeamsPanel({
                 letterSpacing: "0.05em",
               }}
             >
-              Create user account
+              Invite user
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
               <input
                 onChange={(event) => setInviteName(event.target.value)}
-                placeholder="Full name"
+                placeholder="Full name (optional)"
                 style={{
                   flex: "1 1 140px",
                   padding: "6px 10px",
@@ -174,20 +172,6 @@ export function AdminTeamsPanel({
                 type="email"
                 value={inviteEmail}
               />
-              <input
-                onChange={(event) => setInvitePassword(event.target.value)}
-                placeholder="Password (min 8 chars)"
-                style={{
-                  flex: "1 1 160px",
-                  padding: "6px 10px",
-                  background: "var(--crm-surface)",
-                  border: "1px solid var(--crm-border)",
-                  borderRadius: "var(--crm-radius-sm)",
-                  color: "var(--crm-fg)",
-                }}
-                type="password"
-                value={invitePassword}
-              />
               <select
                 onChange={(event) => setInviteRole(parseInviteRole(event.target.value))}
                 style={{
@@ -205,26 +189,23 @@ export function AdminTeamsPanel({
               </select>
               <button
                 className="crm-btn primary"
-                disabled={
-                  !inviteName.trim() ||
-                  !inviteEmail.trim() ||
-                  invitePassword.length < 8 ||
-                  inviteUser.isPending
-                }
+                disabled={!inviteEmail.trim() || inviteByEmail.isPending}
                 onClick={() =>
-                  inviteUser.mutate({
-                    name: inviteName.trim(),
+                  inviteByEmail.mutate({
+                    name: inviteName.trim() || undefined,
                     email: inviteEmail.trim(),
-                    password: invitePassword,
                     role: inviteRole,
                   })
                 }
               >
-                {inviteUser.isPending ? "Adding..." : "Add user"}
+                {inviteByEmail.isPending ? "Sending..." : "Send invite"}
               </button>
               <button className="crm-btn" onClick={() => setCreatingUser(false)}>
                 Cancel
               </button>
+              <div style={{ width: "100%", fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 4 }}>
+                We&apos;ll email them a one-time link to set their own password.
+              </div>
             </div>
           </div>
         ) : null}

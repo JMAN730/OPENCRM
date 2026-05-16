@@ -26,7 +26,6 @@ describe("callsRouter", () => {
           userId: "user-1",
           status: "CONNECTED",
           duration: 30,
-          disposition: undefined,
         },
       });
     });

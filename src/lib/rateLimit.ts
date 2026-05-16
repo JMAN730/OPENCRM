@@ -62,29 +62,48 @@ export async function assertWithinRateLimit(opts: RateLimitOptions & { message?:
 /**
  * Extracts a best-effort client IP from request headers.
  *
- * Set TRUSTED_PROXY=true when the app runs behind a reverse proxy (Nginx,
- * Caddy, load balancer) that sets x-forwarded-for. Without it, only
- * x-real-ip is consulted. If neither header is present, all unauthenticated
- * requests share the "unknown" rate-limit bucket — configure your proxy to
- * forward one of these headers to avoid false bucket collisions.
+ * Always honours x-real-ip when present (a single-value header that's not
+ * spoofable by clients in most proxy configurations).
+ *
+ * When TRUSTED_PROXY=true, also consults x-forwarded-for and uses its first
+ * hop. Without TRUSTED_PROXY, x-forwarded-for is only used as a last-resort
+ * fallback (taking the rightmost entry, which is closer to the proxy and
+ * harder for clients to fully control end-to-end). If no usable header is
+ * present, returns "unknown" — but that's still better than letting one
+ * bucket absorb every request silently.
  */
 export function getClientIp(headers: Headers): string {
   const trustProxy = process.env.TRUSTED_PROXY === "true";
-  if (trustProxy) {
-    const fwd = headers.get("x-forwarded-for");
-    if (fwd) {
-      const first = fwd.split(",")[0]?.trim();
-      if (first) return first;
-    }
-    const real = headers.get("x-real-ip");
-    if (real) return real;
-  }
+
+  // x-real-ip wins if present — it's set explicitly by a single proxy hop.
   const real = headers.get("x-real-ip");
-  if (real) return real;
-  console.warn(
-    "[rateLimit] getClientIp: no x-real-ip header found — all clients share " +
-    "the same rate-limit bucket. Set TRUSTED_PROXY=true and configure your " +
-    "reverse proxy to forward x-forwarded-for, or configure it to set x-real-ip."
-  );
+  if (real) return real.trim();
+
+  const fwd = headers.get("x-forwarded-for");
+  if (fwd) {
+    const parts = fwd
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length > 0) {
+      // With a trusted proxy the leftmost entry is the original client.
+      // Without it, the rightmost entry is the most-recent (proxy-set) hop,
+      // which clients can't fully forge.
+      const candidate = trustProxy ? parts[0] : parts[parts.length - 1];
+      if (candidate) return candidate;
+    }
+  }
+
+  if (!real && !fwd && !ipWarningEmitted) {
+    ipWarningEmitted = true;
+    console.warn(
+      "[rateLimit] getClientIp: no x-real-ip or x-forwarded-for header found — " +
+      "all clients will share the 'unknown' rate-limit bucket. Configure your " +
+      "reverse proxy to forward one of these headers."
+    );
+  }
   return "unknown";
 }
+
+// Single-shot warning so log volume stays sane on busy hosts that lack the headers.
+let ipWarningEmitted = false;

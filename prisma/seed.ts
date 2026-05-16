@@ -66,7 +66,6 @@ function lead(i: number) {
 }
 
 // WON deals in last 30 days — sum = $7,862
-const WON_VALUES   = [380, 450, 320, 610, 280, 490, 420, 560, 340, 680, 295, 520, 380, 460, 310, 590, 430, 347];
 const WON_DAYS_AGO = [  1,   2,   3,   4,   5,   6,   7,   9,  10,  11,  12,  14,  16,  18,  20,  22,  25,  28];
 
 async function main() {
@@ -107,7 +106,7 @@ async function main() {
 
   // ── Build lead records ───────────────────────────────────────────────────
   // Distribution that totals 463:
-  //   18 CONNECTED  recent  ($7,862 revenue, last 30 days)
+  //   18 CONNECTED  recent  (last 30 days)
   //   20 CONNECTED  older   (31-90 days ago)
   //   17 AI_VOICEMAIL
   //  153 NO_ANSWER
@@ -117,19 +116,19 @@ async function main() {
   const rows: Prisma.LeadCreateManyInput[] = [];
   let i = 0;
 
-  const push = (status: string, daysAgo: number, value?: number) => {
+  const push = (status: string, daysAgo: number) => {
     const l = lead(i++);
     const d = subDays(new Date(), daysAgo);
     rows.push({
       firstName: l.first, lastName: l.last, company: l.company,
       phone: l.phone, source: l.source,
-      status, value, createdAt: d, updatedAt: d,
+      status, createdAt: d, updatedAt: d,
       organizationId: org.id, assignedToId: user.id,
     });
   };
 
-  // 18 CONNECTED recent (with revenue value)
-  for (let k = 0; k < 18; k++) push("CONNECTED", WON_DAYS_AGO[k], WON_VALUES[k]);
+  // 18 CONNECTED recent
+  for (let k = 0; k < 18; k++) push("CONNECTED", WON_DAYS_AGO[k]);
   // 20 CONNECTED older
   for (let k = 0; k < 20; k++) push("CONNECTED", 31 + k * 3);
   // 17 AI_VOICEMAIL
@@ -193,13 +192,13 @@ async function main() {
   const taskTitles = ["Follow up call","Send proposal","Check in email","Schedule demo","Confirm appointment","Send quote","Leave voicemail","Email brochure","Schedule callback","Confirm meeting","Send contract","Check in","Initial call","Send intro email","Close deal"];
 
   for (let k = 0; k < 5; k++) {
-    await prisma.task.create({ data: { title: taskTitles[k], userId: user.id, leadId: leadIds[k], dueDate: today, completed: false } });
+    await prisma.task.create({ data: { title: taskTitles[k], userId: user.id, organizationId: org.id, leadId: leadIds[k], dueDate: today, status: "PENDING" } });
   }
   for (let k = 0; k < 8; k++) {
-    await prisma.task.create({ data: { title: taskTitles[5 + k], userId: user.id, leadId: leadIds[5 + k], dueDate: subDays(new Date(), -(k + 1)), completed: false } });
+    await prisma.task.create({ data: { title: taskTitles[5 + k], userId: user.id, organizationId: org.id, leadId: leadIds[5 + k], dueDate: subDays(new Date(), -(k + 1)), status: "PENDING" } });
   }
   for (let k = 0; k < 6; k++) {
-    await prisma.task.create({ data: { title: taskTitles[k], userId: user.id, leadId: leadIds[13 + k], dueDate: subDays(new Date(), k + 1), completed: true } });
+    await prisma.task.create({ data: { title: taskTitles[k], userId: user.id, organizationId: org.id, leadId: leadIds[13 + k], dueDate: subDays(new Date(), k + 1), status: "COMPLETED" } });
   }
 
   // ── Notes on a few CONNECTED leads ──────────────────────────────────────
@@ -212,13 +211,13 @@ async function main() {
     "Booked for a recurring monthly contract.",
   ];
   for (let k = 0; k < wonIds.length; k++) {
-    await prisma.note.create({ data: { content: noteTexts[k], leadId: wonIds[k], userId: user.id, createdAt: subDays(new Date(), k + 1) } });
+    await prisma.note.create({ data: { content: noteTexts[k], leadId: wonIds[k], userId: user.id, organizationId: org.id, createdAt: subDays(new Date(), k + 1) } });
   }
 
   const totalLeads = await prisma.lead.count({ where: { organizationId: org.id } });
   const totalCalls = await prisma.callLog.count({ where: { lead: { organizationId: org.id } } });
   console.log(`\n✅ Done!`);
-  console.log(`   Leads: ${totalLeads}  |  Calls: ${totalCalls}  |  Revenue: $7,862`);
+  console.log(`   Leads: ${totalLeads}  |  Calls: ${totalCalls}`);
   console.log(`\n   Login: demo@example.com  /  demo`);
 }
 
