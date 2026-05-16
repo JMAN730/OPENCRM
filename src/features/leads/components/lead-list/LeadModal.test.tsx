@@ -282,7 +282,7 @@ describe("LeadModal", () => {
     expect(createTaskMutate).toHaveBeenCalledWith({
       leadId: "lead-1",
       title: "Call back owner",
-      dueDate: "2026-06-01",
+      dueDate: new Date(2026, 5, 1).toISOString(),
       priority: "HIGH",
     });
   });
