@@ -380,11 +380,14 @@ function TeamStatsTab() {
 const ACTIVITY_LABEL: Record<string, string> = {
   LEAD_CREATED: "Created lead",
   LEAD_ASSIGNED: "Assigned lead",
+  LEAD_DELETED: "Deleted lead",
   CALL_OUTCOME: "Updated call outcome",
   CALL_LOGGED: "Logged call",
+  LEAD_TEMPERATURE_OVERRIDE: "Updated lead temperature",
   TASK_CREATED: "Added task",
   TASK_COMPLETED: "Completed task",
   NOTE_ADDED: "Added note",
+  NOTE_DELETED: "Deleted note",
 };
 
 function MyStatsTab() {
