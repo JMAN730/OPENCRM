@@ -814,9 +814,21 @@ export default function TasksPage() {
       })
     : allTasks;
 
+  const closeSelectedTask = useCallback(() => {
+    setSelectedTask(null);
+
+    if (!linkedTaskId || typeof window === "undefined") return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("taskId");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/tasks?${query}` : "/tasks");
+  }, [linkedTaskId, searchParams]);
+
   const invalidate = useCallback(() => {
     void utils.tasks.getAll.invalidate();
     void utils.tasks.getDueToday.invalidate();
+    void utils.tasks.getById.invalidate();
   }, [utils]);
 
   const createTask = trpc.tasks.create.useMutation({
@@ -830,7 +842,7 @@ export default function TasksPage() {
   });
 
   const deleteTask = trpc.tasks.delete.useMutation({
-    onSuccess: () => { invalidate(); setDeletingTask(null); setSelectedTask(null); toast.success("Task deleted."); },
+    onSuccess: () => { invalidate(); setDeletingTask(null); closeSelectedTask(); toast.success("Task deleted."); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -865,17 +877,6 @@ export default function TasksPage() {
   function handleComplete(task: TaskItem) {
     updateTask.mutate({ taskId: task.id, status: task.status !== "COMPLETED" ? "COMPLETED" : "PENDING" });
   }
-
-  const closeSelectedTask = useCallback(() => {
-    setSelectedTask(null);
-
-    if (!linkedTaskId || typeof window === "undefined") return;
-
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("taskId");
-    const query = params.toString();
-    window.history.replaceState(null, "", query ? `/tasks?${query}` : "/tasks");
-  }, [linkedTaskId, searchParams]);
 
   const counts = getTaskSummaryCounts(tasks);
   const activeLinkedTask = linkedTaskId ? linkedTaskFromList ?? linkedTask ?? null : null;
