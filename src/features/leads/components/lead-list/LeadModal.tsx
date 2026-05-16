@@ -2,7 +2,6 @@
 
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
-import { formatLocation } from "@/features/leads/location";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useSession } from "next-auth/react";
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
@@ -50,22 +48,6 @@ import {
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
-
-function taskDueDateParts(task: { id: string; dueDate: Date | string }) {
-  const { dueDate } = task;
-  const parsed = new Date(dueDate);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return {
-    href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
-    label: parsed.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-    time: parsed.getTime(),
-  };
-}
 
 function LogNoteDialog({
   leadId,
@@ -177,7 +159,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
-  const location = formatLocation(lead.city, lead.state);
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(
@@ -204,14 +185,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
   const notes: LeadNote[] = (notesRaw ?? []) as LeadNote[];
   const { data: activitiesRaw = [] } = trpc.leads.getActivities.useQuery({ leadId: lead.id });
-  const { data: leadTasks = [] } = trpc.tasks.getAllForLead.useQuery({ leadId: lead.id });
-  const nextOpenTaskDueDate = useMemo(() => {
-    return leadTasks
-      .filter((task) => task.status !== "COMPLETED" && task.dueDate)
-      .map((task) => taskDueDateParts({ id: task.id, dueDate: task.dueDate! }))
-      .filter((task): task is NonNullable<typeof task> => task != null)
-      .sort((left, right) => left.time - right.time)[0] ?? null;
-  }, [leadTasks]);
 
   const timelineItems = [
     ...notes.map((n) => ({ kind: "note" as const, date: new Date(n.createdAt).getTime(), note: n })),
@@ -661,12 +634,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   </span>
                   <span className="crm-k">Source</span>
                   <span className="crm-v">{lead.source || "-"}</span>
-                  {location ? (
-                    <>
-                      <span className="crm-k">Location</span>
-                      <span className="crm-v">{location}</span>
-                    </>
-                  ) : null}
                   {lead.email ? (
                     <>
                       <span className="crm-k">Email</span>
@@ -704,19 +671,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     <>
                       <span className="crm-k">Reviews</span>
                       <span className="crm-v">{reviews}</span>
-                    </>
-                  ) : null}
-                  {nextOpenTaskDueDate ? (
-                    <>
-                      <span className="crm-k">Next task</span>
-                      <span className="crm-v">
-                        <Link
-                          href={nextOpenTaskDueDate.href}
-                          style={{ color: "#2563eb", textDecoration: "underline" }}
-                        >
-                          {nextOpenTaskDueDate.label}
-                        </Link>
-                      </span>
                     </>
                   ) : null}
                   <span className="crm-k">Created</span>
