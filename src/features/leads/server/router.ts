@@ -562,6 +562,7 @@ export const leadsRouter = createTRPCRouter({
           description: input.assigneeId
             ? `Reassigned to ${assigneeName}`
             : `Unassigned`,
+          organizationId: ctx.organizationId,
         })),
       });
 
@@ -579,13 +580,19 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       const note = await ctx.prisma.note.create({
-        data: { content: input.content, leadId: input.leadId, userId: ctx.session.user.id },
+        data: {
+          content: input.content,
+          leadId: input.leadId,
+          userId: ctx.session.user.id,
+          organizationId: ctx.organizationId,
+        },
       });
       await logActivity(ctx.prisma, {
         leadId: input.leadId,
         userId: ctx.session.user.id,
         type: "NOTE_ADDED",
         description: "Added a note",
+        organizationId: ctx.organizationId,
       });
       return note;
     }),
