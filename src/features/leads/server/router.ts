@@ -432,21 +432,27 @@ export const leadsRouter = createTRPCRouter({
         }
       }
 
-      const outcomeToStatus: Record<CallOutcomeInput, LeadStatus> = {
+      const outcomeToStatus: Record<Exclude<CallOutcomeInput, "CUSTOM">, LeadStatus> = {
         ANSWERED:      "CONNECTED",
         AI_VOICEMAIL:  "AI_VOICEMAIL",
         NO_ANSWER:     "NO_ANSWER",
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
-        CUSTOM:        "CONNECTED",
       };
+      // Custom outcomes are mutually exclusive with built-in LeadStatus buckets:
+      // they live solely on `callOutcome`/`customOutcomeId`, so we reset `status`
+      // to NOT_CONTACTED to avoid double-counting them under CONNECTED (etc.).
+      const nextStatus: LeadStatus =
+        input.callOutcome === "CUSTOM"
+          ? "NOT_CONTACTED"
+          : outcomeToStatus[input.callOutcome];
       const updated = await ctx.prisma.lead.update({
         where: { id: input.id },
         data: {
           callOutcome: input.callOutcome,
           callNotes: input.callNotes,
-          status: outcomeToStatus[input.callOutcome],
-          customOutcomeId: input.customOutcomeId ?? null,
+          status: nextStatus,
+          customOutcomeId: input.callOutcome === "CUSTOM" ? input.customOutcomeId ?? null : null,
         },
       });
       await logActivity(ctx.prisma, {
