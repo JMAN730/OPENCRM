@@ -24,7 +24,7 @@ export const dashboardRouter = createTRPCRouter({
         const [
           callsTodayCount,
           followupsDueCount,
-          revenueResult,
+          connectedLast30dCount,
           callStatusDistribution,
           leadsByStatusResult,
           recentCalls,
@@ -36,9 +36,11 @@ export const dashboardRouter = createTRPCRouter({
           ctx.prisma.task.count({
             where: { user: { organizationId }, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow } },
           }),
-          ctx.prisma.lead.aggregate({
-            where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
-            _sum: { value: true },
+          // "Connected · 30d" replaces the old monthlyRevenue metric, which
+          // summed Lead.value — a field nothing in the UI ever wrote, so the
+          // displayed revenue was always 0.
+          ctx.prisma.lead.count({
+            where: { organizationId, status: "CONNECTED", updatedAt: { gte: thirtyDaysAgo } },
           }),
           ctx.prisma.callLog.groupBy({
             by: ["status"],
@@ -72,7 +74,7 @@ export const dashboardRouter = createTRPCRouter({
         ]);
 
         // Derive totals from the status groupBy result so we don't issue
-        // separate count() queries for total/qualified/appointments.
+        // separate count() queries for total/qualified.
         const leadsByStatus = leadsByStatusResult.map((s) => ({
           status: s.status,
           count: s._count.id,
@@ -80,7 +82,6 @@ export const dashboardRouter = createTRPCRouter({
         const totalLeadsCount = leadsByStatus.reduce((acc, s) => acc + s.count, 0);
         const qualifiedLeadsCount =
           leadsByStatus.find((s) => s.status === "CONNECTED")?.count ?? 0;
-        const appointmentsSetCount = qualifiedLeadsCount;
 
         // Fill in zero-count days so the chart always has 7 entries even on
         // a quiet week.
@@ -103,10 +104,10 @@ export const dashboardRouter = createTRPCRouter({
         return {
           totalLeads: totalLeadsCount,
           callsToday: callsTodayCount,
-          appointmentsSet: appointmentsSetCount,
+          qualifiedLeads: qualifiedLeadsCount,
+          connectedLast30d: connectedLast30dCount,
           followupsDue: followupsDueCount,
           conversionRate: `${conversionRate}%`,
-          monthlyRevenue: revenueResult._sum.value ?? 0,
           leadsByStatus,
           recentCalls: recentCalls.map((c) => ({
             id: c.id,

@@ -1,7 +1,7 @@
 {
   "name": "opencrm",
   "version": "0.1.0",
-  "description": "A production-ready CRM platform built for high-volume sales teams, featuring intelligent lead management, integrated smart dialer, and AI-powered analytics.",
+  "description": "A self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.",
   "author": "Your Team",
   "license": "MIT",
   "repository": {

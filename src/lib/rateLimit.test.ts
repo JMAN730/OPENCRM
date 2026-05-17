@@ -118,6 +118,15 @@ describe("getClientIp", () => {
     process.env.TRUSTED_PROXY = prev;
   });
 
+  it("falls back to x-forwarded-for rightmost entry when only x-forwarded-for is present and proxy is untrusted", () => {
+    const prev = process.env.TRUSTED_PROXY;
+    delete process.env.TRUSTED_PROXY;
+    const h = new Headers({ "x-forwarded-for": "5.6.7.8, 9.9.9.9" });
+    // Rightmost is the most-recent (proxy-set) hop a client cannot fully forge.
+    expect(getClientIp(h)).toBe("9.9.9.9");
+    if (prev !== undefined) process.env.TRUSTED_PROXY = prev;
+  });
+
   it("falls back to 'unknown' when no IP headers are present", () => {
     expect(getClientIp(new Headers())).toBe("unknown");
   });

@@ -14,6 +14,36 @@ function createTransport() {
   });
 }
 
+export async function sendInvitationEmail(args: {
+  to: string;
+  inviterName: string;
+  organizationName: string;
+  acceptUrl: string;
+}) {
+  const { to, inviterName, organizationName, acceptUrl } = args;
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "noreply@opencrm.app";
+
+  const transport = createTransport();
+  if (!transport) {
+    console.log(
+      `[Invitation] No SMTP configured — invite link for ${to}: ${acceptUrl}`,
+    );
+    return;
+  }
+
+  await transport.sendMail({
+    from,
+    to,
+    subject: `${inviterName} invited you to join ${organizationName} on OpenCRM`,
+    html: `
+      <p>${inviterName} invited you to join <strong>${organizationName}</strong> on OpenCRM.</p>
+      <p><a href="${acceptUrl}">Accept the invitation and set your password</a></p>
+      <p>This link expires in 7 days.</p>
+    `,
+    text: `${inviterName} invited you to join ${organizationName} on OpenCRM.\n\nAccept: ${acceptUrl}\n\nThis link expires in 7 days.`,
+  });
+}
+
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   const from = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "noreply@opencrm.app";
 

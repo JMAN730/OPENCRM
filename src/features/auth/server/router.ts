@@ -183,6 +183,39 @@ export const authRouter = createTRPCRouter({
 
   deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const user = await ctx.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, organizationId: true },
+    });
+    if (!user) throw new TRPCError({ code: "NOT_FOUND" });
+
+    // If the caller is the sole ADMIN of an org that still has other users,
+    // refuse — otherwise the remaining members become orphaned with no one
+    // who can re-invite, change roles, or manage teams.
+    if (user.organizationId && user.role === "ADMIN") {
+      const [otherAdmins, otherMembers] = await Promise.all([
+        ctx.prisma.user.count({
+          where: {
+            organizationId: user.organizationId,
+            role: "ADMIN",
+            NOT: { id: userId },
+          },
+        }),
+        ctx.prisma.user.count({
+          where: {
+            organizationId: user.organizationId,
+            NOT: { id: userId },
+          },
+        }),
+      ]);
+      if (otherAdmins === 0 && otherMembers > 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "You're the last admin in this organization. Promote another member to admin before deleting your account.",
+        });
+      }
+    }
 
     // ScraperJob.userId is required with no cascade, must be deleted first
     await ctx.prisma.scraperJob.deleteMany({ where: { userId } });
