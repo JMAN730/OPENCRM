@@ -207,6 +207,9 @@ vi.mock("@/app/_trpc/client", () => ({
       bulkSetTemperature: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      listOrgTags: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
       },
