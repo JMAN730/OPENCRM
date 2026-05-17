@@ -827,4 +827,110 @@ describe("leadsRouter", () => {
       });
     });
   });
+
+  describe("listOrgTags", () => {
+    it("returns org tags ordered by name", async () => {
+      prisma.leadTag.findMany.mockResolvedValue([
+        { id: "tag-1", name: "Hot" },
+        { id: "tag-2", name: "VIP" },
+      ]);
+      const result = await caller.leads.listOrgTags();
+      expect(result).toHaveLength(2);
+      expect(prisma.leadTag.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: "org-1" } }),
+      );
+    });
+  });
+
+  describe("createTag", () => {
+    it("upserts a tag and returns id + name", async () => {
+      prisma.leadTag.count.mockResolvedValue(5);
+      prisma.leadTag.upsert.mockResolvedValue({ id: "tag-new", name: "Prospect" });
+      const result = await caller.leads.createTag({ name: "Prospect" });
+      expect(result).toEqual({ id: "tag-new", name: "Prospect" });
+    });
+
+    it("throws BAD_REQUEST when org already has 100 tags", async () => {
+      prisma.leadTag.count.mockResolvedValue(100);
+      await expect(caller.leads.createTag({ name: "Too Many" })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
+    });
+  });
+
+  describe("deleteTag", () => {
+    it("deletes an org-scoped tag", async () => {
+      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1", name: "Old" });
+      prisma.leadTag.delete.mockResolvedValue({});
+      const result = await caller.leads.deleteTag({ id: "tag-1" });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("throws NOT_FOUND for tags outside the org", async () => {
+      prisma.leadTag.findFirst.mockResolvedValue(null);
+      await expect(caller.leads.deleteTag({ id: "tag-other" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+  });
+
+  describe("getLeadTags", () => {
+    it("returns tags for a lead in scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        tags: [{ id: "tag-1", name: "VIP" }],
+      });
+      const result = await caller.leads.getLeadTags({ leadId: "lead-1" });
+      expect(result).toEqual([{ id: "tag-1", name: "VIP" }]);
+    });
+
+    it("throws NOT_FOUND when lead is outside scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+      await expect(caller.leads.getLeadTags({ leadId: "other" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+    });
+  });
+
+  describe("addTagToLead", () => {
+    it("connects a tag to a lead", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1" });
+      prisma.lead.update.mockResolvedValue({});
+      const result = await caller.leads.addTagToLead({ leadId: "lead-1", tagId: "tag-1" });
+      expect(result).toEqual({ ok: true });
+      expect(prisma.lead.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { tags: { connect: { id: "tag-1" } } },
+        }),
+      );
+    });
+
+    it("throws NOT_FOUND when lead is outside scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+      await expect(
+        caller.leads.addTagToLead({ leadId: "other", tagId: "tag-1" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  describe("removeTagFromLead", () => {
+    it("disconnects a tag from a lead", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      prisma.lead.update.mockResolvedValue({});
+      const result = await caller.leads.removeTagFromLead({ leadId: "lead-1", tagId: "tag-1" });
+      expect(result).toEqual({ ok: true });
+      expect(prisma.lead.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { tags: { disconnect: { id: "tag-1" } } },
+        }),
+      );
+    });
+
+    it("throws NOT_FOUND when lead is outside scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+      await expect(
+        caller.leads.removeTagFromLead({ leadId: "other", tagId: "tag-1" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
 });
