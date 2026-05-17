@@ -2,6 +2,7 @@ import { createTRPCRouter, organizationProcedure } from '@/server/trpc';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@prisma/client';
+import { logActivity } from '@/server/activity';
 
 const DEFAULT_STAGES = [
   { name: 'New',         order: 0 },
@@ -79,5 +80,46 @@ export const pipelineRouter = createTRPCRouter({
         where: { id: input.leadId, organizationId: ctx.organizationId },
         data: { pipelineStageId: input.stageId },
       });
+    }),
+
+  createDeal: organizationProcedure
+    .input(
+      z.object({
+        company: z.string().trim().min(1, 'Company is required').max(200),
+        value: z.number().nonnegative().nullable().optional(),
+        stageId: z.string().nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      let stageId: string | null = null;
+      if (input.stageId) {
+        const stage = await ctx.prisma.pipelineStage.findFirst({
+          where: { id: input.stageId },
+          include: { pipeline: true },
+        });
+        if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+        }
+        stageId = stage.id;
+      }
+
+      const lead = await ctx.prisma.lead.create({
+        data: {
+          company: input.company,
+          value: input.value ?? null,
+          organizationId: ctx.organizationId,
+          assignedToId: ctx.session.user.id,
+          pipelineStageId: stageId,
+        },
+      });
+
+      await logActivity(ctx.prisma, {
+        leadId: lead.id,
+        userId: ctx.session.user.id,
+        type: 'LEAD_CREATED',
+        description: `Created deal ${lead.company ?? '(unnamed)'}`,
+      });
+
+      return lead;
     }),
 });
