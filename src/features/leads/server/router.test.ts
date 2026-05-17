@@ -601,13 +601,23 @@ describe("leadsRouter", () => {
   });
 
   describe("lead tags and qualification", () => {
-    it("returns an existing tag instead of creating a case-insensitive duplicate", async () => {
-      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1", name: "Priority" });
+    it("upserts tags by normalized key to prevent case-insensitive duplicates", async () => {
+      prisma.leadTag.upsert.mockResolvedValue({ id: "tag-1", name: "Priority" });
 
       const result = await caller.leads.createTag({ name: "priority" });
 
       expect(result).toEqual({ id: "tag-1", name: "Priority" });
-      expect(prisma.leadTag.create).not.toHaveBeenCalled();
+      expect(prisma.leadTag.upsert).toHaveBeenCalledWith({
+        where: {
+          organizationId_tagKey: {
+            organizationId: "org-1",
+            tagKey: "priority",
+          },
+        },
+        update: {},
+        create: { name: "priority", tagKey: "priority", organizationId: "org-1" },
+        select: { id: true, name: true },
+      });
     });
 
     it("connects only scoped leads to organization tags", async () => {
