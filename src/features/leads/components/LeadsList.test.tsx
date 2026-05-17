@@ -186,6 +186,9 @@ vi.mock("@/app/_trpc/client", () => ({
           };
         }),
       },
+      getById: {
+        useQuery: vi.fn(() => ({ data: undefined })),
+      },
       create: {
         useMutation: vi.fn(() => ({ mutate: createLeadMutate, isPending: false })),
       },
