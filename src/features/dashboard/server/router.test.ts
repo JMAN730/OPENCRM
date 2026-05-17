@@ -36,8 +36,8 @@ describe("dashboardRouter.getKpiStats", () => {
 
   it("derives totals/qualified from a single lead.groupBy call (no separate counts)", async () => {
     prisma.lead.groupBy.mockResolvedValue([
-      { status: "NOT_CONTACTED", _count: { id: 150 } },
-      { status: "CONNECTED", _count: { id: 50 } },
+      { status: "NOT_CONTACTED", callOutcome: "NOT_CONTACTED", _count: { id: 150 } },
+      { status: "CONNECTED", callOutcome: "ANSWERED", _count: { id: 50 } },
     ]);
 
     const result = await caller.dashboard.getKpiStats();
@@ -50,7 +50,33 @@ describe("dashboardRouter.getKpiStats", () => {
   it("returns the connected-last-30d count from the lead.count call", async () => {
     prisma.lead.count.mockResolvedValueOnce(7);
     const result = await caller.dashboard.getKpiStats();
+    expect(prisma.lead.count.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({
+        organizationId: "org-1",
+        status: "CONNECTED",
+        callOutcome: { not: "CUSTOM" },
+      }),
+    );
     expect(result.connectedLast30d).toBe(7);
+  });
+
+  it("excludes custom call outcomes from generic connected dashboard metrics", async () => {
+    prisma.lead.groupBy.mockResolvedValue([
+      { status: "CONNECTED", callOutcome: "ANSWERED", _count: { id: 7 } },
+      { status: "CONNECTED", callOutcome: "CUSTOM", _count: { id: 3 } },
+      { status: "NO_ANSWER", callOutcome: "NO_ANSWER", _count: { id: 5 } },
+    ]);
+
+    const result = await caller.dashboard.getKpiStats();
+
+    expect(prisma.lead.groupBy.mock.calls[0][0].by).toEqual(["status", "callOutcome"]);
+    expect(result.totalLeads).toBe(15);
+    expect(result.qualifiedLeads).toBe(7);
+    expect(result.conversionRate).toBe("46.7%");
+    expect(result.leadsByStatus).toEqual([
+      { status: "CONNECTED", count: 7 },
+      { status: "NO_ANSWER", count: 5 },
+    ]);
   });
 
   it("returns 7 daily call buckets in chronological order, filling missing days with 0", async () => {

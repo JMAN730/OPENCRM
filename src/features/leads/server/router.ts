@@ -149,6 +149,7 @@ export const leadsRouter = createTRPCRouter({
 
       if (input.status) {
         where.status = input.status;
+        where.callOutcome = { not: "CUSTOM" };
       }
 
       if (input.hasPhone) {

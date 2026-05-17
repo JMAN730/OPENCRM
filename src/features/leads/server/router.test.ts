@@ -166,6 +166,18 @@ describe("leadsRouter", () => {
       const args = prisma.lead.findMany.mock.calls[0][0];
       expect(args.where.status).toBe("CONNECTED");
     });
+
+    it("excludes custom outcomes from generic status filters", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ status: "CONNECTED" });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where).toEqual(
+        expect.objectContaining({
+          status: "CONNECTED",
+          callOutcome: { not: "CUSTOM" },
+        }),
+      );
+    });
   });
 
   describe("getById", () => {
@@ -478,6 +490,57 @@ describe("leadsRouter", () => {
           temperatureOverride: "COOL",
         }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  describe("updateCallOutcome", () => {
+    it("maps answered calls to connected status", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", callOutcome: "ANSWERED", status: "CONNECTED" });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "ANSWERED",
+      });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: {
+          callOutcome: "ANSWERED",
+          callNotes: undefined,
+          customOutcomeId: null,
+          status: "CONNECTED",
+        },
+      });
+    });
+
+    it("does not force custom outcomes into connected status", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1", status: "NO_ANSWER" });
+      prisma.customOutcome.findFirst.mockResolvedValue({ id: "custom-1" });
+      prisma.lead.update.mockResolvedValue({
+        id: "lead-1",
+        callOutcome: "CUSTOM",
+        customOutcomeId: "custom-1",
+      });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "CUSTOM",
+        customOutcomeId: "custom-1",
+      });
+
+      expect(prisma.customOutcome.findFirst).toHaveBeenCalledWith({
+        where: { id: "custom-1", organizationId: "org-1" },
+        select: { id: true },
+      });
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: {
+          callOutcome: "CUSTOM",
+          callNotes: undefined,
+          customOutcomeId: "custom-1",
+        },
+      });
     });
   });
 });
