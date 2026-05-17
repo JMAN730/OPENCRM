@@ -273,6 +273,25 @@ describe("importRowsToLeads", () => {
     expect(mockPrisma.scraperJob.update).not.toHaveBeenCalled();
   });
 
+  it("re-imports a row that was previously imported under a different job", async () => {
+    // fingerprint lookup is scoped to the current jobId — no match for job-2
+    mockPrisma.scraperImportedRow.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    const result = await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-2",
+    });
+
+    expect(result.inserted).toBe(1);
+    // Verify the fingerprint lookup was scoped to job-2, not job-1
+    expect(mockPrisma.scraperImportedRow.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ jobId: "job-2" }) })
+    );
+  });
+
   it("never queries leads from another organization", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
     mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });

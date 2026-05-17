@@ -17,19 +17,7 @@ import {
   importRowsToLeads,
   readScrapedCsv,
 } from "@/server/scraper/importer";
-
-function parseArray(val: unknown): string[] {
-  if (Array.isArray(val)) return val.filter((item): item is string => typeof item === "string");
-  if (typeof val === "string") {
-    try {
-      const parsed = JSON.parse(val);
-      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
+import { parseStringArray as parseArray } from "@/server/scraper/utils";
 function deserializeJob<T extends { locations: unknown; categories: unknown }>(
   job: T
 ): Omit<T, "locations" | "categories"> & { locations: string[]; categories: string[] } {
