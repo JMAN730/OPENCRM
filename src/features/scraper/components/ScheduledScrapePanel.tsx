@@ -79,7 +79,7 @@ export function ScheduledScrapePanel() {
         <div style={{ fontSize: 13, color: "var(--crm-fg-faint)" }}>Loading…</div>
       ) : schedules.length === 0 ? (
         <div className="crm-card" style={{ padding: "24px 16px", textAlign: "center", fontSize: 13, color: "var(--crm-fg-faint)" }}>
-          No scheduled scrapes. Click &quot;New schedule&quot; to automate weekly imports.
+          No scheduled scrapes. Click &ldquo;New schedule&rdquo; to automate weekly imports.
         </div>
       ) : (
         <div className="crm-card" style={{ overflow: "hidden" }}>

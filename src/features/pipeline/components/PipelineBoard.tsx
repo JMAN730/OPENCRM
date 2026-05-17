@@ -703,6 +703,8 @@ export function PipelineBoard() {
   if (!data) return null;
 
   const { stages } = data;
+
+
   const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
   const activeStages = ACTIVE_STAGES.map((n) => stageByName[n]).filter(Boolean) as Stage[];
   const lostStage    = stageByName[LOST_STAGE];
