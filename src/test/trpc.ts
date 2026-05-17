@@ -119,7 +119,23 @@ export function createMockPrisma() {
     },
     activity: {
       create: vi.fn().mockResolvedValue({}),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findMany: vi.fn().mockResolvedValue([]),
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    orgScraperCategory: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
+    },
+    scheduledScrape: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
     },
     pipeline: {
       findFirst: vi.fn(),

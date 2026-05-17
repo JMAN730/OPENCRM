@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { avatarClass, initials, type AssignableUser } from "./shared";
+
+type Temperature = "HOT" | "WARM" | "COOL";
 
 type LeadBulkActionBarProps = {
   assignableUsers: AssignableUser[];
@@ -9,10 +12,18 @@ type LeadBulkActionBarProps = {
   onAssign: (assigneeId: string | null) => void;
   onBulkDelete: () => void;
   onClear: () => void;
+  onSetTemperature: (temperature: Temperature | null) => void;
   onToggleAssignMenu: () => void;
   selectedCount: number;
   showAssignMenu: boolean;
 };
+
+const TEMP_OPTIONS: Array<{ value: Temperature | null; label: string }> = [
+  { value: "HOT", label: "🔥 Hot" },
+  { value: "WARM", label: "🌤 Warm" },
+  { value: "COOL", label: "❄️ Cool" },
+  { value: null, label: "Clear" },
+];
 
 export function LeadBulkActionBar({
   assignableUsers,
@@ -21,10 +32,13 @@ export function LeadBulkActionBar({
   onAssign,
   onBulkDelete,
   onClear,
+  onSetTemperature,
   onToggleAssignMenu,
   selectedCount,
   showAssignMenu,
 }: LeadBulkActionBarProps) {
+  const [showTempMenu, setShowTempMenu] = useState(false);
+
   return (
     <div className="crm-selbar">
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
@@ -37,8 +51,44 @@ export function LeadBulkActionBar({
         >
           Assign
         </button>
-        <button className="crm-pill-btn">Change stage</button>
-        <button className="crm-pill-btn">Sequence</button>
+        <div style={{ position: "relative" }}>
+          <button
+            className="crm-pill-btn"
+            onClick={() => setShowTempMenu((v) => !v)}
+          >
+            Temperature
+          </button>
+          {showTempMenu ? (
+            <div
+              className="crm-card"
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 8px)",
+                left: 0,
+                minWidth: 140,
+                padding: 4,
+                zIndex: 50,
+                boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                borderRadius: "var(--crm-radius-md)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {TEMP_OPTIONS.map((opt) => (
+                <button
+                  key={String(opt.value)}
+                  className="crm-nav-item"
+                  style={{ borderRadius: "var(--crm-radius-sm)", fontSize: 13, width: "100%", textAlign: "left" }}
+                  onClick={() => {
+                    onSetTemperature(opt.value);
+                    setShowTempMenu(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <button
           className="crm-pill-btn"
           onClick={onBulkDelete}

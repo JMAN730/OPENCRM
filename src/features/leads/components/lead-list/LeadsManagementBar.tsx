@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, Columns, Filter, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Columns, Download, Filter, Search, X } from "lucide-react";
 import {
   LEAD_VISIBLE_COLUMNS,
   STAGE_ORDER,
@@ -30,6 +30,7 @@ type LeadsManagementBarProps = {
   columnsOpen: boolean;
   customOutcomes?: CustomOutcomeTab[];
   importAction: ReactNode;
+  isExporting?: boolean;
   members: AssignableUser[];
   ownerFilter: Set<string>;
   scoreMin: number | null;
@@ -41,6 +42,7 @@ type LeadsManagementBarProps = {
   visibleColumns: Set<LeadVisibleColumn>;
   onClearStageFilters: () => void;
   onColumnsOpenChange: (open: boolean) => void;
+  onExport: () => void;
   onFilterOpenChange: (open: boolean) => void;
   onOwnerToggle: (id: string) => void;
   onScoreChange: (min: number | null, max: number | null) => void;
@@ -58,6 +60,7 @@ export function LeadsManagementBar({
   columnsOpen,
   customOutcomes,
   importAction,
+  isExporting,
   members,
   ownerFilter,
   scoreMin,
@@ -69,6 +72,7 @@ export function LeadsManagementBar({
   visibleColumns,
   onClearStageFilters,
   onColumnsOpenChange,
+  onExport,
   onFilterOpenChange,
   onOwnerToggle,
   onScoreChange,
@@ -125,7 +129,18 @@ export function LeadsManagementBar({
             {filteredCount} of {allLeadsCount} leads in the current view
           </p>
         </div>
-        <div className="focus-management-actions">{importAction}</div>
+        <div className="focus-management-actions">
+          <button
+            className="crm-btn ghost sm"
+            onClick={onExport}
+            disabled={isExporting}
+            title="Download visible leads as CSV"
+          >
+            <Download size={13} />
+            {isExporting ? "Exporting…" : "Export CSV"}
+          </button>
+          {importAction}
+        </div>
       </div>
 
       <div className="focus-toolbar-row">

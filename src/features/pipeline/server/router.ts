@@ -97,6 +97,21 @@ export const pipelineRouter = createTRPCRouter({
       });
     }),
 
+  updateDealValue: organizationProcedure
+    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Lead not found' });
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { value: input.value },
+        select: LEAD_SELECT,
+      });
+    }),
+
   createDeal: organizationProcedure
     .input(
       z.union([
