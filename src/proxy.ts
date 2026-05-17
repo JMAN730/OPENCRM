@@ -17,6 +17,9 @@ const PUBLIC_TRPC_PROCEDURES = new Set([
   "auth.register",
   "auth.resetPassword",
   "auth.confirmResetPassword",
+  // Email-token invite flow: the recipient hasn't signed in yet.
+  "teams.getInvitation",
+  "teams.acceptInvitation",
 ]);
 
 function isPublicPath(pathname: string): boolean {

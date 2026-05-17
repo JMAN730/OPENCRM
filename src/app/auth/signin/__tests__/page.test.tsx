@@ -126,8 +126,7 @@ describe("SignIn Page Authentication Flow", () => {
     expect(window.location.href).toBe("");
   });
 
-  it("saves the session and user to localStorage on success", async () => {
-    // Arrange
+  it("saves the user to localStorage only when 'Remember this account' is checked", async () => {
     mockSignIn.mockResolvedValueOnce({ error: null, ok: true, status: 200, url: null });
     mockGetSession.mockResolvedValueOnce({
       user: {
@@ -144,20 +143,45 @@ describe("SignIn Page Authentication Flow", () => {
 
     render(<SignInPage />);
 
-    // Act
     fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: "jonas@example.com" } });
     fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: "pass" } });
+    fireEvent.click(screen.getByLabelText(/Remember this account/i));
     fireEvent.click(screen.getByRole("button", { name: /Sign In/i }));
 
-    // Assert
     await waitFor(() => {
       expect(window.location.href).toBe("/dashboard");
     });
 
-    // Check localStorage
     const savedUsers = JSON.parse(localStorage.getItem("crm_saved_users") || "[]");
     expect(savedUsers).toHaveLength(1);
     expect(savedUsers[0].email).toBe("jonas@example.com");
     expect(savedUsers[0].name).toBe("jonas");
+  });
+
+  it("does NOT persist the user to localStorage when remember checkbox is unchecked", async () => {
+    mockSignIn.mockResolvedValueOnce({ error: null, ok: true, status: 200, url: null });
+    mockGetSession.mockResolvedValueOnce({
+      user: {
+        id: "user-1",
+        role: "ADMIN",
+        organizationId: "org-1",
+        teamId: null,
+        email: "anon@example.com",
+        name: "anon",
+      },
+      expires: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    render(<SignInPage />);
+
+    fireEvent.change(screen.getByLabelText(/Email/i), { target: { value: "anon@example.com" } });
+    fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: "pass" } });
+    fireEvent.click(screen.getByRole("button", { name: /Sign In/i }));
+
+    await waitFor(() => {
+      expect(window.location.href).toBe("/dashboard");
+    });
+
+    expect(localStorage.getItem("crm_saved_users")).toBeNull();
   });
 });

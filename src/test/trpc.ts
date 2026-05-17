@@ -80,6 +80,22 @@ export function createMockPrisma() {
     },
     organization: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    invitation: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    note: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
     },
     passwordResetToken: {
       findUnique: vi.fn(),

@@ -9,7 +9,6 @@ export const callsRouter = createTRPCRouter({
       leadId: z.string(),
       status: z.enum(["BUSY", "NO_ANSWER", "CONNECTED", "FAILED", "CANCELED"]),
       duration: z.number().int().positive().optional(),
-      disposition: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const lead = await ctx.prisma.lead.findUnique({
@@ -27,7 +26,6 @@ export const callsRouter = createTRPCRouter({
           userId: ctx.session.user.id,
           status: input.status,
           duration: input.duration,
-          disposition: input.disposition,
         },
       });
       await logActivity(ctx.prisma, {
