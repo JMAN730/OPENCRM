@@ -37,7 +37,12 @@ export const dashboardRouter = createTRPCRouter({
             where: { user: { organizationId }, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.lead.aggregate({
-            where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
+            where: {
+              organizationId,
+              status: "CONNECTED",
+              callOutcome: { not: "CUSTOM" },
+              createdAt: { gte: thirtyDaysAgo },
+            },
             _sum: { value: true },
           }),
           ctx.prisma.callLog.groupBy({
@@ -46,7 +51,7 @@ export const dashboardRouter = createTRPCRouter({
             _count: { id: true },
           }),
           ctx.prisma.lead.groupBy({
-            by: ["status"],
+            by: ["status", "callOutcome"],
             where: { organizationId },
             _count: { id: true },
           }),
@@ -73,11 +78,13 @@ export const dashboardRouter = createTRPCRouter({
 
         // Derive totals from the status groupBy result so we don't issue
         // separate count() queries for total/qualified/appointments.
-        const leadsByStatus = leadsByStatusResult.map((s) => ({
-          status: s.status,
-          count: s._count.id,
-        }));
-        const totalLeadsCount = leadsByStatus.reduce((acc, s) => acc + s.count, 0);
+        const totalLeadsCount = leadsByStatusResult.reduce((acc, s) => acc + s._count.id, 0);
+        const statusCounts = new Map<string, number>();
+        for (const row of leadsByStatusResult) {
+          if (row.callOutcome === "CUSTOM") continue;
+          statusCounts.set(row.status, (statusCounts.get(row.status) ?? 0) + row._count.id);
+        }
+        const leadsByStatus = Array.from(statusCounts, ([status, count]) => ({ status, count }));
         const qualifiedLeadsCount =
           leadsByStatus.find((s) => s.status === "CONNECTED")?.count ?? 0;
         const appointmentsSetCount = qualifiedLeadsCount;
@@ -169,7 +176,9 @@ export const dashboardRouter = createTRPCRouter({
           ctx.prisma.callLog.count({
             where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } },
           }),
-          ctx.prisma.lead.count({ where: { organizationId, status: "CONNECTED" } }),
+          ctx.prisma.lead.count({
+            where: { organizationId, status: "CONNECTED", callOutcome: { not: "CUSTOM" } },
+          }),
           ctx.prisma.lead.count({ where: { organizationId } }),
           ctx.prisma.lead.count({ where: { organizationId, temperatureOverride: "HOT" } }),
           // Per-member call counts (all time)

@@ -214,9 +214,10 @@ export function LeadsList() {
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
     for (const lead of allLeads) {
-      counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       if (lead.callOutcome === "CUSTOM" && lead.customOutcomeId) {
         counts[`CUSTOM:${lead.customOutcomeId}`] = (counts[`CUSTOM:${lead.customOutcomeId}`] ?? 0) + 1;
+      } else {
+        counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       }
     }
     return counts;
@@ -226,11 +227,11 @@ export function LeadsList() {
     const rows = allLeads
       .filter((lead) => {
         if (!stageFilter.size) return true;
-        const matchesStatus = stageFilter.has(lead.status);
         const matchesCustom =
           lead.callOutcome === "CUSTOM" &&
           lead.customOutcomeId != null &&
           stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
+        const matchesStatus = lead.callOutcome !== "CUSTOM" && stageFilter.has(lead.status);
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
