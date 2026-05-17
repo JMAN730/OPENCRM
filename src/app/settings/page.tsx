@@ -8,7 +8,10 @@ import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
 
-const NAV = ["Profile", "Workspace", "Members", "Integrations", "Billing", "API", "Audit log"];
+// Only surface tabs that have a working backend. Billing, API, Audit log,
+// Integrations, and Workspace settings are roadmap items — exposing empty
+// tabs misleads users into thinking the features exist.
+const NAV = ["Profile", "Members"];
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -44,20 +47,18 @@ export default function SettingsPage() {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState<InviteRole>("USER");
 
-  const inviteUser = trpc.teams.inviteUser.useMutation({
+  const inviteByEmail = trpc.teams.inviteByEmail.useMutation({
     onSuccess: () => {
-      toast.success("User added to organization");
+      toast.success("Invitation email sent");
       setShowInviteForm(false);
       setInviteName("");
       setInviteEmail("");
-      setInvitePassword("");
       setInviteRole("USER");
       void utils.teams.organizationMembers.invalidate();
     },
-    onError: (err) => toast.error(err.message || "Failed to add user"),
+    onError: (err) => toast.error(err.message || "Failed to send invitation"),
   });
 
   const parseInviteRole = (value: string): InviteRole => {
@@ -93,25 +94,12 @@ export default function SettingsPage() {
     ["Role",  userRole ?? "USER"],
   ];
 
-  const workspaceRows: [string, string][] = [
-    ["Workspace name",    "My workspace"],
-    ["Time zone",         Intl.DateTimeFormat().resolvedOptions().timeZone],
-    ["Default currency",  "USD ($)"],
-    ["Fiscal year start", "January"],
-  ];
-
   const rows: [string, string][] =
-    active === "Profile" ? profileRows :
-    active === "Workspace" ? workspaceRows : [];
+    active === "Profile" ? profileRows : [];
 
   const desc: Record<string, string> = {
-    Profile:      "Your personal information and account preferences.",
-    Workspace:    "Workspace defaults and regional settings.",
-    Members:      "Manage who has access to this workspace.",
-    Integrations: "Review supported integrations and placeholder areas that still need implementation.",
-    Billing:      "Subscription plan and payment details.",
-    API:          "API keys and webhook configuration.",
-    "Audit log":  "A history of actions taken in this workspace.",
+    Profile: "Your personal information and account preferences.",
+    Members: "Manage who has access to this workspace.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -122,7 +110,7 @@ export default function SettingsPage() {
         <div className="crm-page-head">
           <div>
             <h1 className="crm-page-title">Settings</h1>
-            <div className="crm-page-sub">Workspace, team, integrations</div>
+            <div className="crm-page-sub">Profile and organization members</div>
           </div>
         </div>
 
@@ -247,42 +235,30 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                {active !== "Profile" && (
-                  <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
-                    <button className="crm-btn primary" style={{ height: 32, padding: "0 16px" }}>Save changes</button>
-                  </div>
-                )}
               </>
-            ) : active === "Members" ? (
+            ) : (
               <MembersPanel
                 isAdmin={isAdmin}
                 inviteEmail={inviteEmail}
-                inviteIsPending={inviteUser.isPending}
+                inviteIsPending={inviteByEmail.isPending}
                 inviteName={inviteName}
-                invitePassword={invitePassword}
                 inviteRole={inviteRole}
                 members={members}
                 membersLoading={membersLoading}
                 onInvite={() =>
-                  inviteUser.mutate({
-                    name: inviteName.trim(),
+                  inviteByEmail.mutate({
+                    name: inviteName.trim() || undefined,
                     email: inviteEmail.trim(),
-                    password: invitePassword,
                     role: inviteRole,
                   })
                 }
                 parseInviteRole={parseInviteRole}
                 setInviteEmail={setInviteEmail}
                 setInviteName={setInviteName}
-                setInvitePassword={setInvitePassword}
                 setInviteRole={setInviteRole}
                 setShowInviteForm={setShowInviteForm}
                 showInviteForm={showInviteForm}
               />
-            ) : (
-              <div style={{ padding: "32px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13, borderTop: "1px solid var(--crm-border)" }}>
-                Coming soon
-              </div>
             )}
           </div>
         </div>
@@ -305,7 +281,6 @@ type MembersPanelProps = {
   inviteEmail: string;
   inviteIsPending: boolean;
   inviteName: string;
-  invitePassword: string;
   inviteRole: InviteRole;
   members: OrganizationMember[];
   membersLoading: boolean;
@@ -313,7 +288,6 @@ type MembersPanelProps = {
   parseInviteRole: (value: string) => InviteRole;
   setInviteEmail: (v: string) => void;
   setInviteName: (v: string) => void;
-  setInvitePassword: (v: string) => void;
   setInviteRole: (v: InviteRole) => void;
   setShowInviteForm: (v: boolean) => void;
   showInviteForm: boolean;
@@ -330,7 +304,6 @@ function MembersPanel({
   inviteEmail,
   inviteIsPending,
   inviteName,
-  invitePassword,
   inviteRole,
   members,
   membersLoading,
@@ -338,15 +311,12 @@ function MembersPanel({
   parseInviteRole,
   setInviteEmail,
   setInviteName,
-  setInvitePassword,
   setInviteRole,
   setShowInviteForm,
   showInviteForm,
 }: MembersPanelProps) {
   const canInvite =
-    inviteName.trim().length > 0 &&
     inviteEmail.trim().length > 0 &&
-    invitePassword.length >= 8 &&
     !inviteIsPending;
 
   return (
@@ -358,7 +328,7 @@ function MembersPanel({
               <input
                 autoFocus
                 onChange={(e) => setInviteName(e.target.value)}
-                placeholder="Full name"
+                placeholder="Full name (optional)"
                 style={{ flex: "1 1 140px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
                 value={inviteName}
               />
@@ -368,13 +338,6 @@ function MembersPanel({
                 style={{ flex: "1 1 180px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
                 type="email"
                 value={inviteEmail}
-              />
-              <input
-                onChange={(e) => setInvitePassword(e.target.value)}
-                placeholder="Password (min 8 chars)"
-                style={{ flex: "1 1 160px", padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
-                type="password"
-                value={invitePassword}
               />
               <select
                 onChange={(e) => setInviteRole(parseInviteRole(e.target.value))}
@@ -386,11 +349,14 @@ function MembersPanel({
                 <option value="ADMIN">Admin</option>
               </select>
               <button className="crm-btn primary" disabled={!canInvite} onClick={onInvite} style={{ height: 32, padding: "0 14px" }}>
-                {inviteIsPending ? "Adding…" : "Add user"}
+                {inviteIsPending ? "Sending…" : "Send invite"}
               </button>
               <button className="crm-btn" onClick={() => setShowInviteForm(false)} style={{ height: 32, padding: "0 14px" }}>
                 Cancel
               </button>
+              <div style={{ width: "100%", fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                We&apos;ll email them a one-time link to set their own password.
+              </div>
             </div>
           ) : (
             <button className="crm-btn" onClick={() => setShowInviteForm(true)} style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}>

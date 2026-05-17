@@ -3,32 +3,33 @@
 ## Done
 
 - [x] **Integrate the lead generation scraper** (2026-04-18)
-  - Python Google Maps scraper now runs from the CRM at `/scraper`.
+  - Python Google Maps scraper runs from the CRM at `/scraper`.
   - Modular plug-in: code under `src/server/scraper/` and `src/features/scraper/`.
   - `ScraperJob` model tracks status, locations, logs, scraped/imported counts.
-  - All endpoints are `protectedProcedure` (auth required); locations sanitized.
+  - All endpoints require auth; locations sanitized.
   - Auto-imports `leads.csv` rows into the Leads table on completion.
   - Per-job output dirs at `scraper-output/<jobId>/`.
   - Configurable via env: `SCRAPER_PYTHON_PATH`, `SCRAPER_SCRIPT_PATH`,
     `SCRAPER_OUTPUT_BASE_DIR`, `SCRAPER_ENABLED`.
+- [x] **Wire UI category selection through to scraper.py CLI** — `--categories` flag is plumbed end-to-end.
+- [x] **Dashboard stats** — `dashboardRouter.getKpiStats` is the live source.
+- [x] **Leads table search + dropdown actions** — implemented.
+- [x] **Tasks page** — implemented (`/tasks`, calendar view).
+- [x] **Email-token invitation flow** — `teams.inviteByEmail` + `/auth/accept-invite`.
 
 ## Open
-
-- [ ] **Wire UI category selection through to scraper.py CLI**
-  - The form lets users pick categories, but scraper.py currently always uses
-    its built-in `CATEGORIES` list. Add a `--categories` flag in scraper.py
-    and pass `job.categories` from the runner.
 
 - [ ] **Scheduled scraping jobs** (cron-style recurring runs)
   - Run a saved location/category set daily/weekly automatically.
 
-- [ ] **Dashboard stats**
-  - Replace hardcoded zeros with real tRPC queries (dashboardRouter exists
-    but isn't wired into the dashboard page yet).
+- [ ] **Real Twilio integration in the dialer**
+  - `endCall` now prompts for outcome, but the call itself is still simulated.
+  - Add an end-to-end audio path (Twilio client / WebRTC).
 
-- [ ] **Leads table polish**
-  - Search bar is UI-only — implement filtering.
-  - Dropdown actions (View Details, Delete Lead) currently do nothing.
+- [ ] **Backfill Note.organizationId and Activity.organizationId for legacy rows**
+  - Run `npx tsx scripts/backfill-org-id.ts` once after schema sync.
+  - After verification, promote both columns to NOT NULL.
 
-- [ ] **Tasks & Outreach pages**
-  - Both are placeholder empty states with no functionality.
+- [ ] **Billing / subscription layer** — no design yet; depends on Stripe selection.
+
+- [ ] **Pipeline stages UI** — schema removed; reintroduce when a pipeline model is designed.
