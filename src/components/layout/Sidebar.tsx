@@ -8,7 +8,6 @@ import {
   Phone,
   Calendar,
   CalendarDays,
-  MessageSquare,
   Users2,
   Settings,
   BarChart3,
@@ -16,6 +15,7 @@ import {
   ChevronDown,
   LogOut,
   User,
+  Kanban,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
@@ -32,9 +32,9 @@ const NAV_GROUPS = [
     title: "Workspace",
     items: [
       { id: "leads",    label: "Leads",    href: "/leads",    icon: Users },
+      { id: "pipeline", label: "Pipeline", href: "/pipeline", icon: Kanban },
       { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
-      { id: "outreach", label: "Outreach", href: "/outreach", icon: MessageSquare },
       { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },
       { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
       { id: "dialer",   label: "Dialer",   href: "/dialer",   icon: Phone },

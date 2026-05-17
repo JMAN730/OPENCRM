@@ -17,17 +17,15 @@ describe("teamsRouter", () => {
     ({ caller, prisma } = createTestCaller());
   });
 
-  describe("inviteUser", () => {
+  describe("inviteByEmail", () => {
     it("rejects non-admin callers before granting roles", async () => {
       const { caller } = createTestCaller({
         sessionOverrides: { role: "MANAGER" },
       });
 
       await expect(
-        caller.teams.inviteUser({
-          name: "Example User",
+        caller.teams.inviteByEmail({
           email: "user@example.com",
-          password: "password123",
           role: "USER",
         })
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -37,16 +35,43 @@ describe("teamsRouter", () => {
       prisma.team.findFirst.mockResolvedValue(null);
 
       await expect(
-        caller.teams.inviteUser({
-          name: "Example User",
+        caller.teams.inviteByEmail({
           email: "user@example.com",
-          password: "password123",
           role: "USER",
           teamId: "team-other-org",
         })
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("creates a pending Invitation row with a hashed token after replacing any prior pending invite", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.invitation.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.invitation.create.mockResolvedValue({});
+      prisma.organization.findUnique.mockResolvedValue({ name: "Acme" });
+
+      await caller.teams.inviteByEmail({
+        email: "new@example.com",
+        name: "New User",
+        role: "USER",
+      });
+
+      expect(prisma.invitation.deleteMany).toHaveBeenCalledWith({
+        where: {
+          email: "new@example.com",
+          organizationId: "org-1",
+          status: "PENDING",
+        },
+      });
+      // The token itself is random, but the create call must include the
+      // hashed token, org, email, and role.
+      const createArg = prisma.invitation.create.mock.calls[0][0];
+      expect(createArg.data.email).toBe("new@example.com");
+      expect(createArg.data.organizationId).toBe("org-1");
+      expect(createArg.data.role).toBe("USER");
+      expect(typeof createArg.data.tokenHash).toBe("string");
+      expect(createArg.data.tokenHash.length).toBe(64); // sha-256 hex
     });
   });
 
