@@ -8,6 +8,17 @@ import type { AppRouter } from "@/server/api/root";
 import { toast } from "sonner";
 import { Phone, Mail, Star, Plus, MoreVertical, Filter, ArrowUpDown } from "lucide-react";
 import { formatDistanceToNowStrict, differenceInDays } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 type BoardData = inferRouterOutputs<AppRouter>["pipeline"]["getBoard"];
 type Stage = BoardData["stages"][number];
@@ -186,13 +197,14 @@ function LeadCard({ lead, onDragStart, onDragEnd }: {
 
 // ── Stage column ──────────────────────────────────────────────────────────────
 
-function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop }: {
+function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal }: {
   stage: Stage; leads: Lead[]; dragOverStageId: string | null;
   onDragStart: (e: React.DragEvent, lead: Lead) => void;
   onDragEnd:   (e: React.DragEvent) => void;
   onDragOver:  (e: React.DragEvent, stageId: string) => void;
   onDragLeave: (e: React.DragEvent, stageId: string) => void;
   onDrop:      (e: React.DragEvent, stageId: string) => void;
+  onAddDeal:   (stage: Stage) => void;
 }) {
   const cfg     = STAGE_CONFIG[stage.name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
   const total   = leads.reduce((s, l) => s + (l.value ?? 0), 0);
@@ -227,7 +239,11 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} onDragStart={onDragStart} onDragEnd={onDragEnd} />
         ))}
-        <button className="crm-pipeline-col-add">
+        <button
+          type="button"
+          className="crm-pipeline-col-add"
+          onClick={() => onAddDeal(stage)}
+        >
           <Plus size={12} />
           {stage.name === "Won" ? "Log won deal" : "Add deal"}
         </button>
@@ -325,7 +341,51 @@ export function PipelineBoard() {
   const draggingRef                     = useRef<Lead | null>(null);
   const [dragOverId, setDragOverId]     = useState<string | null>(null);
 
+  const [dealDialogOpen, setDealDialogOpen] = useState(false);
+  const [dealStage, setDealStage]           = useState<Stage | null>(null);
+  const [dealCompany, setDealCompany]       = useState("");
+  const [dealValue, setDealValue]           = useState("");
+
   const { data, isLoading } = trpc.pipeline.getBoard.useQuery();
+
+  const createDeal = trpc.pipeline.createDeal.useMutation({
+    onSuccess: () => {
+      toast.success("Deal created");
+      setDealDialogOpen(false);
+      setDealCompany("");
+      setDealValue("");
+      setDealStage(null);
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to create deal");
+    },
+  });
+
+  const openDealDialog = useCallback((stage: Stage | null) => {
+    setDealStage(stage);
+    setDealCompany("");
+    setDealValue("");
+    setDealDialogOpen(true);
+  }, []);
+
+  const submitDeal = useCallback(() => {
+    const company = dealCompany.trim();
+    if (!company) {
+      toast.error("Company is required");
+      return;
+    }
+    const parsedValue = dealValue.trim() === "" ? null : Number(dealValue.replace(/[^0-9.]/g, ""));
+    if (parsedValue != null && (!Number.isFinite(parsedValue) || parsedValue < 0)) {
+      toast.error("Value must be a positive number");
+      return;
+    }
+    createDeal.mutate({
+      company,
+      value: parsedValue,
+      stageId: dealStage?.id ?? null,
+    });
+  }, [dealCompany, dealValue, dealStage, createDeal]);
 
   const moveLead = trpc.pipeline.moveLead.useMutation({
     onMutate: async ({ leadId, stageId }) => {
@@ -437,7 +497,12 @@ export function PipelineBoard() {
               <button key={t} aria-pressed={viewTab === t} onClick={() => setViewTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>
             ))}
           </div>
-          <button className="crm-btn primary" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            className="crm-btn primary"
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+            onClick={() => openDealDialog(null)}
+          >
             <Plus size={13} /> New deal
           </button>
         </div>
@@ -469,6 +534,7 @@ export function PipelineBoard() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
+                  onAddDeal={openDealDialog}
                 />
               ))}
             </div>
@@ -492,6 +558,64 @@ export function PipelineBoard() {
           <p style={{ margin: "6px 0 0", fontSize: 13 }}>Coming soon</p>
         </div>
       )}
+
+      <Dialog open={dealDialogOpen} onOpenChange={setDealDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {dealStage?.name === "Won" ? "Log won deal" : "New deal"}
+            </DialogTitle>
+            <DialogDescription>
+              {dealStage
+                ? `Add a deal to the ${dealStage.name} stage.`
+                : "Add a new deal to your pipeline."}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitDeal();
+            }}
+            className="flex flex-col gap-3"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="deal-company">Company</Label>
+              <Input
+                id="deal-company"
+                autoFocus
+                value={dealCompany}
+                onChange={(e) => setDealCompany(e.target.value)}
+                placeholder="Acme Inc."
+                disabled={createDeal.isPending}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="deal-value">Value (USD)</Label>
+              <Input
+                id="deal-value"
+                inputMode="decimal"
+                value={dealValue}
+                onChange={(e) => setDealValue(e.target.value)}
+                placeholder="0"
+                disabled={createDeal.isPending}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDealDialogOpen(false)}
+                disabled={createDeal.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createDeal.isPending}>
+                {createDeal.isPending ? "Creating…" : "Create deal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
