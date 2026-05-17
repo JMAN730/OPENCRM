@@ -351,8 +351,8 @@ model Task {
   status      TaskStatus   @default(PENDING)
   deletedAt   DateTime?
 
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
