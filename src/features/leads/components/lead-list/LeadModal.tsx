@@ -50,6 +50,7 @@ import {
   type LeadNote,
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
+import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
 
@@ -197,6 +198,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [assignOpen, setAssignOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [websiteDialogOpen, setWebsiteDialogOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const assignRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
@@ -379,6 +381,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   return (
     <>
       {noteOpen ? <LogNoteDialog leadId={lead.id} onClose={() => setNoteOpen(false)} /> : null}
+      <WebsiteGeneratorDialog
+        open={websiteDialogOpen}
+        onClose={() => setWebsiteDialogOpen(false)}
+        leadId={lead.id}
+        leadName={name}
+      />
       <div className="crm-modal-backdrop" onClick={onClose}>
         <div className="crm-modal crm-app" onClick={(event) => event.stopPropagation()}>
           <div className="crm-modal-head">
@@ -615,6 +623,24 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     >
                       <NotebookPen size={13} />
                       <span>View notes ({notes.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="crm-nav-item"
+                      style={{
+                        borderRadius: "var(--crm-radius-sm)",
+                        fontSize: 12,
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        setWebsiteDialogOpen(true);
+                      }}
+                    >
+                      <Globe size={13} />
+                      <span>Generate website</span>
                     </button>
                     <div
                       style={{

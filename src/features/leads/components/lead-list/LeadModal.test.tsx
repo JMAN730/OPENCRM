@@ -102,6 +102,14 @@ vi.mock("@/app/_trpc/client", () => ({
         useQuery: vi.fn(() => ({ data: [] })),
       },
     },
+    websites: {
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      update: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
   },
 }));
 

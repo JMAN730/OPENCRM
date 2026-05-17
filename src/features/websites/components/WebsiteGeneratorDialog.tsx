@@ -10,37 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TEMPLATES, getAccentColor, type WebsiteContent } from "@/features/websites/templates";
 
-type Template = "local_service" | "barbershop" | "modern_professional";
-
-const TEMPLATES: Array<{ id: Template; name: string; description: string; emoji: string }> = [
-  {
-    id: "local_service",
-    name: "Local Service Business",
-    description: "Great for plumbers, electricians, HVAC, landscaping and other home service businesses.",
-    emoji: "🔧",
-  },
-  {
-    id: "barbershop",
-    name: "Barbershop / Salon",
-    description: "Perfect for hair salons, barbershops, nail studios and beauty service providers.",
-    emoji: "✂️",
-  },
-  {
-    id: "modern_professional",
-    name: "Modern Professional Service",
-    description: "Ideal for consultants, agencies, law firms and professional service companies.",
-    emoji: "💼",
-  },
-];
-
-type WebsiteContent = {
-  hero: { title: string; tagline: string; cta: string };
-  about: { heading: string; body: string };
-  services: Array<{ title: string; description: string }>;
-  contact: { phone: string; email: string; address: string };
-  footer: { tagline: string };
-};
+type Template = string;
 
 type GeneratedWebsite = {
   id: string;
@@ -60,7 +32,7 @@ type Props = {
 };
 
 function buildHtml(title: string, content: WebsiteContent, template: string): string {
-  const accentColor = template === "barbershop" ? "#c0392b" : template === "local_service" ? "#2980b9" : "#1a1a2e";
+  const accentColor = getAccentColor(template);
   const services = content.services.map((s) =>
     `<div class="service-card"><h3>${s.title}</h3><p>${s.description}</p></div>`
   ).join("\n");
