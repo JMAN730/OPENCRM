@@ -745,14 +745,17 @@ export const leadsRouter = createTRPCRouter({
     .input(z.object({ name: z.string().trim().min(1).max(50) }))
     .mutation(async ({ ctx, input }) => {
       const name = input.name.trim();
-      const existing = await ctx.prisma.leadTag.findFirst({
-        where: { organizationId: ctx.organizationId, name: { equals: name, mode: "insensitive" } },
-        select: { id: true, name: true },
-      });
-      if (existing) return existing;
+      const tagKey = name.toLocaleLowerCase();
 
-      return ctx.prisma.leadTag.create({
-        data: { name, organizationId: ctx.organizationId },
+      return ctx.prisma.leadTag.upsert({
+        where: {
+          organizationId_tagKey: {
+            organizationId: ctx.organizationId,
+            tagKey,
+          },
+        },
+        update: {},
+        create: { name, tagKey, organizationId: ctx.organizationId },
         select: { id: true, name: true },
       });
     }),
