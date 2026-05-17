@@ -149,6 +149,7 @@ export const leadsRouter = createTRPCRouter({
 
       if (input.status) {
         where.status = input.status;
+        where.callOutcome = { not: "CUSTOM" };
       }
 
       if (input.hasPhone) {
@@ -432,22 +433,24 @@ export const leadsRouter = createTRPCRouter({
         }
       }
 
-      const outcomeToStatus: Record<CallOutcomeInput, LeadStatus> = {
+      const outcomeToStatus: Record<Exclude<CallOutcomeInput, "CUSTOM">, LeadStatus> = {
         ANSWERED:      "CONNECTED",
         AI_VOICEMAIL:  "AI_VOICEMAIL",
         NO_ANSWER:     "NO_ANSWER",
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
-        CUSTOM:        "CONNECTED",
       };
+      const data: Prisma.LeadUncheckedUpdateInput = {
+        callOutcome: input.callOutcome,
+        callNotes: input.callNotes,
+        customOutcomeId: input.customOutcomeId ?? null,
+      };
+      if (input.callOutcome !== "CUSTOM") {
+        data.status = outcomeToStatus[input.callOutcome];
+      }
       const updated = await ctx.prisma.lead.update({
         where: { id: input.id },
-        data: {
-          callOutcome: input.callOutcome,
-          callNotes: input.callNotes,
-          status: outcomeToStatus[input.callOutcome],
-          customOutcomeId: input.customOutcomeId ?? null,
-        },
+        data,
       });
       await logActivity(ctx.prisma, {
         leadId: lead.id,
