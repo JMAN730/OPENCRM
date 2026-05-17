@@ -29,6 +29,7 @@ import {
   Phone,
   SquareCheck,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -195,8 +196,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const assignRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+  const activityRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
   const userRole = (session?.user as SessionUser | undefined)?.role;
@@ -278,6 +282,14 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const deleteLead = trpc.leads.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Lead deleted");
+      void utils.leads.getAll.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const [starred, setStarred] = useState(lead.starred ?? false);
   const toggleStar = trpc.leads.toggleStar.useMutation({
     onMutate: () => setStarred((s) => !s),
@@ -328,6 +340,19 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [assignOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [moreOpen]);
 
   const chooseOutcome = (nextOutcome: string | null, nextCustomId: string | null = null) => {
     setOutcome(nextOutcome);
@@ -547,9 +572,84 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   style={{ color: starred ? "#f59e0b" : undefined }}
                 />
               </button>
-              <button className="crm-btn ghost icon" title="More">
-                <MoreHorizontal size={14} />
-              </button>
+              <div ref={moreRef} style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  className="crm-btn ghost icon"
+                  title="More"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((value) => !value)}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+                {moreOpen ? (
+                  <div
+                    className="crm-card"
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      right: 0,
+                      minWidth: 180,
+                      padding: 4,
+                      zIndex: 80,
+                      boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                      borderRadius: "var(--crm-radius-md)",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="crm-nav-item"
+                      style={{
+                        borderRadius: "var(--crm-radius-sm)",
+                        fontSize: 12,
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        activityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    >
+                      <NotebookPen size={13} />
+                      <span>View notes ({notes.length})</span>
+                    </button>
+                    <div
+                      style={{
+                        height: 1,
+                        background: "var(--crm-border)",
+                        margin: "4px 6px",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="crm-nav-item"
+                      style={{
+                        borderRadius: "var(--crm-radius-sm)",
+                        fontSize: 12,
+                        width: "100%",
+                        textAlign: "left",
+                        color: "#dc2626",
+                      }}
+                      disabled={deleteLead.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete ${name || "this lead"}? This cannot be undone.`,
+                          )
+                        ) {
+                          deleteLead.mutate({ id: lead.id });
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} />
+                      <span>{deleteLead.isPending ? "Deleting…" : "Delete lead"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -814,7 +914,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               </div>
             </div>
 
-            <div>
+            <div ref={activityRef}>
               <h4>Recent activity</h4>
               <div className="crm-timeline">
                 <div className="crm-tl-row">
