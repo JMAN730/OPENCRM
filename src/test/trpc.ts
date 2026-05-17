@@ -138,6 +138,12 @@ export function createMockPrisma() {
       delete: vi.fn(),
       count: vi.fn().mockResolvedValue(0),
     },
+    generatedWebsite: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
     leadTag: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
