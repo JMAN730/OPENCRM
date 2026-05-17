@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authentication with NextAuth.js
 - Comprehensive test suite with Vitest
 
+### Changed (2026-05-17, continued)
+
+- **Lead tags**: `leads.listOrgTags` / `createTag` / `deleteTag` / `getLeadTags` / `addTagToLead` / `removeTagFromLead` tRPC procedures; Tags section in LeadModal with chip display, picker dropdown, inline tag creation (max 100 tags per org); `LeadTag` many-to-many relation with `Lead`.
+
 ### Changed (2026-05-17)
 
 - **CSV Export**: `leads.export` tRPC procedure returns a filtered CSV of up to 10,000 leads; Export CSV button in LeadsManagementBar triggers browser download.
