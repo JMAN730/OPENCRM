@@ -6,6 +6,7 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import { scraperConfig } from "./config";
 import { readScrapedCsv, importRowsToLeads } from "./importer";
+import { parseStringArray } from "./utils";
 
 type RunningJob = {
   child: ChildProcessWithoutNullStreams;
@@ -31,23 +32,11 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 const STALE_HEARTBEAT_MS = 2 * 60_000;
 const WORKER_ID = `${os.hostname()}:${process.pid}:${randomUUID()}`;
 
-let initialized = false;
+// Survives Next.js hot-reloads so we don't run reconcile on every HMR cycle.
+const g = globalThis as unknown as { __scraperInitialized?: boolean };
 
 function jobOutputDir(jobId: string): string {
   return path.join(scraperConfig.outputBaseDir, jobId);
-}
-
-function parseStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
 }
 
 function parseScrapedCount(line: string): number {
@@ -163,8 +152,8 @@ export async function reconcileOrphanedJobs(): Promise<void> {
 }
 
 export async function initializeScraperWorker(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
+  if (g.__scraperInitialized) return;
+  g.__scraperInitialized = true;
   await reconcileOrphanedJobs();
 }
 
