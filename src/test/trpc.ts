@@ -43,6 +43,7 @@ export function createMockPrisma() {
     customOutcome: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       delete: vi.fn(),
     },
