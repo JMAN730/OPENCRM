@@ -72,7 +72,7 @@ export const tasksRouter = createTRPCRouter({
       const task = await ctx.prisma.task.findFirst({
         where: {
           id: input.taskId,
-          user: { organizationId: ctx.organizationId },
+          organizationId: ctx.organizationId,
           deletedAt: null,
         },
         select: { id: true, userId: true, leadId: true, title: true },
@@ -126,7 +126,7 @@ export const tasksRouter = createTRPCRouter({
       const task = await ctx.prisma.task.findFirst({
         where: {
           id: input.taskId,
-          user: { organizationId: ctx.organizationId },
+          organizationId: ctx.organizationId,
           deletedAt: null,
         },
         select: { id: true, userId: true },
@@ -211,7 +211,7 @@ export const tasksRouter = createTRPCRouter({
       return ctx.prisma.task.findFirst({
         where: {
           id: input.taskId,
-          user: { organizationId: ctx.organizationId },
+          organizationId: ctx.organizationId,
           deletedAt: null,
         },
         include: {
@@ -231,7 +231,7 @@ export const tasksRouter = createTRPCRouter({
     .query(({ ctx, input }) => {
       return ctx.prisma.task.findMany({
         where: {
-          user: { organizationId: ctx.organizationId },
+          organizationId: ctx.organizationId,
           deletedAt: null,
           dueDate: { gte: input.from, lte: input.to },
           ...(input.assignedToId ? { assignedToId: input.assignedToId } : {}),
