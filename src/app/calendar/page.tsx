@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -53,6 +53,41 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function parseCalendarDateParam(value: string | null) {
+  if (!value) return null;
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function subscribeToLocationChange(onStoreChange: () => void) {
+  window.addEventListener("popstate", onStoreChange);
+  return () => window.removeEventListener("popstate", onStoreChange);
+}
+
+function getLocationSearch() {
+  return window.location.search;
+}
+
+function getServerLocationSearch() {
+  return "";
+}
 
 function isOverdue(task: Pick<CalendarTask, "dueDate" | "status">) {
   if (task.status === "COMPLETED" || !task.dueDate) return false;
@@ -801,9 +836,16 @@ function DeleteConfirm({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
+  const locationSearch = useSyncExternalStore(
+    subscribeToLocationChange,
+    getLocationSearch,
+    getServerLocationSearch,
+  );
+  const dateParam = useMemo(() => new URLSearchParams(locationSearch).get("date"), [locationSearch]);
+  const linkedDate = useMemo(() => parseCalendarDateParam(dateParam), [dateParam]);
   const utils = trpc.useUtils();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [currentMonthOverride, setCurrentMonthOverride] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null | undefined>(undefined);
   const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
   const [creating, setCreating] = useState(false);
   const [createDate, setCreateDate] = useState<string>("");
@@ -811,6 +853,8 @@ export default function CalendarPage() {
   const [deletingTask, setDeletingTask] = useState<CalendarTask | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("");
 
+  const currentMonth = currentMonthOverride ?? linkedDate ?? new Date();
+  const activeSelectedDay = selectedDay === undefined ? linkedDate : selectedDay;
   const calendarStart = startOfWeek(startOfMonth(currentMonth));
   const calendarEnd = endOfWeek(endOfMonth(currentMonth));
 
@@ -909,8 +953,8 @@ export default function CalendarPage() {
   const today = new Date();
 
   // Tasks for the selected day panel
-  const selectedDayTasks = selectedDay
-    ? (byDate[format(selectedDay, "yyyy-MM-dd")] ?? [])
+  const selectedDayTasks = activeSelectedDay
+    ? (byDate[format(activeSelectedDay, "yyyy-MM-dd")] ?? [])
     : [];
 
   return (
@@ -974,7 +1018,7 @@ export default function CalendarPage() {
           >
             <button
               type="button"
-              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
+              onClick={() => setCurrentMonthOverride((m) => subMonths(m ?? currentMonth, 1))}
               className="crm-btn"
               style={{ padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}
             >
@@ -987,7 +1031,7 @@ export default function CalendarPage() {
               {!isSameMonth(today, currentMonth) && (
                 <button
                   type="button"
-                  onClick={() => setCurrentMonth(new Date())}
+                  onClick={() => setCurrentMonthOverride(new Date())}
                   className="crm-btn"
                   style={{ fontSize: 12, padding: "3px 10px" }}
                 >
@@ -997,7 +1041,7 @@ export default function CalendarPage() {
             </div>
             <button
               type="button"
-              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
+              onClick={() => setCurrentMonthOverride((m) => addMonths(m ?? currentMonth, 1))}
               className="crm-btn"
               style={{ padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}
             >
@@ -1060,7 +1104,7 @@ export default function CalendarPage() {
                 const dayTasks = byDate[key] ?? [];
                 const inMonth = isSameMonth(day, currentMonth);
                 const todayDay = isSameDay(day, today);
-                const isSelected = selectedDay ? isSameDay(day, selectedDay) : false;
+                const isSelected = activeSelectedDay ? isSameDay(day, activeSelectedDay) : false;
 
                 return (
                   <div
@@ -1158,9 +1202,9 @@ export default function CalendarPage() {
       </div>
 
       {/* Day panel */}
-      {selectedDay && !selectedTask && (
+      {activeSelectedDay && !selectedTask && (
         <DayPanel
-          date={selectedDay}
+          date={activeSelectedDay}
           tasks={selectedDayTasks}
           onTaskClick={(t) => { setSelectedDay(null); setSelectedTask(t); }}
           onCreateForDay={openCreateForDay}
