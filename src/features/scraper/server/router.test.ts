@@ -285,4 +285,48 @@ describe("scraperRouter", () => {
       expect(result.rows).toEqual([]);
     });
   });
+
+  describe("createCategory", () => {
+    it("creates a new org category", async () => {
+      prisma.orgScraperCategory.count.mockResolvedValue(0);
+      prisma.orgScraperCategory.create.mockResolvedValue({ id: "cat-1", name: "Pest Control", organizationId: "org-1" });
+
+      const result = await caller.scraper.createCategory({ name: "Pest Control" });
+
+      expect(prisma.orgScraperCategory.create).toHaveBeenCalledWith({
+        data: { name: "Pest Control", organizationId: "org-1" },
+      });
+      expect(result.id).toBe("cat-1");
+    });
+
+    it("rejects when the org already has 50 categories", async () => {
+      prisma.orgScraperCategory.count.mockResolvedValue(50);
+
+      await expect(caller.scraper.createCategory({ name: "New Cat" })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
+      expect(prisma.orgScraperCategory.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteCategory", () => {
+    it("deletes an existing org category", async () => {
+      prisma.orgScraperCategory.findFirst.mockResolvedValue({ id: "cat-1", name: "Pest Control", organizationId: "org-1" });
+      prisma.orgScraperCategory.delete.mockResolvedValue({ id: "cat-1" });
+
+      const result = await caller.scraper.deleteCategory({ id: "cat-1" });
+
+      expect(prisma.orgScraperCategory.delete).toHaveBeenCalledWith({ where: { id: "cat-1" } });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("throws NOT_FOUND for a category from another org", async () => {
+      prisma.orgScraperCategory.findFirst.mockResolvedValue(null);
+
+      await expect(caller.scraper.deleteCategory({ id: "cat-other" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      expect(prisma.orgScraperCategory.delete).not.toHaveBeenCalled();
+    });
+  });
 });
