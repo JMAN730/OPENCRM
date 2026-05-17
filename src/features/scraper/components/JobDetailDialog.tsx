@@ -87,7 +87,7 @@ export function JobDetailDialog({ jobId, onClose, onChanged }: Props) {
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-background">
         <DialogHeader>
           <DialogTitle>Scraper job</DialogTitle>
           <DialogDescription>
@@ -103,10 +103,10 @@ export function JobDetailDialog({ jobId, onClose, onChanged }: Props) {
         </DialogHeader>
 
         {job.data && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 text-sm">
+          <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <Badge variant="outline">{job.data.status}</Badge>
-              <span className="text-muted-foreground">
+              <span className="min-w-0 text-muted-foreground">
                 Scraped <strong className="text-foreground">{job.data.totalScraped}</strong> ·
                 Imported <strong className="text-foreground">{job.data.importedCount}</strong>
                 {job.data.totalQueries > 0 && (
@@ -122,7 +122,7 @@ export function JobDetailDialog({ jobId, onClose, onChanged }: Props) {
                 )}
               </span>
               {job.data.completedAt && (
-                <span className="text-xs text-muted-foreground ml-auto">
+                <span className="text-xs text-muted-foreground sm:ml-auto">
                   Completed {new Date(job.data.completedAt).toLocaleString()}
                 </span>
               )}
@@ -150,7 +150,7 @@ export function JobDetailDialog({ jobId, onClose, onChanged }: Props) {
               </div>
               <pre
                 ref={logRef}
-                className="max-h-64 overflow-auto rounded-md bg-muted/40 border border-border p-3 text-[11px] font-mono whitespace-pre-wrap"
+                className="max-h-64 overflow-auto rounded-md bg-muted/40 border border-border p-3 text-[11px] font-mono whitespace-pre-wrap break-words"
               >
                 {job.data.logs || "(no logs yet)"}
               </pre>
