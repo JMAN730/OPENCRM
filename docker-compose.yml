@@ -38,7 +38,12 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-    command: ["node", "node_modules/prisma/build/index.js", "db", "push"]
+    command:
+      [
+        "sh",
+        "-c",
+        "node node_modules/prisma/build/index.js db execute --file prisma/migrations/20260516120000_harden_scraper_jobs/migration.sql --schema prisma/schema.prisma || true; node node_modules/prisma/build/index.js db push",
+      ]
     depends_on:
       db:
         condition: service_healthy

@@ -5,7 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { logActivity } from '@/server/activity';
 
 const DEFAULT_STAGES = [
-  { name: 'New',         order: 0 },
+  { name: 'Potential',   order: 0 },
   { name: 'Qualified',   order: 1 },
   { name: 'Proposal',    order: 2 },
   { name: 'Negotiation', order: 3 },
@@ -24,6 +24,20 @@ async function getOrCreateDefaultPipeline(prisma: PrismaClient, organizationId: 
       include: { stages: { orderBy: { order: 'asc' } } },
     });
     return pipeline;
+  }
+  if (
+    pipeline.stages.some((s) => s.name === 'New') &&
+    !pipeline.stages.some((s) => s.name === 'Potential')
+  ) {
+    await prisma.pipelineStage.updateMany({
+      where: { pipelineId: pipeline.id, name: 'New' },
+      data: { name: 'Potential' },
+    });
+    pipeline = await prisma.pipeline.findUnique({
+      where: { id: pipeline.id },
+      include: { stages: { orderBy: { order: 'asc' } } },
+    });
+    if (!pipeline) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Pipeline not found after stage rename' });
   }
   const existingNames = new Set(pipeline.stages.map((s) => s.name));
   const missing = DEFAULT_STAGES.filter((s) => !existingNames.has(s.name));

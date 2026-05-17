@@ -7,6 +7,7 @@ import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
+import { invalidate } from "@/lib/cache";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -440,28 +441,47 @@ export const leadsRouter = createTRPCRouter({
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
       };
-      // Custom outcomes are mutually exclusive with built-in LeadStatus buckets:
-      // they live solely on `callOutcome`/`customOutcomeId`, so we reset `status`
-      // to NOT_CONTACTED to avoid double-counting them under CONNECTED (etc.).
-      const nextStatus: LeadStatus =
+      const statusUpdate =
         input.callOutcome === "CUSTOM"
-          ? "NOT_CONTACTED"
-          : outcomeToStatus[input.callOutcome];
-      const updated = await ctx.prisma.lead.update({
-        where: { id: input.id },
-        data: {
-          callOutcome: input.callOutcome,
-          callNotes: input.callNotes,
-          status: nextStatus,
-          customOutcomeId: input.callOutcome === "CUSTOM" ? input.customOutcomeId ?? null : null,
-        },
-      });
-      await logActivity(ctx.prisma, {
-        leadId: lead.id,
-        userId: ctx.session.user.id,
-        type: "CALL_OUTCOME",
-        description: `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`,
-      });
+          ? {}
+          : { status: outcomeToStatus[input.callOutcome] };
+
+      const shouldCountTouch =
+        lead.callOutcome === "NOT_CONTACTED" && input.callOutcome !== "NOT_CONTACTED";
+      const now = new Date();
+      const touchUpdate = shouldCountTouch
+        ? {
+            touchCount: { increment: 1 },
+            lastTouchedAt: now,
+          }
+        : {};
+      const description = `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`;
+
+      const [updated] = await ctx.prisma.$transaction([
+        ctx.prisma.lead.update({
+          where: { id: input.id, organizationId: ctx.organizationId },
+          data: {
+            callOutcome: input.callOutcome,
+            callNotes: input.callNotes,
+            ...statusUpdate,
+            ...touchUpdate,
+            customOutcomeId: input.callOutcome === "CUSTOM" ? input.customOutcomeId ?? null : null,
+          },
+        }),
+        ctx.prisma.activity.create({
+          data: {
+            leadId: lead.id,
+            userId: ctx.session.user.id,
+            type: "CALL_OUTCOME",
+            description,
+            organizationId: ctx.organizationId,
+          },
+        }),
+      ]);
+      await Promise.all([
+        invalidate(`dashboard:kpi:${ctx.organizationId}`),
+        invalidate(`dashboard:team:${ctx.organizationId}`),
+      ]);
       return updated;
     }),
 

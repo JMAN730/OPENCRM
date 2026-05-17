@@ -14,6 +14,7 @@ const createNoteMutate = vi.fn();
 const createTaskMutate = vi.fn();
 const deleteNoteMutate = vi.fn();
 const toggleStarMutate = vi.fn();
+const deleteLeadMutate = vi.fn();
 let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => void } | undefined;
 let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
 
@@ -68,6 +69,9 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       toggleStar: {
         useMutation: vi.fn(() => ({ mutate: toggleStarMutate, isPending: false })),
+      },
+      delete: {
+        useMutation: vi.fn(() => ({ mutate: deleteLeadMutate, isPending: false })),
       },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Phone,
   Calendar,
   CalendarDays,
   Users2,
@@ -37,7 +36,6 @@ const NAV_GROUPS = [
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
       { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },
       { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
-      { id: "dialer",   label: "Dialer",   href: "/dialer",   icon: Phone },
     ],
   },
   {

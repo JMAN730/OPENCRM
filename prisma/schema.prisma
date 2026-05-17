@@ -64,6 +64,7 @@ model User {
   assignedTasks  Task[]       @relation("TaskAssignee")
   activities     Activity[]
   scraperJobs    ScraperJob[]
+  scraperRows    ScraperImportedRow[]
   invitationsSent Invitation[] @relation("InvitationInviter")
 
   createdAt DateTime @default(now())
@@ -85,6 +86,7 @@ model Organization {
   notes          Note[]
   activities     Activity[]
   scraperJobs    ScraperJob[]
+  scraperRows    ScraperImportedRow[]
   tasks          Task[]
   customOutcomes CustomOutcome[]
   scoringRules   ScoringRule[]
@@ -135,6 +137,8 @@ model Lead {
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?
   starred             Boolean                  @default(false)
+  touchCount          Int                      @default(0)
+  lastTouchedAt       DateTime?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -166,6 +170,7 @@ model Lead {
   // Lead scope filtering for non-admins (assignedToId IN (...)).
   @@index([organizationId, assignedToId])
   @@index([organizationId, state, city])
+  @@index([organizationId, lastTouchedAt])
 }
 
 enum LeadStatus {
@@ -423,16 +428,13 @@ enum InvitationStatus {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scraper feature
-// locations and categories are stored as JSON-encoded strings in the DB and
-// parsed by the scraper layer when exposing them as string[] values.
 // ─────────────────────────────────────────────────────────────────────────────
 model ScraperJob {
   id     String           @id @default(cuid())
   status ScraperJobStatus @default(PENDING)
 
-  // JSON-encoded string arrays, e.g. '["New York","Los Angeles"]'
-  locations  String @default("[]")
-  categories String @default("[]")
+  locations  Json @default("[]")
+  categories Json @default("[]")
 
   limit       Int @default(20)
   concurrency Int @default(1)
@@ -440,10 +442,17 @@ model ScraperJob {
   totalScraped  Int     @default(0)
   importedCount Int     @default(0)
   autoImport    Boolean @default(true)
+  totalQueries     Int @default(0)
+  completedQueries Int @default(0)
+  failedQueries    Int @default(0)
 
   outputDir String?
   logs      String  @default("")
   error     String?
+  workerId  String?
+  workerPid Int?
+  lastHeartbeatAt DateTime?
+  stopRequestedAt DateTime?
 
   startedAt   DateTime?
   completedAt DateTime?
@@ -454,10 +463,35 @@ model ScraperJob {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  importedRows ScraperImportedRow[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId, createdAt])
+  @@index([status, lastHeartbeatAt])
+  @@index([workerId])
+}
+
+model ScraperImportedRow {
+  id          String @id @default(cuid())
+  jobId       String
+  job         ScraperJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  fingerprint String
+  sourceUrl   String?
+  leadId      String?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  importedById String
+  importedBy   User @relation(fields: [importedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, fingerprint])
+  @@index([organizationId, createdAt])
+  @@index([sourceUrl])
 }
 
 enum ScraperJobStatus {

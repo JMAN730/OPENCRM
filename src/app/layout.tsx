@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "OpenCRM",
-  description: "Pipeline, dialer, and team-aware CRM in one place.",
+  description: "Pipeline, call logging, and team-aware CRM in one place.",
 };
 
 export default function RootLayout({
