@@ -29,6 +29,7 @@ import {
   type Lead,
   type LeadSort,
   type LeadSortKey,
+  type ScoringRuleConfig,
 } from "./shared";
 import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
 
@@ -49,6 +50,7 @@ type LeadsTableProps = {
   ownerFilter: Set<string>;
   scoreMin: number | null;
   scoreMax: number | null;
+  scoringRules?: ScoringRuleConfig[];
   onClearStageFilters: () => void;
   onDeleteLead: (leadId: string) => void;
   onFetchNextPage: () => void;
@@ -97,6 +99,7 @@ export function LeadsTable({
   sortBy,
   stageCounts,
   stageFilter,
+  scoringRules,
 }: LeadsTableProps) {
   const allSelected =
     filteredLeads.length > 0 && filteredLeads.every((lead) => selectedIds.has(lead.id));
@@ -386,7 +389,7 @@ export function LeadsTable({
             filteredLeads.map((lead) => {
               const name = fullNameOf(lead);
               const checked = selectedIds.has(lead.id);
-              const score = scoreOf(lead);
+              const score = scoreOf(lead, scoringRules);
               const temp = effectiveTempOf(lead);
               const touches = touchesOf(lead);
               const reviews = reviewSummary(lead);

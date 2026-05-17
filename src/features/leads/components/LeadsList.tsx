@@ -31,6 +31,7 @@ import {
   type Lead,
   type LeadSort,
   type LeadVisibleColumn,
+  type ScoringRuleConfig,
 } from "./lead-list/shared";
 
 type LeadsViewMode = "focus" | "classic";
@@ -146,6 +147,8 @@ export function LeadsList() {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
+  const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
@@ -258,13 +261,13 @@ export function LeadsList() {
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
-      .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
-      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true))
+      .filter((lead) => (scoreMin !== null ? scoreOf(lead, scoringRules) >= scoreMin : true))
+      .filter((lead) => (scoreMax !== null ? scoreOf(lead, scoringRules) <= scoreMax : true))
       .filter((lead) => (sortBy.key === "starred" ? lead.starred === true : true));
 
     rows.sort((left, right) => {
       const getValue = (lead: Lead) => {
-        if (sortBy.key === "score") return scoreOf(lead);
+        if (sortBy.key === "score") return scoreOf(lead, scoringRules);
         if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
         if (sortBy.key === "starred") return lead.createdAt;
         return lead[sortBy.key as keyof Lead] ?? "";
@@ -305,8 +308,9 @@ export function LeadsList() {
         overdueTasks,
         dueTodayTasks,
         upcomingFollowUpTasks,
+        scoringRules,
       }),
-    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks],
+    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks, scoringRules],
   );
 
   const toggleStage = (stage: string) => {
@@ -621,6 +625,7 @@ export function LeadsList() {
               onOpenLead={(lead) => setSelectedLeadId(lead.id)}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
+              scoringRules={scoringRules}
               selectedIds={selected}
               visibleColumns={visibleColumns}
             />
@@ -680,6 +685,7 @@ export function LeadsList() {
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
               onToggleStage={toggleStage}
+              scoringRules={scoringRules}
               search={search}
               selectedIds={selected}
               sortBy={sortBy}
