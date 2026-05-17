@@ -101,6 +101,9 @@ export function ScheduledScrapePanel() {
                   <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{locs}</div>
                   <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginTop: 2 }}>
                     Every {DAY_LABELS[s.dayOfWeek]} at {String(s.hourOfDay).padStart(2, "0")}:00 UTC
+                    {s.nextRunAt ? (
+                      <span> · next: {new Date(s.nextRunAt).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+                    ) : null}
                   </div>
                 </div>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
