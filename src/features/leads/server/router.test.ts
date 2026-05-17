@@ -414,6 +414,56 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("updateCallOutcome", () => {
+    it("maps the built-in ANSWERED outcome to a CONNECTED lead status", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.updateCallOutcome({ id: "lead-1", callOutcome: "ANSWERED" });
+
+      const args = prisma.lead.update.mock.calls[0][0];
+      expect(args.data.callOutcome).toBe("ANSWERED");
+      expect(args.data.status).toBe("CONNECTED");
+      expect(args.data.customOutcomeId).toBeNull();
+    });
+
+    it("does not mark a lead as CONNECTED when a custom outcome is selected", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.customOutcome.findFirst.mockResolvedValue({ id: "outcome-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "CUSTOM",
+        customOutcomeId: "outcome-1",
+      });
+
+      const args = prisma.lead.update.mock.calls[0][0];
+      expect(args.data.callOutcome).toBe("CUSTOM");
+      expect(args.data.status).not.toBe("CONNECTED");
+      expect(args.data.customOutcomeId).toBe("outcome-1");
+    });
+
+    it("requires a customOutcomeId when callOutcome is CUSTOM", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+
+      await expect(
+        caller.leads.updateCallOutcome({ id: "lead-1", callOutcome: "CUSTOM" }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("clears any previously linked customOutcomeId when switching to a built-in outcome", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.updateCallOutcome({ id: "lead-1", callOutcome: "NO_ANSWER" });
+
+      const args = prisma.lead.update.mock.calls[0][0];
+      expect(args.data.customOutcomeId).toBeNull();
+      expect(args.data.status).toBe("NO_ANSWER");
+    });
+  });
+
   describe("updateTemperatureOverride", () => {
     it("updates the lead override when the lead is in scope", async () => {
       prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
