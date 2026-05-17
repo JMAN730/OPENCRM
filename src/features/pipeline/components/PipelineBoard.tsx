@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
 
 type BoardData = inferRouterOutputs<AppRouter>["pipeline"]["getBoard"];
 type Stage = BoardData["stages"][number];
@@ -352,6 +353,8 @@ export function PipelineBoard() {
 
   const [dealDialogOpen, setDealDialogOpen] = useState(false);
   const [dealStage, setDealStage]           = useState<Stage | null>(null);
+  const [dealMode, setDealMode]             = useState<"existing" | "new">("existing");
+  const [dealLeadId, setDealLeadId]         = useState("");
   const [dealCompany, setDealCompany]       = useState("");
   const [dealValue, setDealValue]           = useState("");
 
@@ -361,6 +364,8 @@ export function PipelineBoard() {
     onSuccess: () => {
       toast.success("Deal created");
       setDealDialogOpen(false);
+      setDealMode("existing");
+      setDealLeadId("");
       setDealCompany("");
       setDealValue("");
       setDealStage(null);
@@ -373,20 +378,34 @@ export function PipelineBoard() {
 
   const openDealDialog = useCallback((stage: Stage | null) => {
     setDealStage(stage);
+    setDealMode("existing");
+    setDealLeadId("");
     setDealCompany("");
     setDealValue("");
     setDealDialogOpen(true);
   }, []);
 
   const submitDeal = useCallback(() => {
-    const company = dealCompany.trim();
-    if (!company) {
-      toast.error("Company is required");
-      return;
-    }
     const parsedValue = dealValue.trim() === "" ? null : Number(dealValue.replace(/[^0-9.]/g, ""));
     if (parsedValue != null && (!Number.isFinite(parsedValue) || parsedValue < 0)) {
       toast.error("Value must be a positive number");
+      return;
+    }
+    if (dealMode === "existing") {
+      if (!dealLeadId) {
+        toast.error("Select a lead");
+        return;
+      }
+      createDeal.mutate({
+        leadId: dealLeadId,
+        value: parsedValue,
+        stageId: dealStage?.id ?? null,
+      });
+      return;
+    }
+    const company = dealCompany.trim();
+    if (!company) {
+      toast.error("Company is required");
       return;
     }
     createDeal.mutate({
@@ -394,7 +413,7 @@ export function PipelineBoard() {
       value: parsedValue,
       stageId: dealStage?.id ?? null,
     });
-  }, [dealCompany, dealValue, dealStage, createDeal]);
+  }, [dealMode, dealLeadId, dealCompany, dealValue, dealStage, createDeal]);
 
   const moveLead = trpc.pipeline.moveLead.useMutation({
     onMutate: async ({ leadId, stageId }) => {
@@ -587,17 +606,72 @@ export function PipelineBoard() {
             }}
             className="flex flex-col gap-3"
           >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="deal-company">Company</Label>
-              <Input
-                id="deal-company"
-                autoFocus
-                value={dealCompany}
-                onChange={(e) => setDealCompany(e.target.value)}
-                placeholder="Acme Inc."
-                disabled={createDeal.isPending}
-              />
+            <div
+              role="tablist"
+              aria-label="Deal source"
+              style={{
+                display: "inline-flex",
+                gap: 4,
+                padding: 3,
+                background: "var(--crm-bg-muted)",
+                border: "1px solid var(--crm-border)",
+                borderRadius: 8,
+                alignSelf: "flex-start",
+              }}
+            >
+              {(["existing", "new"] as const).map((mode) => {
+                const active = dealMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setDealMode(mode)}
+                    disabled={createDeal.isPending}
+                    style={{
+                      padding: "4px 12px",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: createDeal.isPending ? "not-allowed" : "pointer",
+                      background: active ? "var(--crm-bg-card)" : "transparent",
+                      color: active ? "var(--crm-fg)" : "var(--crm-fg-muted)",
+                      boxShadow: active ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                    }}
+                  >
+                    {mode === "existing" ? "Existing lead" : "New lead"}
+                  </button>
+                );
+              })}
             </div>
+            {dealMode === "existing" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="deal-lead">Lead</Label>
+                <LeadCombobox
+                  value={dealLeadId}
+                  onChange={(id, _name, lead) => {
+                    setDealLeadId(id);
+                    if (lead && lead.value != null && dealValue.trim() === "") {
+                      setDealValue(String(lead.value));
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="deal-company">Company</Label>
+                <Input
+                  id="deal-company"
+                  autoFocus
+                  value={dealCompany}
+                  onChange={(e) => setDealCompany(e.target.value)}
+                  placeholder="Acme Inc."
+                  disabled={createDeal.isPending}
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="deal-value">Value (USD)</Label>
               <Input

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@prisma/client';
 import { logActivity } from '@/server/activity';
+import { getLeadScope, leadWhereFromScope } from '@/server/teams/scope';
 
 const DEFAULT_STAGES = [
   { name: 'Potential',   order: 0 },
@@ -98,14 +99,22 @@ export const pipelineRouter = createTRPCRouter({
 
   createDeal: organizationProcedure
     .input(
-      z.object({
-        company: z.string().trim().min(1, 'Company is required').max(200),
-        value: z.number().nonnegative().nullable().optional(),
-        stageId: z.string().nullable().optional(),
-      }),
+      z.union([
+        z.object({
+          leadId: z.string(),
+          value: z.number().nonnegative().nullable().optional(),
+          stageId: z.string().nullable().optional(),
+        }),
+        z.object({
+          company: z.string().trim().min(1, 'Company is required').max(200),
+          value: z.number().nonnegative().nullable().optional(),
+          stageId: z.string().nullable().optional(),
+        }),
+      ]),
     )
     .mutation(async ({ ctx, input }) => {
       let stageId: string | null = null;
+      let stageName: string | null = null;
       if (input.stageId) {
         const stage = await ctx.prisma.pipelineStage.findFirst({
           where: { id: input.stageId },
@@ -115,6 +124,36 @@ export const pipelineRouter = createTRPCRouter({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
         stageId = stage.id;
+        stageName = stage.name;
+      }
+
+      if ('leadId' in input) {
+        const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+        const existing = await ctx.prisma.lead.findFirst({
+          where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        });
+        if (!existing) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Lead not found' });
+        }
+
+        const lead = await ctx.prisma.lead.update({
+          where: { id: existing.id },
+          data: {
+            pipelineStageId: stageId,
+            ...(input.value !== undefined ? { value: input.value } : {}),
+          },
+        });
+
+        await logActivity(ctx.prisma, {
+          leadId: lead.id,
+          userId: ctx.session.user.id,
+          type: 'LEAD_ASSIGNED',
+          description: stageName
+            ? `Moved ${lead.company ?? '(unnamed)'} to ${stageName}`
+            : `Added ${lead.company ?? '(unnamed)'} to pipeline`,
+        });
+
+        return lead;
       }
 
       const lead = await ctx.prisma.lead.create({
