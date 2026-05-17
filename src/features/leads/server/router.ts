@@ -255,13 +255,14 @@ export const leadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
+      const uniqueIds = [...new Set(input.leadIds)];
 
       const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
         select: { id: true },
       });
-      if (leads.length !== input.leadIds.length) {
+      if (leads.length !== uniqueIds.length) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "One or more leads are outside your scope.",
@@ -269,11 +270,11 @@ export const leadsRouter = createTRPCRouter({
       }
 
       const result = await ctx.prisma.lead.deleteMany({
-        where: { id: { in: input.leadIds } },
+        where: { id: { in: uniqueIds } },
       });
 
       await Promise.all(
-        input.leadIds.map((leadId) =>
+        uniqueIds.map((leadId) =>
           logActivity(ctx.prisma, {
             leadId,
             userId,
@@ -890,18 +891,19 @@ export const leadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
+      const uniqueIds = [...new Set(input.leadIds)];
 
       const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
         select: { id: true },
       });
-      if (leads.length !== input.leadIds.length) {
+      if (leads.length !== uniqueIds.length) {
         throw new TRPCError({ code: "FORBIDDEN", message: "One or more leads are outside your scope." });
       }
 
       await ctx.prisma.lead.updateMany({
-        where: { id: { in: input.leadIds } },
+        where: { id: { in: uniqueIds } },
         data: { temperatureOverride: input.temperature as LeadTemperatureOverride | null },
       });
 
