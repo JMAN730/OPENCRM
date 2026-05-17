@@ -154,10 +154,16 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(prisma.lead.groupBy.mock.calls[0][0].where.organizationId).toBe("org-1");
     // recent calls
     expect(prisma.callLog.findMany.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
-    // followupsDue scopes via user.organizationId so standalone tasks are included
+    // followupsDue uses direct organizationId on Task (non-nullable since 2026-05-17)
     const taskCountCall = prisma.task.count.mock.calls[0][0];
-    expect(taskCountCall.where.user.organizationId).toBe("org-1");
-    expect(taskCountCall.where).not.toHaveProperty("lead");
+    expect(taskCountCall.where.organizationId).toBe("org-1");
+    expect(taskCountCall.where.deletedAt).toBeNull();
+  });
+
+  it("excludes soft-deleted tasks from followupsDue count", async () => {
+    await caller.dashboard.getKpiStats();
+    const taskCountCall = prisma.task.count.mock.calls[0][0];
+    expect(taskCountCall.where.deletedAt).toBeNull();
   });
 
   it("issues exactly one query per data source (no fanout)", async () => {

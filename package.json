@@ -2,15 +2,15 @@
   "name": "opencrm",
   "version": "0.1.0",
   "description": "A self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.",
-  "author": "Your Team",
+  "author": "JMAN730",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/crm.git"
+    "url": "https://github.com/JMAN730/OPENCRM.git"
   },
-  "homepage": "https://github.com/yourusername/crm",
+  "homepage": "https://github.com/JMAN730/OPENCRM",
   "bugs": {
-    "url": "https://github.com/yourusername/crm/issues"
+    "url": "https://github.com/JMAN730/OPENCRM/issues"
   },
   "keywords": [
     "crm",
