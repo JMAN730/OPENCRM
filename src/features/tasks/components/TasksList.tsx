@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { inferRouterOutputs } from "@trpc/server";
 import { Calendar as CalendarIcon, Clock, Flag, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
@@ -222,12 +223,15 @@ export function TasksList() {
                       {new Date(task.dueDate).toLocaleDateString()}
                     </span>
                   )}
-                  {task.lead && (
-                    <span className="flex items-center gap-1">
+                  {task.lead && task.lead.id ? (
+                    <Link
+                      href={`/leads?leadId=${task.lead.id}`}
+                      className="flex items-center gap-1 text-blue-600 hover:underline"
+                    >
                       <Users size={12} />
                       {task.lead.company || `${task.lead.firstName} ${task.lead.lastName}`}
-                    </span>
-                  )}
+                    </Link>
+                  ) : null}
                   {task.assignedTo && (
                     <span className="flex items-center gap-1">
                       <Users size={12} />
