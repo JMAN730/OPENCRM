@@ -41,8 +41,8 @@ export function createMockPrisma() {
       groupBy: vi.fn(),
     },
     customOutcome: {
-      findMany: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       delete: vi.fn(),
     },
@@ -113,12 +113,6 @@ export function createMockPrisma() {
     activity: {
       create: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
-    },
-    customOutcome: {
-      findFirst: vi.fn(),
-      findMany: vi.fn().mockResolvedValue([]),
-      create: vi.fn(),
-      delete: vi.fn(),
     },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
