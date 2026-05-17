@@ -453,10 +453,33 @@ export function LeadsTable({
                   )}
                   {show("Company") && (
                     <td>
-                      <div style={{ display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         <span style={{ color: "var(--crm-fg)" }}>{lead.company || "-"}</span>
                         {lead.source ? (
                           <span style={{ color: "var(--crm-fg-faint)", fontSize: 11.5 }}>{lead.source}</span>
+                        ) : null}
+                        {lead.tags && lead.tags.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                            {lead.tags.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag.id}
+                                style={{
+                                  fontSize: 10, fontWeight: 500,
+                                  padding: "0 5px", borderRadius: 999, lineHeight: "16px",
+                                  background: "var(--crm-surface-2)",
+                                  border: "1px solid var(--crm-border)",
+                                  color: "var(--crm-fg-faint)",
+                                }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                            {lead.tags.length > 3 ? (
+                              <span style={{ fontSize: 10, color: "var(--crm-fg-faint)", lineHeight: "16px" }}>
+                                +{lead.tags.length - 3}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     </td>

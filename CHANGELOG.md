@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (2026-05-17, continued)
 
-- **Lead tags**: `leads.listOrgTags` / `createTag` / `deleteTag` / `getLeadTags` / `addTagToLead` / `removeTagFromLead` tRPC procedures; Tags section in LeadModal with chip display, picker dropdown, inline tag creation (max 100 tags per org); `LeadTag` many-to-many relation with `Lead`.
+- **Lead tags (full feature)**: `leads.listOrgTags` / `createTag` / `deleteTag` / `getLeadTags` / `addTagToLead` / `removeTagFromLead` tRPC procedures; Tags section in LeadModal (chip display, picker dropdown, inline creation); tag filter in LeadsManagementBar and LeadsTable Filters popover; tag chips shown on LeadCardList rows and LeadsTable company column; Tags admin tab in Settings for creating / deleting org tags (max 100 per org).
 
 ### Changed (2026-05-17)
 
