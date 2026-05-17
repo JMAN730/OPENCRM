@@ -4,7 +4,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -53,6 +54,41 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function parseCalendarDateParam(value: string | null) {
+  if (!value) return null;
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function subscribeToLocationChange(onStoreChange: () => void) {
+  window.addEventListener("popstate", onStoreChange);
+  return () => window.removeEventListener("popstate", onStoreChange);
+}
+
+function getLocationSearch() {
+  return window.location.search;
+}
+
+function getServerLocationSearch() {
+  return "";
+}
 
 function isOverdue(task: Pick<CalendarTask, "dueDate" | "status">) {
   if (task.status === "COMPLETED" || !task.dueDate) return false;
@@ -293,9 +329,16 @@ function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => voi
       : PRIORITY_COLORS[task.priority ?? "MEDIUM"];
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         width: "100%",
         padding: "10px 12px",
@@ -321,16 +364,22 @@ function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => voi
         {task.title}
       </span>
       {task.lead && (
-        <span style={{ fontSize: 11, color: "#3b82f6", display: "flex", alignItems: "center", gap: 4 }}>
+        <Link
+          href={`/leads?leadId=${task.lead.id}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ fontSize: 11, color: "#3b82f6", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+        >
           <Link2 size={10} /> {leadLabel(task.lead)}
-        </span>
+        </Link>
       )}
       {task.assignedTo && (
         <span style={{ fontSize: 11, color: "var(--crm-fg-faint)", display: "flex", alignItems: "center", gap: 4 }}>
           <User size={10} /> {task.assignedTo.name}
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -400,9 +449,20 @@ function TaskDrawer({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <DetailRow icon={<User size={14} />} label="Assigned To" value={task.assignedTo?.name ?? "—"} />
-            {task.lead && (
-              <DetailRow icon={<Link2 size={14} />} label="Lead" value={leadLabel(task.lead)} />
-            )}
+            <DetailRow icon={<Link2 size={14} />} label="Lead">
+              {task.lead ? (
+                <Link
+                  href={`/leads?leadId=${task.lead.id}`}
+                  style={{ fontSize: 13, color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  {leadLabel(task.lead)}
+                </Link>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--crm-fg-faint)" }}>No lead</div>
+              )}
+            </DetailRow>
             <DetailRow
               icon={<Clock size={14} />}
               label="Due"
@@ -476,11 +536,13 @@ function DetailRow({
   label,
   value,
   accent,
+  children,
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value?: string;
   accent?: boolean;
+  children?: React.ReactNode;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -498,7 +560,7 @@ function DetailRow({
         >
           {label}
         </div>
-        <div style={{ fontSize: 13, color: accent ? "#ef4444" : "var(--crm-fg)" }}>{value}</div>
+        {children ?? <div style={{ fontSize: 13, color: accent ? "#ef4444" : "var(--crm-fg)" }}>{value}</div>}
       </div>
     </div>
   );
@@ -801,9 +863,16 @@ function DeleteConfirm({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
+  const locationSearch = useSyncExternalStore(
+    subscribeToLocationChange,
+    getLocationSearch,
+    getServerLocationSearch,
+  );
+  const dateParam = useMemo(() => new URLSearchParams(locationSearch).get("date"), [locationSearch]);
+  const linkedDate = useMemo(() => parseCalendarDateParam(dateParam), [dateParam]);
   const utils = trpc.useUtils();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [currentMonthOverride, setCurrentMonthOverride] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null | undefined>(undefined);
   const [selectedTask, setSelectedTask] = useState<CalendarTask | null>(null);
   const [creating, setCreating] = useState(false);
   const [createDate, setCreateDate] = useState<string>("");
@@ -811,6 +880,8 @@ export default function CalendarPage() {
   const [deletingTask, setDeletingTask] = useState<CalendarTask | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState("");
 
+  const currentMonth = currentMonthOverride ?? linkedDate ?? new Date();
+  const activeSelectedDay = selectedDay === undefined ? linkedDate : selectedDay;
   const calendarStart = startOfWeek(startOfMonth(currentMonth));
   const calendarEnd = endOfWeek(endOfMonth(currentMonth));
 
@@ -909,8 +980,8 @@ export default function CalendarPage() {
   const today = new Date();
 
   // Tasks for the selected day panel
-  const selectedDayTasks = selectedDay
-    ? (byDate[format(selectedDay, "yyyy-MM-dd")] ?? [])
+  const selectedDayTasks = activeSelectedDay
+    ? (byDate[format(activeSelectedDay, "yyyy-MM-dd")] ?? [])
     : [];
 
   return (
@@ -974,7 +1045,7 @@ export default function CalendarPage() {
           >
             <button
               type="button"
-              onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
+              onClick={() => setCurrentMonthOverride((m) => subMonths(m ?? currentMonth, 1))}
               className="crm-btn"
               style={{ padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}
             >
@@ -987,7 +1058,7 @@ export default function CalendarPage() {
               {!isSameMonth(today, currentMonth) && (
                 <button
                   type="button"
-                  onClick={() => setCurrentMonth(new Date())}
+                  onClick={() => setCurrentMonthOverride(new Date())}
                   className="crm-btn"
                   style={{ fontSize: 12, padding: "3px 10px" }}
                 >
@@ -997,7 +1068,7 @@ export default function CalendarPage() {
             </div>
             <button
               type="button"
-              onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
+              onClick={() => setCurrentMonthOverride((m) => addMonths(m ?? currentMonth, 1))}
               className="crm-btn"
               style={{ padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}
             >
@@ -1060,7 +1131,7 @@ export default function CalendarPage() {
                 const dayTasks = byDate[key] ?? [];
                 const inMonth = isSameMonth(day, currentMonth);
                 const todayDay = isSameDay(day, today);
-                const isSelected = selectedDay ? isSameDay(day, selectedDay) : false;
+                const isSelected = activeSelectedDay ? isSameDay(day, activeSelectedDay) : false;
 
                 return (
                   <div
@@ -1158,9 +1229,9 @@ export default function CalendarPage() {
       </div>
 
       {/* Day panel */}
-      {selectedDay && !selectedTask && (
+      {activeSelectedDay && !selectedTask && (
         <DayPanel
-          date={selectedDay}
+          date={activeSelectedDay}
           tasks={selectedDayTasks}
           onTaskClick={(t) => { setSelectedDay(null); setSelectedTask(t); }}
           onCreateForDay={openCreateForDay}

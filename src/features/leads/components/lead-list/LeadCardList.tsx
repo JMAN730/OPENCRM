@@ -7,6 +7,7 @@ import {
   effectiveTempOf,
   fullNameOf,
   initials,
+  lastTouchOf,
   nextActionForLead,
   relativeTime,
   reviewSummary,
@@ -178,7 +179,7 @@ export function LeadCardList({
                   {show("Last touch") ? (
                     <div className="focus-card-stat">
                       <span className="label">Last touch</span>
-                      <span className="value">{relativeTime(lead.createdAt)}</span>
+                      <span className="value">{relativeTime(lastTouchOf(lead))}</span>
                     </div>
                   ) : null}
                 </div>

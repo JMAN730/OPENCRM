@@ -16,6 +16,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional sidecar. The app degrades gracefully when REDIS_URL is unset, but
+  # rate limiting and KPI caching are far more useful with Redis running.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   migrate:
     build:
       context: .
@@ -23,7 +38,12 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-    command: ["node", "node_modules/prisma/build/index.js", "db", "push"]
+    command:
+      [
+        "sh",
+        "-c",
+        "node node_modules/prisma/build/index.js db execute --file prisma/migrations/20260516120000_harden_scraper_jobs/migration.sql || true; node node_modules/prisma/build/index.js db push",
+      ]
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +58,7 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       NODE_ENV: ${NODE_ENV}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SCRAPER_ENABLED: ${SCRAPER_ENABLED:-true}
       SCRAPER_PYTHON_PATH: /opt/venv/bin/python3
       SCRAPER_SCRIPT_PATH: /app/scraper/scraper.py
@@ -49,7 +70,10 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
 
 volumes:
   postgres_data_v2:
   scraper_output:
+  redis_data:

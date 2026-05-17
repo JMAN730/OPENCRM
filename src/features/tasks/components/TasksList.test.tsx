@@ -56,7 +56,7 @@ describe("TasksList", () => {
             title: "Call back John",
             status: "PENDING",
             dueDate: null,
-            lead: { firstName: "John", lastName: "Doe", company: "Acme" },
+            lead: { id: "lead-1", firstName: "John", lastName: "Doe", company: "Acme" },
           },
         ],
         nextCursor: null,

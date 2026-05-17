@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { createHash } from "crypto";
 import Papa from "papaparse";
 import { prisma } from "@/lib/prisma";
 import { parseCityState } from "@/features/leads/location";
@@ -62,6 +63,16 @@ function dedupKey(company: string, phone: string | null): string {
   return `${company.toLowerCase()}|${normalizePhone(phone)}`;
 }
 
+function rowFingerprint(row: ScrapedRow): string {
+  const sourceUrl = (row["Google Maps URL"] ?? "").trim().toLowerCase();
+  const name = (row.Name ?? "").trim().toLowerCase();
+  const phone = normalizePhone(row.Phone);
+  const location = (row.Location ?? "").trim().toLowerCase();
+  const category = (row.Category ?? "").trim().toLowerCase();
+  const stableKey = sourceUrl || [name, phone, location, category].join("|");
+  return createHash("sha256").update(stableKey).digest("hex");
+}
+
 /**
  * Build the set of existing (company, phone) keys that overlap with the
  * incoming batch. The previous implementation loaded **every** lead in the
@@ -106,6 +117,16 @@ export async function importRowsToLeads(opts: {
   const { rows, organizationId, assignedToId, jobId } = opts;
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
 
+  const rowFingerprints = Array.from(new Set(rows.map(rowFingerprint)));
+  const alreadyImported = await prisma.scraperImportedRow.findMany({
+    where: {
+      jobId,
+      fingerprint: { in: rowFingerprints },
+    },
+    select: { fingerprint: true },
+  });
+  const importedFingerprints = new Set(alreadyImported.map((r) => r.fingerprint));
+
   // Distinct companies in the incoming batch — keeps the lookup bounded by
   // the request size rather than the org's total lead count.
   const companiesSet = new Set<string>();
@@ -118,6 +139,7 @@ export async function importRowsToLeads(opts: {
   const existingKeys = await loadExistingKeys(organizationId, companies);
 
   const toInsert: Array<{
+    fingerprint: string;
     company: string;
     phone: string | null;
     website: string | null;
@@ -134,6 +156,11 @@ export async function importRowsToLeads(opts: {
   let skipped = 0;
 
   for (const row of rows) {
+    const fingerprint = rowFingerprint(row);
+    if (importedFingerprints.has(fingerprint)) {
+      skipped++;
+      continue;
+    }
     const company = (row.Name ?? "").trim();
     if (!company) {
       skipped++;
@@ -171,12 +198,14 @@ export async function importRowsToLeads(opts: {
       continue;
     }
     existingKeys.set(key, { id: "", rating: Number.isFinite(rating) ? rating : null, reviewCount: Number.isFinite(reviewCount) ? reviewCount : null });
+    importedFingerprints.add(fingerprint);
 
     const sourceParts = ["GoogleMaps"];
     if (row.Category) sourceParts.push(row.Category);
     if (row.Location) sourceParts.push(row.Location);
 
     toInsert.push({
+      fingerprint,
       company,
       phone,
       website,
@@ -193,7 +222,19 @@ export async function importRowsToLeads(opts: {
 
   const result = toInsert.length
     ? await prisma.lead.createMany({
-        data: toInsert,
+        data: toInsert.map((row) => ({
+          company: row.company,
+          phone: row.phone,
+          website: row.website,
+          mapsUrl: row.mapsUrl,
+          city: row.city,
+          state: row.state,
+          rating: row.rating,
+          reviewCount: row.reviewCount,
+          source: row.source,
+          organizationId: row.organizationId,
+          assignedToId: row.assignedToId,
+        })),
       })
     : { count: 0 };
 
@@ -207,6 +248,16 @@ export async function importRowsToLeads(opts: {
   );
 
   if (result.count > 0) {
+    await prisma.scraperImportedRow.createMany({
+      data: toInsert.map((row) => ({
+        jobId,
+        fingerprint: row.fingerprint,
+        sourceUrl: row.mapsUrl,
+        organizationId,
+        importedById: assignedToId,
+      })),
+      skipDuplicates: true,
+    });
     await prisma.scraperJob.update({
       where: { id: jobId },
       data: { importedCount: { increment: result.count } },

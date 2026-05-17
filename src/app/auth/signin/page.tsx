@@ -97,6 +97,7 @@ export default function SignInPage() {
   const [selectedUser, setSelectedUser] = useState<SavedUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberOnDevice, setRememberOnDevice] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
@@ -145,7 +146,13 @@ export default function SignInPage() {
         );
       } else {
         const session = await getSession();
-        if (session?.user?.email) {
+        // Only persist the account picker entry when the user explicitly opts
+        // in (default off) or when they're re-signing in to a previously
+        // remembered account — otherwise this leaks the user's identity to
+        // anyone with browser access on a shared machine.
+        const shouldRemember =
+          view === "password" || rememberOnDevice;
+        if (shouldRemember && session?.user?.email) {
           upsertSavedUser({
             email: session.user.email,
             name: session.user.name ?? session.user.email,
@@ -351,6 +358,14 @@ export default function SignInPage() {
                 required
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                checked={rememberOnDevice}
+                onChange={(e) => setRememberOnDevice(e.target.checked)}
+              />
+              Remember this account on this device
+            </label>
           </CardContent>
           <CardFooter className="flex flex-col gap-4 border-t-0 bg-transparent">
             <Button className="w-full" type="submit" disabled={isLoading}>

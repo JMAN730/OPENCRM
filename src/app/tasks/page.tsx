@@ -5,6 +5,7 @@ import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
 import { Suspense, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -17,10 +18,10 @@ import {
   eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths,
 } from "date-fns";
 import { getTaskSummaryCounts, isTaskOverdue } from "./task-summary";
+import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
 
 type TaskItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
 type OrgMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
-type LeadResult = inferRouterOutputs<AppRouter>["leads"]["getAll"]["items"][number];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,119 +89,6 @@ function isOverdue(task: Pick<TaskItem, "dueDate" | "status">) {
 function leadName(lead: TaskItem["lead"]) {
   if (!lead) return "";
   return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—";
-}
-
-// ── Lead Search Combobox ──────────────────────────────────────────────────────
-
-function LeadCombobox({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (id: string, name: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const { data } = trpc.leads.getAll.useQuery(
-    { search: search || undefined, limit: 10 },
-    { enabled: open && search.length > 0 },
-  );
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const leads = data?.items ?? [];
-
-  function select(lead: LeadResult) {
-    const name = lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed";
-    onChange(lead.id, name);
-    setDisplayName(name);
-    setSearch("");
-    setOpen(false);
-  }
-
-  function clear() {
-    onChange("", "");
-    setDisplayName("");
-    setSearch("");
-  }
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        {value && !open ? (
-          <div style={{
-            flex: 1, padding: "6px 10px", border: "1px solid var(--crm-border)",
-            borderRadius: 6, fontSize: 13, color: "var(--crm-fg)", display: "flex",
-            alignItems: "center", justifyContent: "space-between", gap: 6,
-          }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Link2 size={12} style={{ color: "var(--crm-fg-muted)" }} />
-              {displayName}
-            </span>
-            <button type="button" onClick={clear} style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "flex" }}>
-              <X size={12} style={{ color: "var(--crm-fg-muted)" }} />
-            </button>
-          </div>
-        ) : (
-          <div style={{ flex: 1, position: "relative" }}>
-            <Search size={12} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--crm-fg-faint)" }} />
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
-              onFocus={() => setOpen(true)}
-              placeholder="Search leads by name, company, email…"
-              style={{
-                width: "100%", padding: "6px 10px 6px 28px",
-                border: "1px solid var(--crm-border)", borderRadius: 6,
-                fontSize: 13, color: "var(--crm-fg)", background: "var(--crm-bg-card)",
-                outline: "none", boxSizing: "border-box",
-              }}
-            />
-          </div>
-        )}
-      </div>
-      {open && search.length > 0 && (
-        <div style={{
-          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
-          background: "var(--crm-bg-card)", border: "1px solid var(--crm-border)",
-          borderRadius: 8, marginTop: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-          maxHeight: 240, overflowY: "auto",
-        }}>
-          {leads.length === 0 ? (
-            <div style={{ padding: "10px 14px", fontSize: 13, color: "var(--crm-fg-faint)" }}>No leads found</div>
-          ) : leads.map((lead) => {
-            const name = lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed";
-            return (
-              <button
-                key={lead.id}
-                type="button"
-                onClick={() => select(lead)}
-                style={{
-                  width: "100%", padding: "8px 14px", border: "none", background: "none",
-                  cursor: "pointer", textAlign: "left", fontSize: 13, color: "var(--crm-fg)",
-                  display: "flex", flexDirection: "column", gap: 2,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--crm-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-              >
-                <span style={{ fontWeight: 500 }}>{name}</span>
-                {lead.email && <span style={{ fontSize: 11, color: "var(--crm-fg-muted)" }}>{lead.email}</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── Task Form (used in Create and Edit dialogs) ───────────────────────────────
@@ -506,8 +394,17 @@ function TaskRow({
       </td>
       <td style={{ padding: "10px 16px", fontSize: 13, color: "var(--crm-fg-muted)", verticalAlign: "middle" }}>
         {task.lead ? (
-          <span style={{ color: "#3b82f6", fontWeight: 500 }}>{leadName(task.lead)}</span>
-        ) : "—"}
+          <Link
+            href={`/leads?leadId=${task.lead.id}`}
+            style={{ color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+          >
+            {leadName(task.lead)}
+          </Link>
+        ) : (
+          <span style={{ color: "var(--crm-fg-faint)" }}>No lead</span>
+        )}
       </td>
       <td style={{ padding: "10px 16px", fontSize: 13, color: isOverdue(task) ? "#ef4444" : "var(--crm-fg-muted)", verticalAlign: "middle", whiteSpace: "nowrap" }}>
         {fmtDateTime(task.dueDate)}
@@ -685,7 +582,20 @@ function TaskDetailSidebar({ task, onEdit, onDelete, onComplete, onClose }: {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Row icon={<User size={14} />} label="Assigned To" value={task.assignedTo?.name ?? task.user?.name ?? "—"} />
-            <Row icon={<Link2 size={14} />} label="Lead" value={task.lead ? leadName(task.lead) : "—"} />
+            <Row icon={<Link2 size={14} />} label="Lead">
+              {task.lead ? (
+                <Link
+                  href={`/leads?leadId=${task.lead.id}`}
+                  style={{ fontSize: 13, color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  {leadName(task.lead)}
+                </Link>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--crm-fg-faint)" }}>No lead</div>
+              )}
+            </Row>
             <Row icon={<Clock size={14} />} label="Due" value={fmtDateTime(task.dueDate)} accent={isOverdue(task)} />
             <Row icon={<Flag size={14} />} label="Priority" value={PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS] ?? task.priority} />
             <Row icon={<AlertCircle size={14} />} label="Status">

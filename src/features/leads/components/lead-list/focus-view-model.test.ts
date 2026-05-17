@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildFocusSpotlightLeads } from "./focus-view-model";
 import type { Lead } from "./shared";
 
@@ -36,6 +36,15 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 describe("buildFocusSpotlightLeads", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-16T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("surfaces scheduled follow-ups for hot leads instead of the no-follow-up warning", () => {
     const lead = makeLead();
     const cards = buildFocusSpotlightLeads({

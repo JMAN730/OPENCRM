@@ -109,7 +109,7 @@ describe("tasksRouter", () => {
       expect(prisma.task.findFirst).toHaveBeenCalledWith({
         where: {
           id: "t1",
-          user: { organizationId: "org-1" },
+          organizationId: "org-1",
           deletedAt: null,
         },
         select: { id: true, userId: true, leadId: true, title: true },
@@ -185,7 +185,7 @@ describe("tasksRouter", () => {
       expect(prisma.task.findFirst).toHaveBeenCalledWith({
         where: {
           id: "t1",
-          user: { organizationId: "org-1" },
+          organizationId: "org-1",
           deletedAt: null,
         },
         select: { id: true, userId: true },
@@ -257,7 +257,7 @@ describe("tasksRouter", () => {
       expect(prisma.task.findFirst).toHaveBeenCalledWith({
         where: {
           id: "task-1",
-          user: { organizationId: "org-1" },
+          organizationId: "org-1",
           deletedAt: null,
         },
         include: {

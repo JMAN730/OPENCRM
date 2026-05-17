@@ -40,6 +40,12 @@ export function createMockPrisma() {
       aggregate: vi.fn(),
       groupBy: vi.fn(),
     },
+    customOutcome: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
     callLog: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -74,6 +80,22 @@ export function createMockPrisma() {
     },
     organization: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    invitation: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    note: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
     },
     passwordResetToken: {
       findUnique: vi.fn(),
@@ -91,6 +113,16 @@ export function createMockPrisma() {
     activity: {
       create: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
+    },
+    pipeline: {
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    pipelineStage: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      createMany: vi.fn(),
     },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {

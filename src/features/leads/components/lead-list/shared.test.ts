@@ -54,19 +54,17 @@ describe("touchesOf", () => {
     ).toBe(1);
   });
 
-  it("does not inflate touches from call outcome alone", () => {
-    // No CallLog rows recorded yet -> touches must be 0 regardless of
-    // status or denormalized callOutcome. This protects against seed
-    // data / status changes being counted as touches.
+  it("uses persisted touchCount when call outcomes are logged", () => {
     expect(
       touchesOf(
         makeLead({
           status: "CONNECTED",
           callOutcome: "ANSWERED",
+          touchCount: 1,
           _count: { calls: 0, notes: 0 },
         }),
       ),
-    ).toBe(0);
+    ).toBe(1);
   });
 
   it("counts calls and notes additively", () => {

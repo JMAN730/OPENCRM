@@ -8,6 +8,8 @@ import { authRouter } from "@/features/auth/server/router";
 import { teamsRouter } from "@/features/teams/server/router";
 import { scoringRouter } from "@/features/scoring/server/router";
 import { websitesRouter } from "@/features/websites/server/router";
+import { pipelineRouter } from "@/features/pipeline/server/router";
+import { analyticsRouter } from "@/features/analytics/server/router";
 
 export const appRouter = createTRPCRouter({
   leads: leadsRouter,
@@ -19,6 +21,8 @@ export const appRouter = createTRPCRouter({
   teams: teamsRouter,
   scoring: scoringRouter,
   websites: websitesRouter,
+  pipeline: pipelineRouter,
+  analytics: analyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

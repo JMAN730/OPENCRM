@@ -11,7 +11,7 @@ describe("dashboardRouter.getKpiStats", () => {
     // Default: zero of everything. Individual tests override as needed.
     prisma.callLog.count.mockResolvedValue(0);
     prisma.task.count.mockResolvedValue(0);
-    prisma.lead.aggregate.mockResolvedValue({ _sum: { value: null } });
+    prisma.lead.count.mockResolvedValue(0);
     prisma.callLog.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
     prisma.callLog.findMany.mockResolvedValue([]);
@@ -36,29 +36,47 @@ describe("dashboardRouter.getKpiStats", () => {
 
   it("derives totals/qualified from a single lead.groupBy call (no separate counts)", async () => {
     prisma.lead.groupBy.mockResolvedValue([
-      { status: "NOT_CONTACTED", _count: { id: 150 } },
-      { status: "CONNECTED", _count: { id: 50 } },
+      { status: "NOT_CONTACTED", callOutcome: "NOT_CONTACTED", _count: { id: 150 } },
+      { status: "CONNECTED", callOutcome: "ANSWERED", _count: { id: 50 } },
     ]);
 
     const result = await caller.dashboard.getKpiStats();
 
     expect(result.totalLeads).toBe(200);
-    expect(result.appointmentsSet).toBe(50);
+    expect(result.qualifiedLeads).toBe(50);
     expect(result.conversionRate).toBe("25.0%");
-    // Old implementation ran three lead.count calls; new implementation runs none.
-    expect(prisma.lead.count).not.toHaveBeenCalled();
   });
 
-  it("falls back to 0 monthly revenue when aggregate _sum.value is null", async () => {
-    prisma.lead.aggregate.mockResolvedValue({ _sum: { value: null } });
+  it("returns the connected-last-30d count from the lead.count call", async () => {
+    prisma.lead.count.mockResolvedValueOnce(7);
     const result = await caller.dashboard.getKpiStats();
-    expect(result.monthlyRevenue).toBe(0);
+    expect(prisma.lead.count.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({
+        organizationId: "org-1",
+        status: "CONNECTED",
+        callOutcome: { not: "CUSTOM" },
+      }),
+    );
+    expect(result.connectedLast30d).toBe(7);
   });
 
-  it("returns the aggregated monthly revenue when present", async () => {
-    prisma.lead.aggregate.mockResolvedValue({ _sum: { value: 12345 } });
+  it("excludes custom call outcomes from generic connected dashboard metrics", async () => {
+    prisma.lead.groupBy.mockResolvedValue([
+      { status: "CONNECTED", callOutcome: "ANSWERED", _count: { id: 7 } },
+      { status: "CONNECTED", callOutcome: "CUSTOM", _count: { id: 3 } },
+      { status: "NO_ANSWER", callOutcome: "NO_ANSWER", _count: { id: 5 } },
+    ]);
+
     const result = await caller.dashboard.getKpiStats();
-    expect(result.monthlyRevenue).toBe(12345);
+
+    expect(prisma.lead.groupBy.mock.calls[0][0].by).toEqual(["status", "callOutcome"]);
+    expect(result.totalLeads).toBe(15);
+    expect(result.qualifiedLeads).toBe(7);
+    expect(result.conversionRate).toBe("46.7%");
+    expect(result.leadsByStatus).toEqual([
+      { status: "CONNECTED", count: 7 },
+      { status: "NO_ANSWER", count: 5 },
+    ]);
   });
 
   it("returns 7 daily call buckets in chronological order, filling missing days with 0", async () => {
@@ -128,18 +146,24 @@ describe("dashboardRouter.getKpiStats", () => {
 
     // callsTodayCount
     expect(prisma.callLog.count.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
-    // revenue aggregate
-    expect(prisma.lead.aggregate.mock.calls[0][0].where.organizationId).toBe("org-1");
+    // connected-last-30d count
+    expect(prisma.lead.count.mock.calls[0][0].where.organizationId).toBe("org-1");
     // status distribution
     expect(prisma.callLog.groupBy.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
     // lead groupBy
     expect(prisma.lead.groupBy.mock.calls[0][0].where.organizationId).toBe("org-1");
     // recent calls
     expect(prisma.callLog.findMany.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
-    // followupsDue scopes via user.organizationId so standalone tasks are included
+    // followupsDue uses direct organizationId on Task (non-nullable since 2026-05-17)
     const taskCountCall = prisma.task.count.mock.calls[0][0];
-    expect(taskCountCall.where.user.organizationId).toBe("org-1");
-    expect(taskCountCall.where).not.toHaveProperty("lead");
+    expect(taskCountCall.where.organizationId).toBe("org-1");
+    expect(taskCountCall.where.deletedAt).toBeNull();
+  });
+
+  it("excludes soft-deleted tasks from followupsDue count", async () => {
+    await caller.dashboard.getKpiStats();
+    const taskCountCall = prisma.task.count.mock.calls[0][0];
+    expect(taskCountCall.where.deletedAt).toBeNull();
   });
 
   it("issues exactly one query per data source (no fanout)", async () => {
@@ -149,7 +173,7 @@ describe("dashboardRouter.getKpiStats", () => {
     // should run at most one of each kind.
     expect(prisma.callLog.count).toHaveBeenCalledTimes(1); // callsToday only
     expect(prisma.task.count).toHaveBeenCalledTimes(1); // followups due
-    expect(prisma.lead.aggregate).toHaveBeenCalledTimes(1);
+    expect(prisma.lead.count).toHaveBeenCalledTimes(1); // connected-last-30d
     expect(prisma.callLog.groupBy).toHaveBeenCalledTimes(1);
     expect(prisma.lead.groupBy).toHaveBeenCalledTimes(1);
     expect(prisma.callLog.findMany).toHaveBeenCalledTimes(1);

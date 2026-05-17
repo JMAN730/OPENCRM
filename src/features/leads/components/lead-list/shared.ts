@@ -19,6 +19,8 @@ export type Lead = {
   callOutcome?: string | null;
   callNotes?: string | null;
   starred?: boolean | null;
+  touchCount?: number | null;
+  lastTouchedAt?: string | Date | null;
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
@@ -314,16 +316,17 @@ export function relativeTime(iso: string | Date) {
 }
 
 export function touchesOf(lead: Lead) {
-  // Touches = real, recorded interactions with the lead. CallLog rows are
-  // the canonical source (each Twilio dial creates exactly one row, and
-  // `CallLog.twilioCallSid` is unique so the same Twilio call cannot be
-  // counted twice). Notes count as a second kind of explicit touch.
-  // Status changes, task creation, page views, and Activity log entries
-  // are intentionally NOT counted — Activity rows can be duplicated by
-  // bulk operations and don't represent a real interaction with the lead.
+  if (typeof lead.touchCount === "number") return lead.touchCount;
+
+  // Fallback for older test fixtures or API shapes that only expose relation
+  // counts.
   const calls = lead._count?.calls ?? 0;
   const notes = lead._count?.notes ?? 0;
   return calls + notes;
+}
+
+export function lastTouchOf(lead: Lead) {
+  return lead.lastTouchedAt ?? lead.createdAt;
 }
 
 export function nextActionForLead(
