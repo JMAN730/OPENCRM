@@ -94,13 +94,10 @@ export default function SettingsPage() {
     ["Role",  userRole ?? "USER"],
   ];
 
-  const rows: [string, string][] =
-    active === "Profile" ? profileRows : [];
-
   const desc: Record<string, string> = {
     Profile: "Your personal information and account preferences.",
     Members: "Manage who has access to this workspace.",
-    Tags: "Create and manage lead tags for this workspace.",
+    Tags: "Manage labels you can attach to leads to categorize and filter them.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -134,9 +131,9 @@ export default function SettingsPage() {
             <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600, color: "var(--crm-fg)" }}>{active}</h3>
             <p style={{ margin: "0 0 20px", color: "var(--crm-fg-muted)", fontSize: 13 }}>{desc[active]}</p>
 
-            {rows.length > 0 ? (
+            {active === "Profile" ? (
               <>
-                {rows.map(([k, v]) => (
+                {profileRows.map(([k, v]) => (
                   <div
                     key={k}
                     style={{
@@ -199,45 +196,44 @@ export default function SettingsPage() {
                   </div>
                 ))}
 
-                {active === "Profile" && (
-                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>
-                    <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
-                      Once you delete your account, there is no going back.
-                    </div>
-                    {!confirmDelete ? (
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>
+                  <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
+                    Once you delete your account, there is no going back.
+                  </div>
+                  {!confirmDelete ? (
+                    <button
+                      className="crm-btn"
+                      style={{ height: 32, padding: "0 16px", border: "1px solid var(--crm-neg)", color: "var(--crm-neg)" }}
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete account
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>Are you sure?</span>
                       <button
                         className="crm-btn"
-                        style={{ height: 32, padding: "0 16px", border: "1px solid var(--crm-neg)", color: "var(--crm-neg)" }}
-                        onClick={() => setConfirmDelete(true)}
+                        style={{ height: 32, padding: "0 14px", background: "var(--crm-neg)", color: "white", border: "none" }}
+                        disabled={deleteAccount.isPending}
+                        onClick={() => deleteAccount.mutate()}
                       >
-                        Delete account
+                        {deleteAccount.isPending ? "Deleting…" : "Yes, delete"}
                       </button>
-                    ) : (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>Are you sure?</span>
-                        <button
-                          className="crm-btn"
-                          style={{ height: 32, padding: "0 14px", background: "var(--crm-neg)", color: "white", border: "none" }}
-                          disabled={deleteAccount.isPending}
-                          onClick={() => deleteAccount.mutate()}
-                        >
-                          {deleteAccount.isPending ? "Deleting…" : "Yes, delete"}
-                        </button>
-                        <button
-                          className="crm-btn"
-                          style={{ height: 32, padding: "0 14px" }}
-                          onClick={() => setConfirmDelete(false)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
+                      <button
+                        className="crm-btn"
+                        style={{ height: 32, padding: "0 14px" }}
+                        onClick={() => setConfirmDelete(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
-            ) : active === "Members" ? (
+            ) : active === "Tags" ? (
+              <TagsPanel />
+            ) : (
               <MembersPanel
                 isAdmin={isAdmin}
                 inviteEmail={inviteEmail}
@@ -260,8 +256,6 @@ export default function SettingsPage() {
                 setShowInviteForm={setShowInviteForm}
                 showInviteForm={showInviteForm}
               />
-            ) : (
-              <TagsPanel />
             )}
           </div>
         </div>
@@ -278,88 +272,6 @@ type OrganizationMember = {
   teamId: string | null;
   team: { id: string; name: string } | null;
 };
-
-function TagsPanel() {
-  const [name, setName] = useState("");
-  const utils = trpc.useUtils();
-  const { data: tags = [], isLoading } = trpc.leads.listOrgTags.useQuery();
-  const createTag = trpc.leads.createTag.useMutation({
-    onSuccess: () => {
-      toast.success("Tag created");
-      setName("");
-      void utils.leads.listOrgTags.invalidate();
-    },
-    onError: (err) => toast.error(err.message || "Failed to create tag"),
-  });
-  const deleteTag = trpc.leads.deleteTag.useMutation({
-    onSuccess: () => {
-      toast.success("Tag deleted");
-      void utils.leads.listOrgTags.invalidate();
-      void utils.leads.getAll.invalidate();
-    },
-    onError: (err) => toast.error(err.message || "Failed to delete tag"),
-  });
-  const canCreate = name.trim().length > 0 && !createTag.isPending;
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 0", borderTop: "1px solid var(--crm-border)" }}>
-        <input
-          autoFocus
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && canCreate) createTag.mutate({ name: name.trim() });
-          }}
-          placeholder="New tag name..."
-          style={{ flex: 1, padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
-          value={name}
-        />
-        <button
-          className="crm-btn primary"
-          disabled={!canCreate}
-          onClick={() => createTag.mutate({ name: name.trim() })}
-          style={{ height: 32, padding: "0 14px" }}
-        >
-          <Plus size={13} />
-          {createTag.isPending ? "Adding..." : "Add tag"}
-        </button>
-      </div>
-
-      <div style={{ marginTop: 8, borderTop: "1px solid var(--crm-border)" }}>
-        {isLoading ? (
-          <div style={{ padding: "16px 0", color: "var(--crm-fg-muted)", fontSize: 13 }}>Loading tags...</div>
-        ) : tags.length === 0 ? (
-          <div style={{ padding: "16px 0", color: "var(--crm-fg-muted)", fontSize: 13 }}>No tags yet. Create one above.</div>
-        ) : (
-          tags.map((tag) => (
-            <div
-              key={tag.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 0",
-                borderBottom: "1px solid var(--crm-border)",
-                fontSize: 13,
-              }}
-            >
-              <span style={{ flex: 1, color: "var(--crm-fg)" }}>{tag.name}</span>
-              <button
-                className="crm-btn ghost icon"
-                disabled={deleteTag.isPending}
-                onClick={() => deleteTag.mutate({ id: tag.id })}
-                title={`Delete ${tag.name}`}
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-      <div style={{ marginTop: 12, color: "var(--crm-fg-faint)", fontSize: 12 }}>{tags.length} / 100 tags used</div>
-    </div>
-  );
-}
 
 type MembersPanelProps = {
   isAdmin: boolean;
@@ -480,6 +392,104 @@ function MembersPanel({
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagsPanel() {
+  const utils = trpc.useUtils();
+  const { data: tags = [], isLoading } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 30_000 });
+  const [newName, setNewName] = useState("");
+
+  const createTag = trpc.leads.createTag.useMutation({
+    onSuccess: () => {
+      setNewName("");
+      void utils.leads.listOrgTags.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteTag = trpc.leads.deleteTag.useMutation({
+    onSuccess: () => void utils.leads.listOrgTags.invalidate(),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleCreate = () => {
+    const name = newName.trim();
+    if (!name) return;
+    createTag.mutate({ name });
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input
+          placeholder="New tag name…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+          maxLength={50}
+          style={{
+            flex: 1, padding: "6px 10px", fontSize: 13,
+            border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+            background: "var(--crm-surface)", color: "var(--crm-fg)", outline: "none",
+          }}
+        />
+        <button
+          className="crm-btn primary"
+          style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
+          disabled={!newName.trim() || createTag.isPending}
+          onClick={handleCreate}
+        >
+          <Plus size={13} /> {createTag.isPending ? "Adding…" : "Add tag"}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
+      ) : tags.length === 0 ? (
+        <div style={{ color: "var(--crm-fg-faint)", fontSize: 13, padding: "16px 0", borderTop: "1px solid var(--crm-border)" }}>
+          No tags yet. Create one above.
+        </div>
+      ) : (
+        <div style={{ borderTop: "1px solid var(--crm-border)" }}>
+          {(tags as { id: string; name: string }[]).map((tag) => (
+            <div
+              key={tag.id}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 0", borderBottom: "1px solid var(--crm-border)", fontSize: 13,
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "2px 10px", borderRadius: 999,
+                  background: "var(--crm-surface-2)", border: "1px solid var(--crm-border)",
+                  fontWeight: 500, color: "var(--crm-fg-muted)",
+                }}
+              >
+                {tag.name}
+              </span>
+              <button
+                className="crm-btn ghost sm icon"
+                title="Delete tag"
+                disabled={deleteTag.isPending}
+                onClick={() => {
+                  if (confirm(`Delete tag "${tag.name}"? It will be removed from all leads.`)) {
+                    deleteTag.mutate({ id: tag.id });
+                  }
+                }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 8 }}>
+            {tags.length} / 100 tags used
+          </div>
         </div>
       )}
     </div>
