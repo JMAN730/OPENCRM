@@ -18,6 +18,7 @@ let leadPages: Record<string, { items: Array<Record<string, unknown>>; nextCurso
   {};
 let searchParamView: string | null = null;
 let leadQueryState = { isLoading: false, isFetching: false };
+let customOutcomesState: Array<{ id: string; label: string }> = [];
 let dueTodayState: { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean } = {
   data: [],
   isLoading: false,
@@ -198,7 +199,7 @@ vi.mock("@/app/_trpc/client", () => ({
         useMutation: vi.fn(() => ({ mutateAsync: bulkDeleteMutateAsync, isPending: false })),
       },
       customOutcomes: {
-        list: { useQuery: vi.fn(() => ({ data: [] })) },
+        list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
       },
     },
     tasks: {
@@ -314,6 +315,7 @@ describe("LeadsList", () => {
     searchParamView = null;
     leadQueryCalls = [];
     leadQueryState = { isLoading: false, isFetching: false };
+    customOutcomesState = [];
     orgMembersState = [
       { id: "user-1", name: "Maya Rivera", email: "user@example.com", image: null },
       { id: "user-2", name: "Theo King", email: "theo@example.com", image: null },
@@ -495,6 +497,45 @@ describe("LeadsList", () => {
     await waitFor(() => {
       expect(within(allLeadsSection).getByText("Beta Health")).toBeInTheDocument();
       expect(within(allLeadsSection).queryByText("Gamma Labs")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps custom outcomes out of generic connected stage counts and filters", async () => {
+    customOutcomesState = [{ id: "custom-1", label: "Booked demo" }];
+    leadPages.root.items = [
+      makeLead({
+        id: "lead-connected",
+        company: "Connected Co",
+        status: "CONNECTED",
+        callOutcome: "ANSWERED",
+      }),
+      makeLead({
+        id: "lead-custom",
+        company: "Custom Co",
+        status: "CONNECTED",
+        callOutcome: "CUSTOM",
+        customOutcomeId: "custom-1",
+        customOutcome: { id: "custom-1", label: "Booked demo" },
+      }),
+    ];
+
+    render(<LeadsList />);
+    const allLeadsSection = getAllLeadsSection();
+
+    expect(getStageChip("Connected")).toHaveTextContent("1");
+    expect(getStageChip("Booked demo")).toHaveTextContent("1");
+
+    fireEvent.click(getStageChip("Connected"));
+    await waitFor(() => {
+      expect(within(allLeadsSection).getByText("Connected Co")).toBeInTheDocument();
+      expect(within(allLeadsSection).queryByText("Custom Co")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(getStageChip("Connected"));
+    fireEvent.click(getStageChip("Booked demo"));
+    await waitFor(() => {
+      expect(within(allLeadsSection).getByText("Custom Co")).toBeInTheDocument();
+      expect(within(allLeadsSection).queryByText("Connected Co")).not.toBeInTheDocument();
     });
   });
 

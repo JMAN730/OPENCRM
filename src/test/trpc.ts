@@ -40,6 +40,12 @@ export function createMockPrisma() {
       aggregate: vi.fn(),
       groupBy: vi.fn(),
     },
+    customOutcome: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
     callLog: {
       findMany: vi.fn(),
       create: vi.fn(),
