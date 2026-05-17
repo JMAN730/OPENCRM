@@ -457,6 +457,7 @@ export const teamsRouter = createTRPCRouter({
         teamId: true,
         expires: true,
         createdAt: true,
+        invitedBy: { select: { name: true } },
       },
     });
   }),
