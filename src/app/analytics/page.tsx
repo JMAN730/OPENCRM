@@ -3,47 +3,158 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 const LEAD_STATUS_LABEL: Record<string, string> = {
-  NOT_CONTACTED: "Not Contacted", NO_ANSWER: "No Answer", AI_VOICEMAIL: "AI Voicemail",
-  HUNG_UP: "Hung Up", CONNECTED: "Connected",
+  NOT_CONTACTED: "Not contacted",
+  NO_ANSWER: "No answer",
+  AI_VOICEMAIL: "Voicemail",
+  HUNG_UP: "Hung up",
+  CONNECTED: "Connected",
+};
+const LEAD_STATUS_COLOR: Record<string, string> = {
+  NOT_CONTACTED: "var(--crm-fg-faint)",
+  NO_ANSWER: "var(--crm-warn)",
+  AI_VOICEMAIL: "oklch(70% 0.14 290)",
+  HUNG_UP: "var(--crm-neg)",
+  CONNECTED: "var(--crm-pos)",
 };
 
-const CALL_STATUS_LABEL: Record<string, string> = {
-  CONNECTED: "Connected", NO_ANSWER: "No answer",
-  BUSY: "Busy", FAILED: "Failed", CANCELED: "Canceled",
-};
-const CALL_STATUS_COLOR: Record<string, string> = {
-  CONNECTED: "var(--crm-pos)", NO_ANSWER: "var(--crm-neg)",
-  BUSY: "var(--crm-warn)", FAILED: "var(--crm-neg)", CANCELED: "var(--crm-fg-faint)",
+const TEMP_LABEL: Record<string, string> = { HOT: "Hot", WARM: "Warm", COLD: "Cold", Auto: "Auto" };
+const TEMP_COLOR: Record<string, string> = {
+  HOT: "var(--crm-neg)",
+  WARM: "var(--crm-warn)",
+  COLD: "oklch(72% 0.11 230)",
+  Auto: "var(--crm-fg-faint)",
 };
 
-function KPICard({ label, value, note }: { label: string; value: string | number; note?: string }) {
+function fmt(n: number) { return n.toLocaleString(); }
+
+function pct(part: number, total: number) {
+  return total > 0 ? `${((part / total) * 100).toFixed(1)}%` : "0%";
+}
+
+// ── Primitive chart components ────────────────────────────────────────────────
+
+function BarChart({
+  data,
+  height = 100,
+  accent = "var(--crm-accent)",
+  accentSoft = "var(--crm-accent-soft)",
+  showLabels = true,
+}: {
+  data: Array<{ date: string; count: number }>;
+  height?: number;
+  accent?: string;
+  accentSoft?: string;
+  showLabels?: boolean;
+}) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const isEmpty = data.every((d) => d.count === 0);
+
+  if (isEmpty) {
+    return (
+      <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+        No data yet
+      </div>
+    );
+  }
+
+  const labelEvery = data.length > 14 ? Math.ceil(data.length / 6) : 1;
+
   return (
-    <div className="crm-card crm-kpi">
-      <div className="crm-kpi-label">{label}</div>
-      <div className="crm-kpi-value">{value}</div>
-      {note && <div className="crm-kpi-foot"><span className="crm-compare">{note}</span></div>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: data.length > 14 ? 3 : 8, height }}>
+        {data.map((d, i) => {
+          const isLast = i === data.length - 1;
+          return (
+            <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0, height: "100%" }}>
+              <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                <div
+                  title={`${d.date}: ${d.count}`}
+                  style={{
+                    height: `${(d.count / max) * 100}%`,
+                    minHeight: d.count > 0 ? 3 : 0,
+                    background: isLast ? accent : accentSoft,
+                    borderRadius: "3px 3px 0 0",
+                    transition: "height 0.2s",
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {showLabels && (
+        <div style={{ display: "flex", gap: data.length > 14 ? 3 : 8 }}>
+          {data.map((d, i) => {
+            const showLabel = i % labelEvery === 0 || i === data.length - 1;
+            return (
+              <div key={d.date} style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--crm-fg-faint)", fontFamily: "var(--crm-font-mono)", overflow: "hidden", whiteSpace: "nowrap" }}>
+                {showLabel ? new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
+function HBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, marginBottom: 10 }}>
+      <div style={{ width: 96, color: "var(--crm-fg-muted)", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ flex: 1, height: 6, background: "var(--crm-surface-2)", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{ width: `${(count / Math.max(max, 1)) * 100}%`, height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
+      </div>
+      <div style={{ width: 36, textAlign: "right", fontFamily: "var(--crm-font-mono)", color: "var(--crm-fg-muted)", flexShrink: 0 }}>{fmt(count)}</div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="crm-card crm-kpi">
+      <div className="crm-kpi-label">{label}</div>
+      <div className="crm-kpi-value">{value}</div>
+      {sub && <div className="crm-kpi-foot"><span className="crm-compare">{sub}</span></div>}
+    </div>
+  );
+}
+
+function SectionHead({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
+      <h3 style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--crm-fg)" }}>{title}</h3>
+      {sub && <span style={{ fontSize: 12, color: "var(--crm-fg-faint)", fontFamily: "var(--crm-font-mono)" }}>{sub}</span>}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function AnalyticsPage() {
-  const { data: stats } = trpc.dashboard.getKpiStats.useQuery();
+  const { data: overview, isLoading } = trpc.analytics.overview.useQuery();
+  const { data: teamData } = trpc.dashboard.getTeamStats.useQuery();
+  const { data: kpiData } = trpc.dashboard.getKpiStats.useQuery();
 
-  const callsPerDay = stats?.charts?.callsPerDay ?? [];
-  const maxCalls = Math.max(...callsPerDay.map((d) => d.count), 1);
+  const kpis = overview?.kpis;
+  const leadsPerDay = overview?.leadsPerDay ?? [];
+  const callsPerDay = overview?.callsPerDay ?? [];
+  const touchDepth = overview?.touchDepth ?? { untouched: 0, one: 0, twoToFive: 0, sixPlus: 0 };
+  const bySource = overview?.bySource ?? [];
+  const byTemperature = overview?.byTemperature ?? [];
+  const memberStats = teamData?.memberStats ?? [];
 
-  const statusDist = stats?.charts?.statusDistribution ?? [];
-  const totalCalls = statusDist.reduce((s: number, d: { status: string; count: number }) => s + d.count, 0);
-
-  // Use server-side groupBy from getKpiStats so all leads in the org are counted,
-  // not just the first page of a paginated client-side fetch.
-  const leadsByStatus = stats?.leadsByStatus ?? [];
-  const pipelineRows = LEAD_STATUS_ORDER
-    .map((s) => ({ status: s, count: leadsByStatus.find((r) => r.status === s)?.count ?? 0 }))
-    .filter((r) => r.count > 0);
-  const maxLeads = Math.max(...pipelineRows.map((r) => r.count), 1);
+  const leadsByStatus = kpiData?.leadsByStatus ?? [];
+  const maxLeadsByStatus = Math.max(...leadsByStatus.map((r) => r.count), 1);
+  const totalTouched = (kpis?.totalLeads ?? 0) - touchDepth.untouched;
+  const touchTotal = Object.values(touchDepth).reduce((a, b) => a + b, 0);
+  const maxSource = Math.max(...bySource.map((s) => s.count), 1);
+  const maxTemp = Math.max(...byTemperature.map((t) => t.count), 1);
+  const maxMemberCalls = Math.max(...memberStats.map((m) => m.callCount), 1);
 
   return (
     <DashboardLayout>
@@ -51,87 +162,166 @@ export default function AnalyticsPage() {
         <div className="crm-page-head">
           <div>
             <h1 className="crm-page-title">Analytics</h1>
-            <div className="crm-page-sub">Pipeline and call activity metrics</div>
+            <div className="crm-page-sub">30-day pipeline and activity overview</div>
           </div>
         </div>
 
+        {/* ── KPI strip ── */}
         <div className="crm-kpi-grid">
-          <KPICard label="Connected · 30d" value={(stats?.connectedLast30d ?? 0).toLocaleString()} note="Leads in CONNECTED status" />
-          <KPICard label="Total leads" value={(stats?.totalLeads ?? 0).toLocaleString()} note={`${stats?.conversionRate ?? "0.0%"} conversion rate`} />
-          <KPICard label="Calls today" value={stats?.callsToday ?? 0} note={`${totalCalls} calls · 30d`} />
+          <KpiCard label="Total leads" value={fmt(kpis?.totalLeads ?? 0)} sub="all time" />
+          <KpiCard label="Added this week" value={fmt(kpis?.leadsThisWeek ?? 0)} sub="new leads · 7d" />
+          <KpiCard label="Calls this week" value={fmt(kpis?.callsThisWeek ?? 0)} sub="logged · 7d" />
+          <KpiCard label="Connected" value={fmt(kpis?.connectedCount ?? 0)} sub="total in pipeline" />
+          <KpiCard label="Contact rate" value={`${kpis?.contactRate ?? "0.0"}%`} sub={`${fmt(totalTouched)} of ${fmt(kpis?.totalLeads ?? 0)} touched`} />
         </div>
 
-        {/* Calls per day */}
-        <div className="crm-card" style={{ padding: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 500 }}>Calls per day</h3>
-            <span style={{ marginLeft: "auto", color: "var(--crm-fg-faint)", fontSize: 12, fontFamily: "var(--crm-font-mono)" }}>last 7 days</span>
-          </div>
-          {callsPerDay.length === 0 || callsPerDay.every((d) => d.count === 0) ? (
-            <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
-              No calls logged yet
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 120 }}>
-              {callsPerDay.map((d, i) => {
-                const isToday = i === callsPerDay.length - 1;
-                const label = new Date(d.date).toLocaleDateString("en-US", { weekday: "short" });
-                return (
-                  <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                    <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                      <div style={{
-                        height: `${(d.count / maxCalls) * 100}%`, minHeight: d.count > 0 ? 4 : 0,
-                        background: isToday ? "var(--crm-accent)" : "var(--crm-accent-soft)",
-                        borderRadius: "4px 4px 0 0",
-                        border: isToday ? "none" : "1px solid color-mix(in oklch, var(--crm-accent) 20%, transparent)",
-                      }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", fontFamily: "var(--crm-font-mono)" }}>{label}</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
+        {/* ── 30-day trends ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {/* Pipeline by stage */}
           <div className="crm-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 13, fontWeight: 500 }}>Pipeline by stage</h3>
-            {pipelineRows.length === 0 ? (
-              <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>No leads yet</div>
+            <SectionHead title="Calls per day" sub="last 30 days" />
+            <BarChart data={callsPerDay} height={110} />
+          </div>
+          <div className="crm-card" style={{ padding: 24 }}>
+            <SectionHead title="New leads per day" sub="last 30 days" />
+            <BarChart
+              data={leadsPerDay}
+              height={110}
+              accent="var(--crm-pos)"
+              accentSoft="color-mix(in oklch, var(--crm-pos) 25%, transparent)"
+            />
+          </div>
+        </div>
+
+        {/* ── Pipeline health ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          {/* Touch depth */}
+          <div className="crm-card" style={{ padding: 24 }}>
+            <SectionHead title="Touch depth" sub="all leads" />
+            {isLoading ? (
+              <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
             ) : (
-              pipelineRows.map((row) => (
-                <div key={row.status} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, fontSize: 13 }}>
-                  <div style={{ width: 88, color: "var(--crm-fg-muted)", flexShrink: 0 }}>{LEAD_STATUS_LABEL[row.status]}</div>
-                  <div style={{ flex: 1, height: 6, background: "var(--crm-surface-2)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${(row.count / maxLeads) * 100}%`, height: "100%", background: "var(--crm-accent)", borderRadius: 3 }} />
-                  </div>
-                  <div style={{ width: 28, textAlign: "right", fontFamily: "var(--crm-font-mono)", color: "var(--crm-fg-muted)" }}>{row.count}</div>
+              <>
+                {[
+                  { label: "Never touched", count: touchDepth.untouched, color: "var(--crm-fg-faint)" },
+                  { label: "1 touch", count: touchDepth.one, color: "var(--crm-warn)" },
+                  { label: "2–5 touches", count: touchDepth.twoToFive, color: "var(--crm-accent)" },
+                  { label: "6+ touches", count: touchDepth.sixPlus, color: "var(--crm-pos)" },
+                ].map(({ label, count, color }) => (
+                  <HBar key={label} label={label} count={count} max={touchTotal} color={color} />
+                ))}
+                <div style={{ marginTop: 4, fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                  {pct(touchDepth.untouched, touchTotal)} untouched · {pct(touchTotal - touchDepth.untouched, touchTotal)} contacted
                 </div>
-              ))
+              </>
             )}
           </div>
 
-          {/* Call outcomes */}
+          {/* Lead status */}
           <div className="crm-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 13, fontWeight: 500 }}>Call outcomes · 30d</h3>
-            {statusDist.length === 0 ? (
-              <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>No calls logged yet</div>
+            <SectionHead title="Pipeline by status" />
+            {LEAD_STATUS_ORDER.map((s) => {
+              const row = leadsByStatus.find((r) => r.status === s);
+              const count = row?.count ?? 0;
+              return (
+                <HBar key={s} label={LEAD_STATUS_LABEL[s]} count={count} max={maxLeadsByStatus} color={LEAD_STATUS_COLOR[s]} />
+              );
+            })}
+          </div>
+
+          {/* Temperature */}
+          <div className="crm-card" style={{ padding: 24 }}>
+            <SectionHead title="Lead temperature" />
+            {byTemperature.length === 0 ? (
+              <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>No temperature data yet</div>
             ) : (
-              statusDist.map((row: { status: string; count: number }) => (
-                <div key={row.status} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, fontSize: 13 }}>
-                  <div style={{ width: 88, color: "var(--crm-fg-muted)", flexShrink: 0 }}>{CALL_STATUS_LABEL[row.status] ?? row.status}</div>
-                  <div style={{ flex: 1, height: 6, background: "var(--crm-surface-2)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${(row.count / totalCalls) * 100}%`, height: "100%", background: CALL_STATUS_COLOR[row.status] ?? "var(--crm-fg-faint)", borderRadius: 3 }} />
-                  </div>
-                  <div style={{ width: 36, textAlign: "right", fontFamily: "var(--crm-font-mono)", color: "var(--crm-fg-muted)" }}>{row.count}</div>
-                </div>
+              byTemperature.map(({ temperature, count }) => (
+                <HBar
+                  key={temperature}
+                  label={TEMP_LABEL[temperature] ?? temperature}
+                  count={count}
+                  max={maxTemp}
+                  color={TEMP_COLOR[temperature] ?? "var(--crm-fg-faint)"}
+                />
               ))
             )}
           </div>
         </div>
+
+        {/* ── Lead sources ── */}
+        {bySource.length > 0 && (
+          <div className="crm-card" style={{ padding: 24 }}>
+            <SectionHead title="Lead sources" sub="all time" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 40px" }}>
+              {bySource.map(({ source, count }) => (
+                <HBar key={source} label={source} count={count} max={maxSource} color="var(--crm-accent)" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Team leaderboard ── */}
+        {memberStats.length > 0 && (
+          <div className="crm-card flush">
+            <div className="crm-card-head">
+              <h3>Team activity</h3>
+              <span className="crm-sub">· all time</span>
+            </div>
+            <table className="crm-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Calls logged</th>
+                  <th style={{ width: 180 }}>Call activity</th>
+                  <th>Leads assigned</th>
+                  <th>Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...memberStats]
+                  .sort((a, b) => b.callCount - a.callCount)
+                  .map((m) => (
+                    <tr key={m.userId}>
+                      <td>
+                        <div className="crm-contact-cell">
+                          <div className="crm-avatar sm c1">{initials(m.name ?? m.email ?? "?")}</div>
+                          <div className="crm-meta">
+                            <span className="crm-n">{m.name ?? "—"}</span>
+                            <span className="crm-c">{m.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="mono">{fmt(m.callCount)}</td>
+                      <td>
+                        <div style={{ height: 6, background: "var(--crm-surface-2)", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ width: `${(m.callCount / Math.max(maxMemberCalls, 1)) * 100}%`, height: "100%", background: "var(--crm-accent)", borderRadius: 3 }} />
+                        </div>
+                      </td>
+                      <td className="mono">{fmt(m.leadsAssigned)}</td>
+                      <td style={{ color: "var(--crm-fg-muted)", fontSize: 12 }}>
+                        {m.lastActive ? relativeTime(m.lastActive) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
+}
+
+function initials(name: string) {
+  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function relativeTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return `${Math.floor(d / 30)}mo ago`;
 }
