@@ -38,6 +38,7 @@ vi.mock("@/app/_trpc/client", () => ({
         getAll: { invalidate: invalidateLeads },
         getNotes: { invalidate: invalidateNotes },
         getActivities: { invalidate: invalidateActivities },
+        listOrgTags: { invalidate: vi.fn() },
         customOutcomes: { list: { invalidate: vi.fn() } },
       },
       tasks: {
@@ -57,6 +58,21 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       updateTemperatureOverride: {
         useMutation: vi.fn(() => ({ mutate: tempMutate, isPending: false })),
+      },
+      listOrgTags: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
+      qualify: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, data: undefined })),
+      },
+      addTagToLead: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      removeTagFromLead: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      createTag: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       assign: {
         useMutation: vi.fn(() => ({ mutate: assignMutate, isPending: false })),

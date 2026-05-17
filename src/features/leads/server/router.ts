@@ -91,11 +91,53 @@ function searchWhere(search?: string): Record<string, unknown> {
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
   customOutcome: { select: { id: true, label: true, hint: true } },
+  tags: { select: { id: true, name: true }, orderBy: { name: "asc" } },
   // _count is what drives the "Touches" count in the UI — it must reflect
   // real interactions (CallLog rows, Notes), not derived data like
   // Activity entries or call outcome heuristics.
   _count: { select: { calls: true, notes: true } },
 } as const;
+
+function buildQualificationSummary(lead: {
+  company: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  source: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  status: LeadStatus;
+  callOutcome: CallOutcomeInput;
+  temperatureOverride: LeadTemperatureOverride | null;
+}) {
+  const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.company || "This lead";
+  const location = [lead.city, lead.state].filter(Boolean).join(", ");
+  const status =
+    lead.callOutcome && lead.callOutcome !== "NOT_CONTACTED"
+      ? lead.callOutcome.replace(/_/g, " ").toLowerCase()
+      : lead.status.replace(/_/g, " ").toLowerCase();
+  const signals: string[] = [];
+
+  if (typeof lead.rating === "number") {
+    const reviews = typeof lead.reviewCount === "number" ? ` across ${lead.reviewCount} reviews` : "";
+    signals.push(`${lead.rating.toFixed(1)} star rating${reviews}`);
+  }
+  if (lead.phone) signals.push("callable phone number");
+  if (lead.email) signals.push("email contact data");
+  if (lead.website) signals.push("website found");
+  if (lead.source) signals.push(`source category: ${lead.source}`);
+
+  const temperature = lead.temperatureOverride?.toLowerCase() ?? "scored";
+  const intro = `${name}${location ? ` in ${location}` : ""} is a ${temperature} lead currently marked ${status}.`;
+  if (signals.length === 0) {
+    return `${intro} There is limited enrichment data, so qualify this lead through direct outreach before prioritizing follow-up.`;
+  }
+  return `${intro} Signals: ${signals.join(", ")}.`;
+}
 
 export const leadsRouter = createTRPCRouter({
   getAll: organizationProcedure
@@ -689,6 +731,113 @@ export const leadsRouter = createTRPCRouter({
         take: 100,
         include: { user: { select: { id: true, name: true, email: true, image: true } } },
       });
+    }),
+
+  listOrgTags: organizationProcedure.query(({ ctx }) =>
+    ctx.prisma.leadTag.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ),
+
+  createTag: organizationProcedure
+    .input(z.object({ name: z.string().trim().min(1).max(50) }))
+    .mutation(async ({ ctx, input }) => {
+      const name = input.name.trim();
+      const existing = await ctx.prisma.leadTag.findFirst({
+        where: { organizationId: ctx.organizationId, name: { equals: name, mode: "insensitive" } },
+        select: { id: true, name: true },
+      });
+      if (existing) return existing;
+
+      return ctx.prisma.leadTag.create({
+        data: { name, organizationId: ctx.organizationId },
+        select: { id: true, name: true },
+      });
+    }),
+
+  deleteTag: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const tag = await ctx.prisma.leadTag.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
+      await ctx.prisma.leadTag.delete({ where: { id: tag.id } });
+      return { success: true };
+    }),
+
+  addTagToLead: organizationProcedure
+    .input(z.object({ leadId: z.string(), tagId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const [lead, tag] = await Promise.all([
+        ctx.prisma.lead.findFirst({
+          where: { id: input.leadId, ...leadWhereFromScope(scope) },
+          select: { id: true },
+        }),
+        ctx.prisma.leadTag.findFirst({
+          where: { id: input.tagId, organizationId: ctx.organizationId },
+          select: { id: true },
+        }),
+      ]);
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
+
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { tags: { connect: { id: tag.id } } },
+        include: includeAssignee,
+      });
+    }),
+
+  removeTagFromLead: organizationProcedure
+    .input(z.object({ leadId: z.string(), tagId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { tags: { disconnect: { id: input.tagId } } },
+        include: includeAssignee,
+      });
+    }),
+
+  qualify: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      const qualificationSummary = buildQualificationSummary(lead);
+      const updated = await ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { qualificationSummary },
+        include: includeAssignee,
+      });
+
+      await logActivity(ctx.prisma, {
+        leadId: lead.id,
+        userId: ctx.session.user.id,
+        type: "LEAD_QUALIFIED",
+        description: "Generated lead qualification summary",
+        organizationId: ctx.organizationId,
+      });
+
+      return updated;
     }),
 
   customOutcomes: customOutcomesRouter,
