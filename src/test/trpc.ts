@@ -46,6 +46,12 @@ export function createMockPrisma() {
       create: vi.fn(),
       delete: vi.fn(),
     },
+    leadTag: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
     callLog: {
       findMany: vi.fn(),
       create: vi.fn(),

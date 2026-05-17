@@ -5,13 +5,13 @@ import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { Plus, Trash2, UserPlus } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
 
 // Only surface tabs that have a working backend. Billing, API, Audit log,
 // Integrations, and Workspace settings are roadmap items — exposing empty
 // tabs misleads users into thinking the features exist.
-const NAV = ["Profile", "Members"];
+const NAV = ["Profile", "Members", "Tags"];
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -100,6 +100,7 @@ export default function SettingsPage() {
   const desc: Record<string, string> = {
     Profile: "Your personal information and account preferences.",
     Members: "Manage who has access to this workspace.",
+    Tags: "Create and manage lead tags for this workspace.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -236,7 +237,7 @@ export default function SettingsPage() {
                 )}
 
               </>
-            ) : (
+            ) : active === "Members" ? (
               <MembersPanel
                 isAdmin={isAdmin}
                 inviteEmail={inviteEmail}
@@ -259,6 +260,8 @@ export default function SettingsPage() {
                 setShowInviteForm={setShowInviteForm}
                 showInviteForm={showInviteForm}
               />
+            ) : (
+              <TagsPanel />
             )}
           </div>
         </div>
@@ -275,6 +278,88 @@ type OrganizationMember = {
   teamId: string | null;
   team: { id: string; name: string } | null;
 };
+
+function TagsPanel() {
+  const [name, setName] = useState("");
+  const utils = trpc.useUtils();
+  const { data: tags = [], isLoading } = trpc.leads.listOrgTags.useQuery();
+  const createTag = trpc.leads.createTag.useMutation({
+    onSuccess: () => {
+      toast.success("Tag created");
+      setName("");
+      void utils.leads.listOrgTags.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to create tag"),
+  });
+  const deleteTag = trpc.leads.deleteTag.useMutation({
+    onSuccess: () => {
+      toast.success("Tag deleted");
+      void utils.leads.listOrgTags.invalidate();
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete tag"),
+  });
+  const canCreate = name.trim().length > 0 && !createTag.isPending;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "12px 0", borderTop: "1px solid var(--crm-border)" }}>
+        <input
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canCreate) createTag.mutate({ name: name.trim() });
+          }}
+          placeholder="New tag name..."
+          style={{ flex: 1, padding: "6px 10px", background: "var(--crm-surface)", border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)", color: "var(--crm-fg)", fontSize: 13 }}
+          value={name}
+        />
+        <button
+          className="crm-btn primary"
+          disabled={!canCreate}
+          onClick={() => createTag.mutate({ name: name.trim() })}
+          style={{ height: 32, padding: "0 14px" }}
+        >
+          <Plus size={13} />
+          {createTag.isPending ? "Adding..." : "Add tag"}
+        </button>
+      </div>
+
+      <div style={{ marginTop: 8, borderTop: "1px solid var(--crm-border)" }}>
+        {isLoading ? (
+          <div style={{ padding: "16px 0", color: "var(--crm-fg-muted)", fontSize: 13 }}>Loading tags...</div>
+        ) : tags.length === 0 ? (
+          <div style={{ padding: "16px 0", color: "var(--crm-fg-muted)", fontSize: 13 }}>No tags yet. Create one above.</div>
+        ) : (
+          tags.map((tag) => (
+            <div
+              key={tag.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 0",
+                borderBottom: "1px solid var(--crm-border)",
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1, color: "var(--crm-fg)" }}>{tag.name}</span>
+              <button
+                className="crm-btn ghost icon"
+                disabled={deleteTag.isPending}
+                onClick={() => deleteTag.mutate({ id: tag.id })}
+                title={`Delete ${tag.name}`}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+      <div style={{ marginTop: 12, color: "var(--crm-fg-faint)", fontSize: 12 }}>{tags.length} / 100 tags used</div>
+    </div>
+  );
+}
 
 type MembersPanelProps = {
   isAdmin: boolean;
