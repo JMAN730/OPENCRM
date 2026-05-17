@@ -494,8 +494,12 @@ describe("leadsRouter", () => {
   });
 
   describe("updateCallOutcome", () => {
-    it("maps answered calls to connected status", async () => {
-      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    it("counts the first standard call outcome as a lead touch", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        callOutcome: "NOT_CONTACTED",
+      });
       prisma.lead.update.mockResolvedValue({ id: "lead-1", callOutcome: "ANSWERED", status: "CONNECTED" });
 
       await caller.leads.updateCallOutcome({
@@ -504,18 +508,35 @@ describe("leadsRouter", () => {
       });
 
       expect(prisma.lead.update).toHaveBeenCalledWith({
-        where: { id: "lead-1" },
+        where: { id: "lead-1", organizationId: "org-1" },
         data: {
           callOutcome: "ANSWERED",
           callNotes: undefined,
           customOutcomeId: null,
           status: "CONNECTED",
+          touchCount: { increment: 1 },
+          lastTouchedAt: expect.any(Date),
         },
       });
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: {
+          leadId: "lead-1",
+          userId: "user-1",
+          type: "CALL_OUTCOME",
+          description: "Marked call outcome as answered",
+          organizationId: "org-1",
+        },
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
-    it("does not force custom outcomes into connected status", async () => {
-      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1", status: "NO_ANSWER" });
+    it("counts the first custom call outcome as a lead touch without forcing connected status", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        status: "NO_ANSWER",
+        callOutcome: "NOT_CONTACTED",
+      });
       prisma.customOutcome.findFirst.mockResolvedValue({ id: "custom-1" });
       prisma.lead.update.mockResolvedValue({
         id: "lead-1",
@@ -534,11 +555,46 @@ describe("leadsRouter", () => {
         select: { id: true },
       });
       expect(prisma.lead.update).toHaveBeenCalledWith({
-        where: { id: "lead-1" },
+        where: { id: "lead-1", organizationId: "org-1" },
         data: {
           callOutcome: "CUSTOM",
           callNotes: undefined,
           customOutcomeId: "custom-1",
+          touchCount: { increment: 1 },
+          lastTouchedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it("does not add another touch when editing an existing outcome", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        callOutcome: "ANSWERED",
+      });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", callOutcome: "NO_ANSWER" });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "NO_ANSWER",
+      });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1", organizationId: "org-1" },
+        data: {
+          callOutcome: "NO_ANSWER",
+          callNotes: undefined,
+          customOutcomeId: null,
+          status: "NO_ANSWER",
+        },
+      });
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: {
+          leadId: "lead-1",
+          userId: "user-1",
+          type: "CALL_OUTCOME",
+          description: "Marked call outcome as no answer",
+          organizationId: "org-1",
         },
       });
     });

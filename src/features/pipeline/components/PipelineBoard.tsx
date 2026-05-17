@@ -27,7 +27,7 @@ type Lead = Stage["leads"][number];
 // ── Stage config ──────────────────────────────────────────────────────────────
 
 const STAGE_CONFIG: Record<string, { color: string; prob: number }> = {
-  "New":         { color: "oklch(72% 0.11 230)",  prob: 10  },
+  "Potential":   { color: "oklch(72% 0.11 230)",  prob: 10  },
   "Qualified":   { color: "var(--crm-accent)",     prob: 30  },
   "Proposal":    { color: "oklch(70% 0.14 290)",   prob: 55  },
   "Negotiation": { color: "var(--crm-warn)",       prob: 75  },
@@ -35,8 +35,16 @@ const STAGE_CONFIG: Record<string, { color: string; prob: number }> = {
   "Lost":        { color: "var(--crm-neg)",        prob: 0   },
 };
 
-const ACTIVE_STAGES = ["New", "Qualified", "Proposal", "Negotiation", "Won"];
+const ACTIVE_STAGES = ["Potential", "Qualified", "Proposal", "Negotiation", "Won"];
 const LOST_STAGE    = "Lost";
+
+function stageDisplayName(stageName: string) {
+  return stageName === "New" ? "Potential" : stageName;
+}
+
+function stageKey(stage: Stage) {
+  return stageDisplayName(stage.name);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +98,7 @@ function avatarColor(id: string): string {
 // ── KPI computation ───────────────────────────────────────────────────────────
 
 function computeKpis(stages: Stage[]) {
-  const stageByName = Object.fromEntries(stages.map((s) => [s.name, s]));
+  const stageByName = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
   const now = new Date();
   const openStages = ACTIVE_STAGES.filter((n) => n !== "Won");
   let openPipeline = 0, weightedForecast = 0;
@@ -206,9 +214,10 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
   onDrop:      (e: React.DragEvent, stageId: string) => void;
   onAddDeal:   (stage: Stage) => void;
 }) {
-  const cfg     = STAGE_CONFIG[stage.name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
+  const name    = stageDisplayName(stage.name);
+  const cfg     = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
   const total   = leads.reduce((s, l) => s + (l.value ?? 0), 0);
-  const barPct  = stage.name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
+  const barPct  = name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
   const isOver  = dragOverStageId === stage.id;
 
   return (
@@ -216,7 +225,7 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
       <header className="crm-pipeline-col-head">
         <div className="crm-pipeline-col-head-top">
           <span className="crm-pipeline-col-dot" style={{ background: cfg.color }} />
-          <span className="crm-pipeline-col-name">{stage.name}</span>
+          <span className="crm-pipeline-col-name">{name}</span>
           <span className="crm-pipeline-col-count">{leads.length}</span>
           <button className="crm-btn ghost icon crm-pipeline-col-menu" aria-label="Column actions" style={{ marginLeft: "auto" }}>
             <MoreVertical size={13} />
@@ -224,7 +233,7 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
         </div>
         <div className="crm-pipeline-col-meta">
           <span className="crm-pipeline-col-value">{fmtValue(total)}</span>
-          <span className="crm-pipeline-col-prob">{stage.name === "Won" ? "· closed" : `· ${cfg.prob}% weighted`}</span>
+          <span className="crm-pipeline-col-prob">{name === "Won" ? "· closed" : `· ${cfg.prob}% weighted`}</span>
         </div>
         <div className="crm-pipeline-col-bar">
           <span style={{ width: `${barPct}%`, background: cfg.color }} />
@@ -308,7 +317,7 @@ function LostLane({ leads, dragOverStageId, stageId, onDragOver, onDragLeave, on
 
 function KpiStrip({ stages }: { stages: Stage[] }) {
   const { openPipeline, weightedForecast, closedWonMtd, avgCycle } = computeKpis(stages);
-  const totalLeads = stages.filter((s) => ACTIVE_STAGES.includes(s.name)).reduce((sum, s) => sum + s.leads.length, 0);
+  const totalLeads = stages.filter((s) => ACTIVE_STAGES.includes(stageKey(s))).reduce((sum, s) => sum + s.leads.length, 0);
   const kpis = [
     { lbl: "Open pipeline",     val: fmtValue(openPipeline),     foot: `${totalLeads} active deals` },
     { lbl: "Weighted forecast", val: fmtValue(weightedForecast), foot: "probability-weighted"       },
@@ -470,7 +479,7 @@ export function PipelineBoard() {
     return leads;
   }
 
-  const stageByName  = Object.fromEntries(stages.map((s) => [s.name, s]));
+  const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
   const activeStages = ACTIVE_STAGES.map((n) => stageByName[n]).filter(Boolean) as Stage[];
   const lostStage    = stageByName[LOST_STAGE];
 
@@ -567,7 +576,7 @@ export function PipelineBoard() {
             </DialogTitle>
             <DialogDescription>
               {dealStage
-                ? `Add a deal to the ${dealStage.name} stage.`
+                ? `Add a deal to the ${stageDisplayName(dealStage.name)} stage.`
                 : "Add a new deal to your pipeline."}
             </DialogDescription>
           </DialogHeader>

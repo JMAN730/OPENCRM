@@ -141,7 +141,7 @@ export function StartJobForm({ config, onStarted }: Props) {
               })}
             </div>
             <p className="text-xs text-muted-foreground">
-              Note: scraper currently uses all built-in categories. Selection is reserved for future use.
+              Leave empty to use every built-in category for each location.
             </p>
           </div>
 

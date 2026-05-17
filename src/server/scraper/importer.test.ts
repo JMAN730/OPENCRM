@@ -13,6 +13,10 @@ const { mockPrisma } = vi.hoisted(() => ({
     scraperJob: {
       update: vi.fn(),
     },
+    scraperImportedRow: {
+      findMany: vi.fn(),
+      createMany: vi.fn(),
+    },
   },
 }));
 
@@ -105,6 +109,8 @@ describe("importRowsToLeads", () => {
     mockPrisma.lead.update.mockResolvedValue({});
     mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.scraperJob.update.mockResolvedValue({});
+    mockPrisma.scraperImportedRow.findMany.mockResolvedValue([]);
+    mockPrisma.scraperImportedRow.createMany.mockResolvedValue({ count: 0 });
   });
 
   it("returns zero counts and no DB writes when given no rows", async () => {
@@ -240,6 +246,31 @@ describe("importRowsToLeads", () => {
       where: { id: "job-42" },
       data: { importedCount: { increment: 3 } },
     });
+    expect(mockPrisma.scraperImportedRow.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ jobId: "job-42", organizationId: "org-1", importedById: "user-1" }),
+      ]),
+      skipDuplicates: true,
+    });
+  });
+
+  it("skips rows already imported for the same scraper job", async () => {
+    mockPrisma.scraperImportedRow.findMany.mockResolvedValue([
+      {
+        fingerprint: "5c3a9399a81a5b3e72fb97500ade84a15711e914e3b009ccb67dd05d6a7d21fe",
+      },
+    ]);
+
+    const result = await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    expect(result).toEqual({ inserted: 0, skipped: 1 });
+    expect(mockPrisma.lead.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.scraperJob.update).not.toHaveBeenCalled();
   });
 
   it("never queries leads from another organization", async () => {

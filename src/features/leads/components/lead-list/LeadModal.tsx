@@ -240,6 +240,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onSuccess: () => {
       toast.success("Outcome saved");
       void utils.leads.getAll.invalidate();
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
     onError: (error) => toast.error(error.message),
   });

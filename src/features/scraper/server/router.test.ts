@@ -6,6 +6,7 @@ vi.mock("@/server/scraper/runner", () => ({
   stopScraperJob: vi.fn().mockResolvedValue(undefined),
   reconcileOrphanedJobs: vi.fn().mockResolvedValue(undefined),
   isJobRunning: vi.fn().mockReturnValue(false),
+  deleteScraperOutput: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/server/scraper/importer", () => ({
@@ -69,23 +70,22 @@ describe("scraperRouter", () => {
   });
 
   describe("list", () => {
-    it("reconciles orphans and scopes to the caller's org", async () => {
+    it("scopes to the caller's org", async () => {
       prisma.scraperJob.findMany.mockResolvedValue([]);
 
       await caller.scraper.list();
 
-      expect(runner.reconcileOrphanedJobs).toHaveBeenCalled();
       const args = prisma.scraperJob.findMany.mock.calls[0][0];
       expect(args.where).toEqual({ organizationId: "org-1" });
       expect(args.take).toBe(50);
     });
 
-    it("deserializes JSON-encoded locations/categories", async () => {
+    it("deserializes JSON locations/categories", async () => {
       prisma.scraperJob.findMany.mockResolvedValue([
         {
           id: "j1",
-          locations: JSON.stringify(["Toledo, OH"]),
-          categories: JSON.stringify(["Cleaning"]),
+          locations: ["Toledo, OH"],
+          categories: ["Cleaning"],
         },
       ]);
 
@@ -107,8 +107,8 @@ describe("scraperRouter", () => {
       prisma.scraperJob.findFirst.mockResolvedValue({
         id: "j1",
         organizationId: "org-1",
-        locations: "[]",
-        categories: "[]",
+        locations: [],
+        categories: [],
       });
       vi.mocked(runner.isJobRunning).mockReturnValue(true);
 
@@ -131,9 +131,9 @@ describe("scraperRouter", () => {
 
       expect(prisma.scraperJob.create).toHaveBeenCalledTimes(1);
       const data = prisma.scraperJob.create.mock.calls[0][0].data;
-      expect(JSON.parse(data.locations)).toEqual(["Toledo, Ohio"]);
+      expect(data.locations).toEqual(["Toledo, Ohio"]);
       // Bogus category gets dropped
-      expect(JSON.parse(data.categories)).toEqual(["Cleaning"]);
+      expect(data.categories).toEqual(["Cleaning"]);
       expect(data.organizationId).toBe("org-1");
       expect(data.userId).toBe("user-1");
       expect(data.status).toBe("PENDING");
@@ -222,11 +222,12 @@ describe("scraperRouter", () => {
       expect(prisma.scraperJob.delete).not.toHaveBeenCalled();
     });
 
-    it("deletes a finished job", async () => {
-      prisma.scraperJob.findFirst.mockResolvedValue({ id: "j1", status: "COMPLETED" });
+    it("deletes a finished job and its output directory", async () => {
+      prisma.scraperJob.findFirst.mockResolvedValue({ id: "j1", status: "COMPLETED", outputDir: "/tmp/scraper-output/j1" });
       prisma.scraperJob.delete.mockResolvedValue({ id: "j1" });
 
       await caller.scraper.delete({ id: "j1" });
+      expect(runner.deleteScraperOutput).toHaveBeenCalledWith("j1", "/tmp/scraper-output/j1");
       expect(prisma.scraperJob.delete).toHaveBeenCalledWith({ where: { id: "j1" } });
     });
   });

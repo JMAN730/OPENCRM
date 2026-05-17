@@ -109,6 +109,17 @@ export function JobDetailDialog({ jobId, onClose, onChanged }: Props) {
               <span className="text-muted-foreground">
                 Scraped <strong className="text-foreground">{job.data.totalScraped}</strong> ·
                 Imported <strong className="text-foreground">{job.data.importedCount}</strong>
+                {job.data.totalQueries > 0 && (
+                  <>
+                    {" "}· Queries{" "}
+                    <strong className="text-foreground">
+                      {job.data.completedQueries}/{job.data.totalQueries}
+                    </strong>
+                    {job.data.failedQueries > 0 && (
+                      <> · Failed <strong className="text-foreground">{job.data.failedQueries}</strong></>
+                    )}
+                  </>
+                )}
               </span>
               {job.data.completedAt && (
                 <span className="text-xs text-muted-foreground ml-auto">
