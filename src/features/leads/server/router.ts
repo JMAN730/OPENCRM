@@ -440,17 +440,21 @@ export const leadsRouter = createTRPCRouter({
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
       };
-      const data: Prisma.LeadUncheckedUpdateInput = {
-        callOutcome: input.callOutcome,
-        callNotes: input.callNotes,
-        customOutcomeId: input.customOutcomeId ?? null,
-      };
-      if (input.callOutcome !== "CUSTOM") {
-        data.status = outcomeToStatus[input.callOutcome];
-      }
+      // Custom outcomes are mutually exclusive with built-in LeadStatus buckets:
+      // they live solely on `callOutcome`/`customOutcomeId`, so we reset `status`
+      // to NOT_CONTACTED to avoid double-counting them under CONNECTED (etc.).
+      const nextStatus: LeadStatus =
+        input.callOutcome === "CUSTOM"
+          ? "NOT_CONTACTED"
+          : outcomeToStatus[input.callOutcome];
       const updated = await ctx.prisma.lead.update({
         where: { id: input.id },
-        data,
+        data: {
+          callOutcome: input.callOutcome,
+          callNotes: input.callNotes,
+          status: nextStatus,
+          customOutcomeId: input.callOutcome === "CUSTOM" ? input.customOutcomeId ?? null : null,
+        },
       });
       await logActivity(ctx.prisma, {
         leadId: lead.id,
