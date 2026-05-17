@@ -23,6 +23,8 @@ const SORT_OPTIONS: Array<{ key: LeadSortKey; label: string }> = [
 
 type CustomOutcomeTab = { id: string; label: string };
 
+type OrgTag = { id: string; name: string };
+
 type LeadsManagementBarProps = {
   allLeadsCount: number;
   filteredCount: number;
@@ -32,6 +34,7 @@ type LeadsManagementBarProps = {
   importAction: ReactNode;
   isExporting?: boolean;
   members: AssignableUser[];
+  orgTags?: OrgTag[];
   ownerFilter: Set<string>;
   scoreMin: number | null;
   scoreMax: number | null;
@@ -39,6 +42,7 @@ type LeadsManagementBarProps = {
   sortBy: LeadSort;
   stageCounts: Record<string, number>;
   stageFilter: Set<string>;
+  tagFilter: Set<string>;
   visibleColumns: Set<LeadVisibleColumn>;
   onClearStageFilters: () => void;
   onColumnsOpenChange: (open: boolean) => void;
@@ -49,6 +53,7 @@ type LeadsManagementBarProps = {
   onSearchChange: (value: string) => void;
   onSortDirectionToggle: () => void;
   onSortKeyChange: (key: LeadSortKey) => void;
+  onTagToggle: (id: string) => void;
   onToggleColumn: (column: LeadVisibleColumn) => void;
   onToggleStage: (stage: string) => void;
 };
@@ -62,6 +67,7 @@ export function LeadsManagementBar({
   importAction,
   isExporting,
   members,
+  orgTags,
   ownerFilter,
   scoreMin,
   scoreMax,
@@ -69,6 +75,7 @@ export function LeadsManagementBar({
   sortBy,
   stageCounts,
   stageFilter,
+  tagFilter,
   visibleColumns,
   onClearStageFilters,
   onColumnsOpenChange,
@@ -79,6 +86,7 @@ export function LeadsManagementBar({
   onSearchChange,
   onSortDirectionToggle,
   onSortKeyChange,
+  onTagToggle,
   onToggleColumn,
   onToggleStage,
 }: LeadsManagementBarProps) {
@@ -104,7 +112,8 @@ export function LeadsManagementBar({
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
-    (scoreMax !== null ? 1 : 0);
+    (scoreMax !== null ? 1 : 0) +
+    (tagFilter.size > 0 ? 1 : 0);
 
   const popoverStyle: CSSProperties = {
     position: "absolute",
@@ -218,6 +227,26 @@ export function LeadsManagementBar({
                   </div>
                 ) : null}
 
+                {orgTags && orgTags.length > 0 ? (
+                  <div>
+                    <div className="focus-popover-label">Tags</div>
+                    <div className="focus-popover-list">
+                      {orgTags.map((tag) => (
+                        <label
+                          key={tag.id}
+                          className="focus-popover-option"
+                          onClick={() => onTagToggle(tag.id)}
+                        >
+                          <span className="crm-checkbox" data-checked={tagFilter.has(tag.id)}>
+                            {tagFilter.has(tag.id) ? <Check size={9} strokeWidth={2.6} /> : null}
+                          </span>
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div>
                   <div className="focus-popover-label">Score</div>
                   <div className="focus-score-range">
@@ -254,6 +283,9 @@ export function LeadsManagementBar({
                       onScoreChange(null, null);
                       for (const member of members) {
                         if (ownerFilter.has(member.id)) onOwnerToggle(member.id);
+                      }
+                      for (const tag of (orgTags ?? [])) {
+                        if (tagFilter.has(tag.id)) onTagToggle(tag.id);
                       }
                     }}
                   >

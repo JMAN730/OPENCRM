@@ -84,6 +84,7 @@ export function LeadsList() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState(new Set<string>());
   const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
+  const [tagFilter, setTagFilter] = useState(new Set<string>());
   const [scoreMin, setScoreMin] = useState<number | null>(null);
   const [scoreMax, setScoreMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<LeadSort>({ key: "createdAt", dir: "desc" });
@@ -149,6 +150,7 @@ export function LeadsList() {
   });
   const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
   const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
+  const { data: orgTags } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 120_000 });
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
@@ -261,6 +263,11 @@ export function LeadsList() {
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
+      .filter((lead) =>
+        tagFilter.size
+          ? (lead.tags ?? []).some((t) => tagFilter.has(t.id))
+          : true,
+      )
       .filter((lead) => (scoreMin !== null ? scoreOf(lead, scoringRules) >= scoreMin : true))
       .filter((lead) => (scoreMax !== null ? scoreOf(lead, scoringRules) <= scoreMax : true))
       .filter((lead) => (sortBy.key === "starred" ? lead.starred === true : true));
@@ -285,7 +292,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
@@ -324,6 +331,15 @@ export function LeadsList() {
 
   const toggleOwner = (id: string) => {
     setOwnerFilter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTag = (id: string) => {
+    setTagFilter((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -571,6 +587,7 @@ export function LeadsList() {
               importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
               isExporting={isExporting}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
@@ -578,6 +595,7 @@ export function LeadsList() {
               sortBy={sortBy}
               stageCounts={stageCounts}
               stageFilter={stageFilter}
+              tagFilter={tagFilter}
               visibleColumns={visibleColumns}
               onClearStageFilters={() => setStageFilter(new Set())}
               onColumnsOpenChange={setColumnsOpen}
@@ -605,6 +623,7 @@ export function LeadsList() {
                   key,
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleColumn={toggleVisibleColumn}
               onToggleStage={toggleStage}
             />
@@ -654,9 +673,11 @@ export function LeadsList() {
               isLoading={isLoading}
               canGoPrevious={cursorHistory.length > 0}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
+              tagFilter={tagFilter}
               onClearStageFilters={() => setStageFilter(new Set())}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
@@ -682,6 +703,7 @@ export function LeadsList() {
                   dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
               onToggleStage={toggleStage}

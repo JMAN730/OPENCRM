@@ -38,6 +38,8 @@ type ColumnName = typeof ALL_COLUMNS[number];
 
 type CustomOutcomeTab = { id: string; label: string };
 
+type OrgTag = { id: string; name: string };
+
 type LeadsTableProps = {
   allLeadsCount: number;
   customOutcomes?: CustomOutcomeTab[];
@@ -47,10 +49,12 @@ type LeadsTableProps = {
   isLoading: boolean;
   canGoPrevious: boolean;
   members: AssignableUser[];
+  orgTags?: OrgTag[];
   ownerFilter: Set<string>;
   scoreMin: number | null;
   scoreMax: number | null;
   scoringRules?: ScoringRuleConfig[];
+  tagFilter?: Set<string>;
   onClearStageFilters: () => void;
   onDeleteLead: (leadId: string) => void;
   onFetchNextPage: () => void;
@@ -60,6 +64,7 @@ type LeadsTableProps = {
   onScoreChange: (min: number | null, max: number | null) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (key: LeadSortKey) => void;
+  onTagToggle?: (id: string) => void;
   onToggleRowSelection: (leadId: string) => void;
   onToggleSelectAllRows: () => void;
   onToggleStage: (stage: string) => void;
@@ -79,6 +84,7 @@ export function LeadsTable({
   isLoading,
   canGoPrevious,
   members,
+  orgTags,
   ownerFilter,
   scoreMin,
   scoreMax,
@@ -91,6 +97,7 @@ export function LeadsTable({
   onScoreChange,
   onSearchChange,
   onSortChange,
+  onTagToggle,
   onToggleRowSelection,
   onToggleSelectAllRows,
   onToggleStage,
@@ -99,6 +106,7 @@ export function LeadsTable({
   sortBy,
   stageCounts,
   stageFilter,
+  tagFilter,
   scoringRules,
 }: LeadsTableProps) {
   const allSelected =
@@ -130,7 +138,8 @@ export function LeadsTable({
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
-    (scoreMax !== null ? 1 : 0);
+    (scoreMax !== null ? 1 : 0) +
+    ((tagFilter?.size ?? 0) > 0 ? 1 : 0);
 
   const toggleColumn = (col: ColumnName) => {
     const next = new Set(visibleColumns);
@@ -268,6 +277,27 @@ export function LeadsTable({
                   </div>
                 )}
 
+                {orgTags && orgTags.length > 0 && onTagToggle && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Tags</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+                      {orgTags.map((tag) => (
+                        <label key={tag.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                          <span
+                            className="crm-checkbox"
+                            data-checked={tagFilter?.has(tag.id)}
+                            onClick={() => onTagToggle(tag.id)}
+                            style={{ flexShrink: 0 }}
+                          >
+                            {tagFilter?.has(tag.id) ? <Check size={9} strokeWidth={2.6} /> : null}
+                          </span>
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Score</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -307,6 +337,9 @@ export function LeadsTable({
                       setScoreMinInput("");
                       setScoreMaxInput("");
                       members.forEach((m) => { if (ownerFilter.has(m.id)) onOwnerToggle(m.id); });
+                      if (onTagToggle) {
+                        (orgTags ?? []).forEach((tag) => { if (tagFilter?.has(tag.id)) onTagToggle(tag.id); });
+                      }
                     }}
                     style={{ display: "flex", alignItems: "center", gap: 4 }}
                   >
