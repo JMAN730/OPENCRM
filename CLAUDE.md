@@ -49,21 +49,7 @@ POSTGRES_DB="crm"
 GOOGLE_CLIENT_ID="..."
 GOOGLE_CLIENT_SECRET="..."
 
-# Optional – Twilio (calling features)
-TWILIO_ACCOUNT_SID="..."
-TWILIO_AUTH_TOKEN="..."
-TWILIO_PHONE_NUMBER="..."
-
-# Optional – AI features
-OPENAI_API_KEY="..."
-
-# Optional – File storage
-AWS_ACCESS_KEY_ID="..."
-AWS_SECRET_ACCESS_KEY="..."
-AWS_REGION="..."
-AWS_S3_BUCKET="..."
-
-# Optional – Caching
+# Optional – Caching, rate limiting, and auth-snapshot cache invalidation
 REDIS_URL="redis://localhost:6379"
 
 # Optional – Email (SMTP for password reset)
@@ -104,13 +90,15 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 ```typescript
 // src/server/api/root.ts
 appRouter = {
-  leads:     leadsRouter,     // full CRUD + bulk import + cursor pagination
+  leads:     leadsRouter,     // full CRUD + bulk import + cursor pagination + notes + custom outcomes
   calls:     callsRouter,     // call logging + retrieval
   scraper:   scraperRouter,   // Google Maps lead scraper
-  tasks:     tasksRouter,     // task CRUD + filtering
-  dashboard: dashboardRouter, // KPI aggregations (Redis-cached)
-  auth:      authRouter,      // register, login helpers, password reset, profile
-  teams:     teamsRouter,     // team CRUD + member management
+  tasks:     tasksRouter,     // task CRUD + filtering + calendar
+  dashboard: dashboardRouter, // KPI aggregations (Redis-cached) + team stats + my stats
+  auth:      authRouter,      // register, password reset, profile, deleteAccount
+  teams:     teamsRouter,     // team CRUD + memberships + email-token invitations
+  scoring:   scoringRouter,   // lead-scoring rule CRUD
+  websites:  websitesRouter,  // template-based per-lead site generator
 }
 ```
 
@@ -208,21 +196,22 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Tasks | `/tasks` | `tasks` | `TasksList` | Implemented |
 | Scraper | `/scraper` | `scraper` | `ScraperPanel`, `StartJobForm`, `JobsTable`, `JobDetailDialog` | Implemented |
 | Teams | `/team`, `/team/[userId]` | `teams` | `TeamPage`, `TeamMemberDetail` | Implemented |
-| Outreach | `/outreach` | — | — | Stub |
 | Analytics | `/analytics` | — | — | Stub |
-| Settings | `/settings` | — | — | Stub |
+| Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail` | Profile + Members tabs only | Implemented |
 
 ### Key tRPC procedures per namespace
 
 | Namespace | Procedures |
 |-----------|-----------|
-| `leads` | `getAll` (cursor pagination + scope-aware), `getById`, `create`, `update`, `updateCallOutcome`, `delete`, `bulkImport`, `bulkDelete`, `getNotes`, `getActivities` |
-| `calls` | `logCall`, `getForLead`, `recentCalls` |
-| `tasks` | `create`, `getForUser`, `getForLead`, `update`, `delete`, `complete` |
-| `scraper` | `config`, `list`, `start`, `stop`, `getDetail`, `importJob` |
-| `dashboard` | `getKpiStats` |
+| `leads` | `getAll`, `getById`, `create`, `bulkCreate`, `delete`, `bulkDelete`, `updateCallOutcome`, `updateTemperatureOverride`, `toggleStar`, `assign`, `createNote`, `getNotes`, `deleteNote`, `getActivities`, `customOutcomes.*` |
+| `calls` | `logCall`, `getForLead`, `getRecent` |
+| `tasks` | `create`, `update`, `delete`, `getAll`, `getCalendar`, `getAllForLead`, `getDueToday`, `getOverdue` |
+| `scraper` | `config`, `list`, `getById`, `start`, `stop`, `delete`, `importResults`, `previewResults` |
+| `dashboard` | `getKpiStats`, `sidebarCounts`, `getTeamStats`, `getMyStats` |
 | `auth` | `register`, `resetPassword`, `confirmResetPassword`, `updateProfile`, `deleteAccount` |
-| `teams` | `list`, `getTeam`, `create`, `update`, `delete`, `addMember`, `removeMember`, `setLeader` |
+| `teams` | `list`, `organizationMembers`, `myTeam`, `activityFeed`, `memberDetail`, `create`, `update`, `delete`, `setMembership`, `inviteByEmail`, `listInvitations`, `revokeInvitation`, `getInvitation`, `acceptInvitation` |
+| `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
+| `websites` | `getForLead`, `generate`, `update`, `delete` |
 
 ---
 
@@ -289,7 +278,7 @@ The lead scraper (`/scraper`) generates leads from Google Maps.
 ## UI conventions
 
 - **CSS**: Tailwind CSS v4 (`@tailwindcss/postcss`)
-- **Components**: shadcn/ui (in `src/components/ui/`) — use existing components before adding new ones
+- **Components**: in `src/components/ui/` — thin wrappers around `@base-ui/react` (MUI Base UI) primitives. The `shadcn` CLI is present in package.json for scaffolding helpers but the runtime primitives are Base UI, not Radix. Reuse the existing components in `src/components/ui/` before adding new ones.
 - **Icons**: lucide-react
 - **Toast notifications**: sonner (`toast.success()`, `toast.error()`)
 - **Animation**: framer-motion (used sparingly)
@@ -338,6 +327,70 @@ Test mocks include: ioredis (graceful failure), IntersectionObserver, PointerEve
 
 ---
 
+## Karpathy-Inspired Behavioral Guidelines
+
+Behavioral guidelines to reduce common LLM coding mistakes.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
 ## Key conventions for AI assistants
 
 1. **Always filter by `organizationId`** in any new tRPC procedure that reads org-scoped data.
@@ -346,7 +399,7 @@ Test mocks include: ioredis (graceful failure), IntersectionObserver, PointerEve
 4. **Register new routers** in `src/server/api/root.ts` — the root router is the single source of truth.
 5. **Use `prisma db push`**, not `prisma migrate` — there is no migration history.
 6. **Add pages** under `src/app/<section>/page.tsx` and mark them `"use client"` if they use tRPC hooks or browser APIs.
-7. **Use shadcn/ui components** from `src/components/ui/` before writing custom primitives.
+7. **Use the existing `src/components/ui/` primitives** (`@base-ui/react` wrappers) before writing new ones — the convention is shared even if the underlying library isn't shadcn.
 8. **Session user fields** (`id`, `role`, `organizationId`, `teamId`) require a cast: `(ctx.session.user as any).organizationId`. Use `ctx.organizationId` in `organizationProcedure` context directly.
 9. **Desktop app**: `src-tauri/` contains a WIP Tauri wrapper — do not modify it unless explicitly asked.
 10. **Scraper jobs** are tracked in-memory; do not rely on job status surviving a server restart without querying the DB.

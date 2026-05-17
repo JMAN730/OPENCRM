@@ -43,7 +43,7 @@ function greetingForHour(hour: number) {
 
 function leadsHref(
   searchParamsString: string,
-  updates: Partial<Record<"new" | "view", string | null>>,
+  updates: Partial<Record<"new" | "view" | "leadId", string | null>>,
 ) {
   const nextSearchParams = new URLSearchParams(searchParamsString);
 
@@ -72,8 +72,14 @@ export function LeadsList() {
   const searchParamsString = searchParams.toString();
   const showAddFromQuery = searchParams.get("new") === "1";
   const viewMode: LeadsViewMode = searchParams.get("view") === "classic" ? "classic" : "focus";
+  const leadIdFromQuery = searchParams.get("leadId");
 
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(leadIdFromQuery);
+  const [lastSyncedQueryLeadId, setLastSyncedQueryLeadId] = useState<string | null>(leadIdFromQuery);
+  if (leadIdFromQuery !== lastSyncedQueryLeadId) {
+    setLastSyncedQueryLeadId(leadIdFromQuery);
+    setSelectedLeadId(leadIdFromQuery);
+  }
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState(new Set<string>());
   const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
@@ -96,7 +102,7 @@ export function LeadsList() {
   const debouncedSearch = useDebounce(search, 300);
 
   const replaceLeadsRoute = useCallback(
-    (updates: Partial<Record<"new" | "view", string | null>>) => {
+    (updates: Partial<Record<"new" | "view" | "leadId", string | null>>) => {
       router.replace(leadsHref(searchParamsString, updates));
     },
     [router, searchParamsString],
@@ -107,6 +113,13 @@ export function LeadsList() {
       replaceLeadsRoute({ new: null });
     }
   }, [replaceLeadsRoute, showAddFromQuery]);
+
+  const closeSelectedLead = useCallback(() => {
+    setSelectedLeadId(null);
+    if (leadIdFromQuery) {
+      replaceLeadsRoute({ leadId: null });
+    }
+  }, [leadIdFromQuery, replaceLeadsRoute]);
 
   const { data: session } = useSession();
   const sessionUser = session?.user as SessionUser | undefined;
@@ -156,7 +169,7 @@ export function LeadsList() {
         return next;
       });
       if (selectedLeadId === variables.id) {
-        setSelectedLeadId(null);
+        closeSelectedLead();
       }
       void utils.leads.getAll.invalidate();
       void utils.tasks.getDueToday.invalidate();
@@ -214,9 +227,10 @@ export function LeadsList() {
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
     for (const lead of allLeads) {
-      counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       if (lead.callOutcome === "CUSTOM" && lead.customOutcomeId) {
         counts[`CUSTOM:${lead.customOutcomeId}`] = (counts[`CUSTOM:${lead.customOutcomeId}`] ?? 0) + 1;
+      } else {
+        counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       }
     }
     return counts;
@@ -226,11 +240,11 @@ export function LeadsList() {
     const rows = allLeads
       .filter((lead) => {
         if (!stageFilter.size) return true;
-        const matchesStatus = stageFilter.has(lead.status);
         const matchesCustom =
           lead.callOutcome === "CUSTOM" &&
           lead.customOutcomeId != null &&
           stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
+        const matchesStatus = lead.callOutcome !== "CUSTOM" && stageFilter.has(lead.status);
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
@@ -335,9 +349,15 @@ export function LeadsList() {
     });
   };
 
-  const selectedLead = selectedLeadId
+  const inListSelectedLead = selectedLeadId
     ? allLeads.find((lead) => lead.id === selectedLeadId) ?? null
     : null;
+  const { data: fallbackSelectedLead } = trpc.leads.getById.useQuery(
+    { id: selectedLeadId ?? "" },
+    { enabled: Boolean(selectedLeadId && !inListSelectedLead) },
+  );
+  const selectedLead: Lead | null =
+    inListSelectedLead ?? ((fallbackSelectedLead as Lead | undefined) ?? null);
   const selectedIndex = selectedLead
     ? activeLeads.findIndex((lead) => lead.id === selectedLead.id)
     : -1;
@@ -359,7 +379,7 @@ export function LeadsList() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedLeadId(null);
+        closeSelectedLead();
       } else if (event.key === "ArrowDown" || event.key === "j") {
         if (isEditableShortcutTarget(event.target)) return;
         event.preventDefault();
@@ -373,7 +393,7 @@ export function LeadsList() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nextLead, previousLead, selectedLead]);
+  }, [closeSelectedLead, nextLead, previousLead, selectedLead]);
 
   const handleBulkDelete = () => {
     const ids = Array.from(selected);
@@ -391,7 +411,7 @@ export function LeadsList() {
         }
 
         if (selectedLeadId && ids.includes(selectedLeadId)) {
-          setSelectedLeadId(null);
+          closeSelectedLead();
         }
         setSelected(new Set());
         setShowAssign(false);
@@ -454,7 +474,7 @@ export function LeadsList() {
         <LeadModal
           key={selectedLead.id}
           lead={selectedLead}
-          onClose={() => setSelectedLeadId(null)}
+          onClose={closeSelectedLead}
           onPrev={previousLead}
           onNext={nextLead}
         />

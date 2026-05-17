@@ -24,7 +24,7 @@ export const dashboardRouter = createTRPCRouter({
         const [
           callsTodayCount,
           followupsDueCount,
-          revenueResult,
+          connectedLast30dCount,
           callStatusDistribution,
           leadsByStatusResult,
           recentCalls,
@@ -34,11 +34,18 @@ export const dashboardRouter = createTRPCRouter({
             where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.task.count({
-            where: { user: { organizationId }, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow } },
+            where: { organizationId, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow }, deletedAt: null },
           }),
-          ctx.prisma.lead.aggregate({
-            where: { organizationId, status: "CONNECTED", createdAt: { gte: thirtyDaysAgo } },
-            _sum: { value: true },
+          // "Connected · 30d" replaces the old monthlyRevenue metric, which
+          // summed Lead.value — a field nothing in the UI ever wrote, so the
+          // displayed revenue was always 0.
+          ctx.prisma.lead.count({
+            where: {
+              organizationId,
+              status: "CONNECTED",
+              callOutcome: { not: "CUSTOM" },
+              updatedAt: { gte: thirtyDaysAgo },
+            },
           }),
           ctx.prisma.callLog.groupBy({
             by: ["status"],
@@ -46,7 +53,7 @@ export const dashboardRouter = createTRPCRouter({
             _count: { id: true },
           }),
           ctx.prisma.lead.groupBy({
-            by: ["status"],
+            by: ["status", "callOutcome"],
             where: { organizationId },
             _count: { id: true },
           }),
@@ -72,15 +79,16 @@ export const dashboardRouter = createTRPCRouter({
         ]);
 
         // Derive totals from the status groupBy result so we don't issue
-        // separate count() queries for total/qualified/appointments.
-        const leadsByStatus = leadsByStatusResult.map((s) => ({
-          status: s.status,
-          count: s._count.id,
-        }));
-        const totalLeadsCount = leadsByStatus.reduce((acc, s) => acc + s.count, 0);
+        // separate count() queries for total/qualified.
+        const totalLeadsCount = leadsByStatusResult.reduce((acc, s) => acc + s._count.id, 0);
+        const statusCounts = new Map<string, number>();
+        for (const row of leadsByStatusResult) {
+          if (row.callOutcome === "CUSTOM") continue;
+          statusCounts.set(row.status, (statusCounts.get(row.status) ?? 0) + row._count.id);
+        }
+        const leadsByStatus = Array.from(statusCounts, ([status, count]) => ({ status, count }));
         const qualifiedLeadsCount =
           leadsByStatus.find((s) => s.status === "CONNECTED")?.count ?? 0;
-        const appointmentsSetCount = qualifiedLeadsCount;
 
         // Fill in zero-count days so the chart always has 7 entries even on
         // a quiet week.
@@ -103,10 +111,10 @@ export const dashboardRouter = createTRPCRouter({
         return {
           totalLeads: totalLeadsCount,
           callsToday: callsTodayCount,
-          appointmentsSet: appointmentsSetCount,
+          qualifiedLeads: qualifiedLeadsCount,
+          connectedLast30d: connectedLast30dCount,
           followupsDue: followupsDueCount,
           conversionRate: `${conversionRate}%`,
-          monthlyRevenue: revenueResult._sum.value ?? 0,
           leadsByStatus,
           recentCalls: recentCalls.map((c) => ({
             id: c.id,
@@ -135,7 +143,7 @@ export const dashboardRouter = createTRPCRouter({
         const [leads, tasks, scraperActive] = await Promise.all([
           ctx.prisma.lead.count({ where: { organizationId } }),
           ctx.prisma.task.count({
-            where: { user: { organizationId }, status: { not: "COMPLETED" } },
+            where: { organizationId, status: { not: "COMPLETED" }, deletedAt: null },
           }),
           ctx.prisma.scraperJob.count({
             where: { organizationId, status: { in: ["PENDING", "RUNNING"] } },
@@ -169,7 +177,9 @@ export const dashboardRouter = createTRPCRouter({
           ctx.prisma.callLog.count({
             where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } },
           }),
-          ctx.prisma.lead.count({ where: { organizationId, status: "CONNECTED" } }),
+          ctx.prisma.lead.count({
+            where: { organizationId, status: "CONNECTED", callOutcome: { not: "CUSTOM" } },
+          }),
           ctx.prisma.lead.count({ where: { organizationId } }),
           ctx.prisma.lead.count({ where: { organizationId, temperatureOverride: "HOT" } }),
           // Per-member call counts (all time)
@@ -184,12 +194,11 @@ export const dashboardRouter = createTRPCRouter({
             where: { organizationId, assignedToId: { not: null } },
             _count: { id: true },
           }),
-          // Latest activity per member for "last active"
-          ctx.prisma.activity.findMany({
+          // Latest activity timestamp per member — one row per user, no in-memory scan
+          ctx.prisma.activity.groupBy({
+            by: ["userId"],
             where: { user: { organizationId } },
-            orderBy: { createdAt: "desc" },
-            take: 200,
-            select: { userId: true, createdAt: true },
+            _max: { createdAt: true },
           }),
         ]);
 
@@ -207,11 +216,9 @@ export const dashboardRouter = createTRPCRouter({
 
         const callMap = new Map(memberCallRows.map((r) => [r.userId, r._count.id]));
         const leadMap = new Map(memberLeadRows.map((r) => [r.assignedToId!, r._count.id]));
-        // Last active: first (most recent) activity per user
-        const lastActiveMap = new Map<string, Date>();
-        for (const a of memberActivityRows) {
-          if (!lastActiveMap.has(a.userId)) lastActiveMap.set(a.userId, a.createdAt);
-        }
+        const lastActiveMap = new Map(
+          memberActivityRows.map((r) => [r.userId, r._max.createdAt]),
+        );
 
         const memberStats = users.map((u) => ({
           userId: u.id,
@@ -220,7 +227,7 @@ export const dashboardRouter = createTRPCRouter({
           image: u.image,
           callCount: callMap.get(u.id) ?? 0,
           leadsAssigned: leadMap.get(u.id) ?? 0,
-          lastActive: lastActiveMap.get(u.id)?.toISOString() ?? null,
+          lastActive: (lastActiveMap.get(u.id) ?? null)?.toISOString() ?? null,
         }));
 
         const conversionRate =
@@ -258,7 +265,7 @@ export const dashboardRouter = createTRPCRouter({
       organizationId
         ? ctx.prisma.lead.count({ where: { organizationId, assignedToId: userId } })
         : Promise.resolve(0),
-      ctx.prisma.task.count({ where: { userId, status: { not: "COMPLETED" } } }),
+      ctx.prisma.task.count({ where: { userId, status: { not: "COMPLETED" }, deletedAt: null } }),
       ctx.prisma.activity.findMany({
         where: { userId },
         orderBy: { createdAt: "desc" },

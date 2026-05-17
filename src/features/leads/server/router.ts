@@ -7,6 +7,7 @@ import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
+import { invalidate } from "@/lib/cache";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -149,6 +150,7 @@ export const leadsRouter = createTRPCRouter({
 
       if (input.status) {
         where.status = input.status;
+        where.callOutcome = { not: "CUSTOM" };
       }
 
       if (input.hasPhone) {
@@ -432,29 +434,54 @@ export const leadsRouter = createTRPCRouter({
         }
       }
 
-      const outcomeToStatus: Record<CallOutcomeInput, LeadStatus> = {
+      const outcomeToStatus: Record<Exclude<CallOutcomeInput, "CUSTOM">, LeadStatus> = {
         ANSWERED:      "CONNECTED",
         AI_VOICEMAIL:  "AI_VOICEMAIL",
         NO_ANSWER:     "NO_ANSWER",
         HUNG_UP:       "HUNG_UP",
         NOT_CONTACTED: "NOT_CONTACTED",
-        CUSTOM:        "CONNECTED",
       };
-      const updated = await ctx.prisma.lead.update({
-        where: { id: input.id },
-        data: {
-          callOutcome: input.callOutcome,
-          callNotes: input.callNotes,
-          status: outcomeToStatus[input.callOutcome],
-          customOutcomeId: input.customOutcomeId ?? null,
-        },
-      });
-      await logActivity(ctx.prisma, {
-        leadId: lead.id,
-        userId: ctx.session.user.id,
-        type: "CALL_OUTCOME",
-        description: `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`,
-      });
+      const statusUpdate =
+        input.callOutcome === "CUSTOM"
+          ? {}
+          : { status: outcomeToStatus[input.callOutcome] };
+
+      const shouldCountTouch =
+        lead.callOutcome === "NOT_CONTACTED" && input.callOutcome !== "NOT_CONTACTED";
+      const now = new Date();
+      const touchUpdate = shouldCountTouch
+        ? {
+            touchCount: { increment: 1 },
+            lastTouchedAt: now,
+          }
+        : {};
+      const description = `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`;
+
+      const [updated] = await ctx.prisma.$transaction([
+        ctx.prisma.lead.update({
+          where: { id: input.id, organizationId: ctx.organizationId },
+          data: {
+            callOutcome: input.callOutcome,
+            callNotes: input.callNotes,
+            ...statusUpdate,
+            ...touchUpdate,
+            customOutcomeId: input.callOutcome === "CUSTOM" ? input.customOutcomeId ?? null : null,
+          },
+        }),
+        ctx.prisma.activity.create({
+          data: {
+            leadId: lead.id,
+            userId: ctx.session.user.id,
+            type: "CALL_OUTCOME",
+            description,
+            organizationId: ctx.organizationId,
+          },
+        }),
+      ]);
+      await Promise.all([
+        invalidate(`dashboard:kpi:${ctx.organizationId}`),
+        invalidate(`dashboard:team:${ctx.organizationId}`),
+      ]);
       return updated;
     }),
 
@@ -559,6 +586,7 @@ export const leadsRouter = createTRPCRouter({
           description: input.assigneeId
             ? `Reassigned to ${assigneeName}`
             : `Unassigned`,
+          organizationId: ctx.organizationId,
         })),
       });
 
@@ -576,13 +604,19 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       const note = await ctx.prisma.note.create({
-        data: { content: input.content, leadId: input.leadId, userId: ctx.session.user.id },
+        data: {
+          content: input.content,
+          leadId: input.leadId,
+          userId: ctx.session.user.id,
+          organizationId: ctx.organizationId,
+        },
       });
       await logActivity(ctx.prisma, {
         leadId: input.leadId,
         userId: ctx.session.user.id,
         type: "NOTE_ADDED",
         description: "Added a note",
+        organizationId: ctx.organizationId,
       });
       return note;
     }),

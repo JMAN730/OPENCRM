@@ -9,24 +9,16 @@ import {
 import {
   startScraperJob,
   stopScraperJob,
-  reconcileOrphanedJobs,
   isJobRunning,
+  deleteScraperOutput,
 } from "@/server/scraper/runner";
 import {
   applyFilter,
   importRowsToLeads,
   readScrapedCsv,
 } from "@/server/scraper/importer";
-
-// The DB stores these array-like fields as JSON strings — these helpers keep
-// the rest of the code working with plain string[] values.
-function serializeArray(arr: string[]): string {
-  return JSON.stringify(arr);
-}
-function parseArray(val: string): string[] {
-  try { return JSON.parse(val); } catch { return []; }
-}
-function deserializeJob<T extends { locations: string; categories: string }>(
+import { parseStringArray as parseArray } from "@/server/scraper/utils";
+function deserializeJob<T extends { locations: unknown; categories: unknown }>(
   job: T
 ): Omit<T, "locations" | "categories"> & { locations: string[]; categories: string[] } {
   // Preserve the full job shape (status, ids, timestamps, etc.) while converting
@@ -65,7 +57,6 @@ export const scraperRouter = createTRPCRouter({
   })),
 
   list: organizationProcedure.query(async ({ ctx }) => {
-    await reconcileOrphanedJobs();
     const jobs = await ctx.prisma.scraperJob.findMany({
       where: { organizationId: ctx.organizationId },
       orderBy: { createdAt: "desc" },
@@ -80,6 +71,10 @@ export const scraperRouter = createTRPCRouter({
         totalScraped: true,
         importedCount: true,
         autoImport: true,
+        totalQueries: true,
+        completedQueries: true,
+        failedQueries: true,
+        lastHeartbeatAt: true,
         startedAt: true,
         completedAt: true,
         createdAt: true,
@@ -108,6 +103,10 @@ export const scraperRouter = createTRPCRouter({
         concurrency: job.concurrency,
         totalScraped: job.totalScraped,
         importedCount: job.importedCount,
+        totalQueries: job.totalQueries,
+        completedQueries: job.completedQueries,
+        failedQueries: job.failedQueries,
+        lastHeartbeatAt: job.lastHeartbeatAt,
         logs: job.logs,
         error: job.error,
         completedAt: job.completedAt,
@@ -145,8 +144,8 @@ export const scraperRouter = createTRPCRouter({
         data: {
           organizationId,
           userId,
-          locations: serializeArray(cleanLocations),
-          categories: serializeArray(validCategories),
+          locations: cleanLocations,
+          categories: validCategories,
           limit: input.limit,
           concurrency: input.concurrency,
           autoImport: input.autoImport,
@@ -179,7 +178,7 @@ export const scraperRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const job = await ctx.prisma.scraperJob.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, outputDir: true },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
       if (job.status !== "RUNNING") {
@@ -194,7 +193,7 @@ export const scraperRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const job = await ctx.prisma.scraperJob.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, outputDir: true },
       });
       if (!job) throw new TRPCError({ code: "NOT_FOUND" });
       if (job.status === "RUNNING") {
@@ -203,6 +202,7 @@ export const scraperRouter = createTRPCRouter({
           message: "Stop the job before deleting it.",
         });
       }
+      await deleteScraperOutput(job.id, job.outputDir);
       await ctx.prisma.scraperJob.delete({ where: { id: job.id } });
       return { ok: true };
     }),

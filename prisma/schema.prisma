@@ -64,6 +64,8 @@ model User {
   assignedTasks  Task[]       @relation("TaskAssignee")
   activities     Activity[]
   scraperJobs    ScraperJob[]
+  scraperRows    ScraperImportedRow[]
+  invitationsSent Invitation[] @relation("InvitationInviter")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -81,12 +83,16 @@ model Organization {
   users          User[]
   teams          Team[]
   leads          Lead[]
-  pipelines      Pipeline[]
+  notes          Note[]
+  activities     Activity[]
   scraperJobs    ScraperJob[]
+  scraperRows    ScraperImportedRow[]
   tasks          Task[]
   customOutcomes CustomOutcome[]
   scoringRules   ScoringRule[]
   leadTags       LeadTag[]
+  invitations    Invitation[]
+  pipelines      Pipeline[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -101,6 +107,8 @@ model Team {
 
   leaderId String?
   leader   User?   @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+
+  invitations Invitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +137,8 @@ model Lead {
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?
   starred             Boolean                  @default(false)
+  touchCount          Int                      @default(0)
+  lastTouchedAt       DateTime?
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -160,6 +170,7 @@ model Lead {
   // Lead scope filtering for non-admins (assignedToId IN (...)).
   @@index([organizationId, assignedToId])
   @@index([organizationId, state, city])
+  @@index([organizationId, lastTouchedAt])
 }
 
 enum LeadStatus {
@@ -220,7 +231,6 @@ model CallLog {
   duration     Int?
   status       CallStatus
   recordingUrl String?
-  disposition  String?
 
   twilioCallSid String? @unique
 
@@ -271,10 +281,19 @@ model Note {
   userId  String
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Denormalized from Lead.organizationId so org-wide queries can hit a
+  // covering index instead of joining through Lead. Nullable for now because
+  // this column was added to an existing table — new rows always populate it
+  // and `scripts/backfill-org-id.ts` fills in legacy rows. After backfill
+  // verification, a follow-up should change this to required.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([leadId])
+  @@index([organizationId, createdAt])
 }
 
 enum ActivityType {
@@ -299,9 +318,16 @@ model Activity {
   userId      String
   user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Denormalized from Lead.organizationId so org-wide activity feeds (team
+  // activityFeed, dashboard "last active") avoid a join through Lead.
+  // Nullable for now — see note on Note.organizationId.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
 
   @@index([leadId])
+  @@index([organizationId, createdAt])
 }
 
 enum TaskPriority {
@@ -325,8 +351,8 @@ model Task {
   status      TaskStatus   @default(PENDING)
   deletedAt   DateTime?
 
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -369,18 +395,46 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+// Email-token invitation flow. An admin invites by email; the recipient gets
+// a one-time link to set their own password. The DB only ever stores the
+// SHA-256 hash of the raw token, so a DB leak alone can't be used to claim
+// pending invitations.
+model Invitation {
+  id             String           @id @default(cuid())
+  tokenHash      String           @unique
+  email          String
+  name           String?
+  role           UserRole         @default(USER)
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teamId         String?
+  team           Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  invitedById    String?
+  invitedBy      User?            @relation("InvitationInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  status         InvitationStatus @default(PENDING)
+  expires        DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, status])
+  @@index([email])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Scraper feature
-// locations and categories are stored as JSON-encoded strings in the DB and
-// parsed by the scraper layer when exposing them as string[] values.
 // ─────────────────────────────────────────────────────────────────────────────
 model ScraperJob {
   id     String           @id @default(cuid())
   status ScraperJobStatus @default(PENDING)
 
-  // JSON-encoded string arrays, e.g. '["New York","Los Angeles"]'
-  locations  String @default("[]")
-  categories String @default("[]")
+  locations  Json @default("[]")
+  categories Json @default("[]")
 
   limit       Int @default(20)
   concurrency Int @default(1)
@@ -388,10 +442,17 @@ model ScraperJob {
   totalScraped  Int     @default(0)
   importedCount Int     @default(0)
   autoImport    Boolean @default(true)
+  totalQueries     Int @default(0)
+  completedQueries Int @default(0)
+  failedQueries    Int @default(0)
 
   outputDir String?
   logs      String  @default("")
   error     String?
+  workerId  String?
+  workerPid Int?
+  lastHeartbeatAt DateTime?
+  stopRequestedAt DateTime?
 
   startedAt   DateTime?
   completedAt DateTime?
@@ -402,10 +463,35 @@ model ScraperJob {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  importedRows ScraperImportedRow[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId, createdAt])
+  @@index([status, lastHeartbeatAt])
+  @@index([workerId])
+}
+
+model ScraperImportedRow {
+  id          String @id @default(cuid())
+  jobId       String
+  job         ScraperJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  fingerprint String
+  sourceUrl   String?
+  leadId      String?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  importedById String
+  importedBy   User @relation(fields: [importedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, fingerprint])
+  @@index([organizationId, createdAt])
+  @@index([sourceUrl])
 }
 
 enum ScraperJobStatus {

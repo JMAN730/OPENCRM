@@ -26,6 +26,7 @@ OpenCRM is a self-hosted CRM for sales teams with lead management, team-aware pe
 
 - Outreach sequences and delivery automation
 - External Twilio, OpenAI, or AWS-backed integrations
+- Interactive dialer calling; the dialer route is disabled until Twilio is funded and configured
 - Email-token invite onboarding flow
 
 ## Local development

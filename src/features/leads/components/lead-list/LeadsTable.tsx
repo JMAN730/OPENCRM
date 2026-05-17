@@ -18,6 +18,7 @@ import {
   effectiveTempOf,
   fullNameOf,
   initials,
+  lastTouchOf,
   relativeTime,
   reviewSummary,
   scoreOf,
@@ -473,7 +474,7 @@ export function LeadsTable({
                     </td>
                   )}
                   {show("Last touch") && (
-                    <td className="mono">{relativeTime(lead.createdAt)}</td>
+                    <td className="mono">{relativeTime(lastTouchOf(lead))}</td>
                   )}
                   <td onClick={(event) => event.stopPropagation()}>
                     <button
