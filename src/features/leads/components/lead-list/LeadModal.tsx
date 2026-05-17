@@ -2,6 +2,7 @@
 
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
+import { formatLocation } from "@/features/leads/location";
 import {
   Dialog,
   DialogContent,
@@ -177,6 +178,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
+  const location = formatLocation(lead.city, lead.state);
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(
@@ -660,6 +662,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   </span>
                   <span className="crm-k">Source</span>
                   <span className="crm-v">{lead.source || "-"}</span>
+                  {location ? (
+                    <>
+                      <span className="crm-k">Location</span>
+                      <span className="crm-v">{location}</span>
+                    </>
+                  ) : null}
                   {lead.email ? (
                     <>
                       <span className="crm-k">Email</span>
