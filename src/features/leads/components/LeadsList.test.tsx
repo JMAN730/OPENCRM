@@ -230,6 +230,11 @@ vi.mock("@/app/_trpc/client", () => ({
         useQuery: vi.fn(() => ({ data: orgMembersState })),
       },
     },
+    scoring: {
+      getRules: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
+    },
   },
 }));
 

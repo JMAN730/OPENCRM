@@ -15,6 +15,7 @@ import {
   touchesOf,
   type Lead,
   type LeadVisibleColumn,
+  type ScoringRuleConfig,
 } from "./shared";
 
 type LeadCardListProps = {
@@ -29,6 +30,7 @@ type LeadCardListProps = {
   onOpenLead: (lead: Lead) => void;
   onToggleRowSelection: (leadId: string) => void;
   onToggleSelectAllRows: () => void;
+  scoringRules?: ScoringRuleConfig[];
   selectedIds: Set<string>;
   visibleColumns: Set<LeadVisibleColumn>;
 };
@@ -45,6 +47,7 @@ export function LeadCardList({
   onOpenLead,
   onToggleRowSelection,
   onToggleSelectAllRows,
+  scoringRules,
   selectedIds,
   visibleColumns,
 }: LeadCardListProps) {
@@ -78,7 +81,7 @@ export function LeadCardList({
             const temp = effectiveTempOf(lead);
             const nextAction = nextActionForLead(lead);
             const scoreSummary = reviewSummary(lead);
-            const leadScore = scoreOf(lead);
+            const leadScore = scoreOf(lead, scoringRules);
 
             return (
               <article

@@ -51,6 +51,7 @@ import {
   type AssignableUser,
   type Lead,
   type LeadNote,
+  type ScoringRuleConfig,
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
@@ -179,7 +180,6 @@ type LeadModalProps = {
 
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const name = fullNameOf(lead);
-  const score = scoreOf(lead);
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
@@ -238,6 +238,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
+  const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
+  const score = scoreOf(lead, scoringRules);
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
