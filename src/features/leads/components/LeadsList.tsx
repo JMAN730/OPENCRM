@@ -90,6 +90,7 @@ export function LeadsList() {
   const [showAdd, setShowAdd] = useState(showAddFromQuery);
   const [showAssign, setShowAssign] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [quickFilter, setQuickFilter] = useState<FocusQuickFilter>("ALL");
@@ -190,6 +191,15 @@ export function LeadsList() {
   });
 
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
+  const exportMutation = trpc.leads.export.useMutation();
+  const bulkSetTemperature = trpc.leads.bulkSetTemperature.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const allLeads = useMemo<Lead[]>(() => (leadsPage?.items as Lead[]) ?? [], [leadsPage]);
   const dueTodayTasks = useMemo(() => dueTodayQuery.data ?? [], [dueTodayQuery.data]);
@@ -428,6 +438,27 @@ export function LeadsList() {
     })();
   };
 
+  const handleExport = () => {
+    setIsExporting(true);
+    exportMutation.mutate(
+      { search: debouncedSearch || undefined },
+      {
+        onSuccess: (data) => {
+          const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `leads-${new Date().toISOString().split("T")[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success(`Exported ${data.count} leads`);
+        },
+        onError: (error) => toast.error(error.message),
+        onSettled: () => setIsExporting(false),
+      },
+    );
+  };
+
   const greeting = useMemo(() => {
     const base = greetingForHour(new Date().getHours());
     const firstName = session?.user?.name?.split(" ")[0];
@@ -534,6 +565,7 @@ export function LeadsList() {
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
               importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              isExporting={isExporting}
               members={assignableUsers}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
@@ -545,6 +577,7 @@ export function LeadsList() {
               visibleColumns={visibleColumns}
               onClearStageFilters={() => setStageFilter(new Set())}
               onColumnsOpenChange={setColumnsOpen}
+              onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
               onOwnerToggle={toggleOwner}
               onScoreChange={(min, max) => {
@@ -669,6 +702,9 @@ export function LeadsList() {
               setSelected(new Set());
               setShowAssign(false);
             }}
+            onSetTemperature={(temperature) =>
+              bulkSetTemperature.mutate({ leadIds: Array.from(selected), temperature })
+            }
             onToggleAssignMenu={() => setShowAssign((current) => !current)}
             selectedCount={selected.size}
             showAssignMenu={showAssign}

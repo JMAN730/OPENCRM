@@ -201,6 +201,12 @@ vi.mock("@/app/_trpc/client", () => ({
       bulkDelete: {
         useMutation: vi.fn(() => ({ mutateAsync: bulkDeleteMutateAsync, isPending: false })),
       },
+      export: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      bulkSetTemperature: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
       },

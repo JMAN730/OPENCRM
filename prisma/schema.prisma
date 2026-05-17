@@ -94,6 +94,9 @@ model Organization {
   invitations    Invitation[]
   pipelines      Pipeline[]
 
+  scraperCategories OrgScraperCategory[]
+  scheduledScrapes  ScheduledScrape[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -534,4 +537,36 @@ model GeneratedWebsite {
   updatedAt DateTime @updatedAt
 
   @@index([leadId])
+}
+
+model OrgScraperCategory {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+}
+
+model ScheduledScrape {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  locations      Json         @default("[]")
+  categories     Json         @default("[]")
+  limit          Int          @default(20)
+  concurrency    Int          @default(1)
+  dayOfWeek      Int          // 0=Sunday … 6=Saturday
+  hourOfDay      Int          // 0-23 UTC
+  enabled        Boolean      @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  autoImport     Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([enabled, nextRunAt])
 }
