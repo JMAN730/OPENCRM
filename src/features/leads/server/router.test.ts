@@ -600,7 +600,7 @@ describe("leadsRouter", () => {
     });
   });
 
-  describe("lead tags and qualification", () => {
+  describe("lead tags", () => {
     it("upserts tags by normalized key to prevent case-insensitive duplicates", async () => {
       prisma.leadTag.upsert.mockResolvedValue({ id: "tag-1", name: "Priority" });
 
@@ -681,6 +681,149 @@ describe("leadsRouter", () => {
           description: "Generated lead qualification summary",
           organizationId: "org-1",
         },
+      });
+    });
+  });
+
+  describe("export", () => {
+    it("returns a CSV string with headers", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        {
+          id: "lead-1",
+          firstName: "Alice",
+          lastName: "Smith",
+          company: "Acme",
+          email: "alice@acme.com",
+          phone: "555-1234",
+          city: "Tampa",
+          state: "FL",
+          status: "CONNECTED",
+          callOutcome: "ANSWERED",
+          rating: 4.5,
+          reviewCount: 20,
+          source: "Google Maps",
+          website: "acme.com",
+          assignedTo: { name: "Bob", email: "bob@crm.com" },
+          createdAt: new Date("2026-01-01"),
+        },
+      ]);
+
+      const result = await caller.leads.export({});
+
+      expect(result.count).toBe(1);
+      const lines = result.csv.split("\n");
+      expect(lines[0]).toContain("First Name");
+      expect(lines[1]).toContain("Alice");
+      expect(lines[1]).toContain("Acme");
+    });
+
+    it("escapes commas and quotes in field values", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        {
+          id: "lead-2",
+          company: 'Smith, "The Best" LLC',
+          firstName: null,
+          lastName: null,
+          email: null,
+          phone: null,
+          city: null,
+          state: null,
+          status: "NOT_CONTACTED",
+          callOutcome: null,
+          rating: null,
+          reviewCount: null,
+          source: null,
+          website: null,
+          assignedTo: null,
+          createdAt: new Date("2026-01-01"),
+        },
+      ]);
+
+      const result = await caller.leads.export({});
+      expect(result.csv).toContain('"Smith, ""The Best"" LLC"');
+    });
+  });
+
+  describe("bulkSetTemperature", () => {
+    it("updates temperature for all visible leads", async () => {
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }, { id: "lead-2" }]);
+      prisma.lead.updateMany.mockResolvedValue({ count: 2 });
+      prisma.activity.createMany.mockResolvedValue({ count: 2 });
+
+      const result = await caller.leads.bulkSetTemperature({
+        leadIds: ["lead-1", "lead-2"],
+        temperature: "HOT",
+      });
+
+      expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1", "lead-2"] } },
+        data: { temperatureOverride: "HOT" },
+      });
+      expect(result.count).toBe(2);
+    });
+
+    it("rejects when one of the leads is outside the caller scope", async () => {
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }]);
+
+      await expect(
+        caller.leads.bulkSetTemperature({ leadIds: ["lead-1", "lead-other"], temperature: "WARM" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.lead.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("clears the override when temperature is null", async () => {
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }]);
+      prisma.lead.updateMany.mockResolvedValue({ count: 1 });
+      prisma.activity.createMany.mockResolvedValue({ count: 1 });
+
+      await caller.leads.bulkSetTemperature({ leadIds: ["lead-1"], temperature: null });
+
+      expect(prisma.lead.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["lead-1"] } },
+        data: { temperatureOverride: null },
+      });
+    });
+  });
+
+  describe("generateQualification", () => {
+    it("uses heuristic fallback when OPENAI_API_KEY is not set", async () => {
+      delete process.env.OPENAI_API_KEY;
+
+      const leadFixture = {
+        id: "lead-1",
+        organizationId: "org-1",
+        firstName: "Alice",
+        lastName: "Smith",
+        company: "Acme",
+        city: "Tampa",
+        state: "FL",
+        rating: 4.8,
+        reviewCount: 120,
+        status: "CONNECTED",
+        callOutcome: "ANSWERED",
+        source: "Google Maps",
+        phone: "555-0000",
+        email: "alice@acme.com",
+        qualificationSummary: null,
+        assignedTo: null,
+      };
+      prisma.lead.findFirst.mockResolvedValue(leadFixture);
+      prisma.lead.update.mockResolvedValue({ ...leadFixture, qualificationSummary: "summary" });
+
+      const result = await caller.leads.generateQualification({ id: "lead-1" });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ qualificationSummary: expect.any(String) }) }),
+      );
+      expect(result.summary).toBeTruthy();
+    });
+
+    it("throws NOT_FOUND when lead is outside caller scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(caller.leads.generateQualification({ id: "other-lead" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
       });
     });
   });

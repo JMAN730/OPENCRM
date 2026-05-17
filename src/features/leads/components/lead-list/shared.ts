@@ -25,7 +25,6 @@ export type Lead = {
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
-  qualificationSummary?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;
