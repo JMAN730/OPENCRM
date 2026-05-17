@@ -5,6 +5,7 @@ import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
 import { Suspense, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -506,8 +507,17 @@ function TaskRow({
       </td>
       <td style={{ padding: "10px 16px", fontSize: 13, color: "var(--crm-fg-muted)", verticalAlign: "middle" }}>
         {task.lead ? (
-          <span style={{ color: "#3b82f6", fontWeight: 500 }}>{leadName(task.lead)}</span>
-        ) : "—"}
+          <Link
+            href={`/leads?leadId=${task.lead.id}`}
+            style={{ color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+          >
+            {leadName(task.lead)}
+          </Link>
+        ) : (
+          <span style={{ color: "var(--crm-fg-faint)" }}>No lead</span>
+        )}
       </td>
       <td style={{ padding: "10px 16px", fontSize: 13, color: isOverdue(task) ? "#ef4444" : "var(--crm-fg-muted)", verticalAlign: "middle", whiteSpace: "nowrap" }}>
         {fmtDateTime(task.dueDate)}
@@ -685,7 +695,20 @@ function TaskDetailSidebar({ task, onEdit, onDelete, onComplete, onClose }: {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Row icon={<User size={14} />} label="Assigned To" value={task.assignedTo?.name ?? task.user?.name ?? "—"} />
-            <Row icon={<Link2 size={14} />} label="Lead" value={task.lead ? leadName(task.lead) : "—"} />
+            <Row icon={<Link2 size={14} />} label="Lead">
+              {task.lead ? (
+                <Link
+                  href={`/leads?leadId=${task.lead.id}`}
+                  style={{ fontSize: 13, color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  {leadName(task.lead)}
+                </Link>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--crm-fg-faint)" }}>No lead</div>
+              )}
+            </Row>
             <Row icon={<Clock size={14} />} label="Due" value={fmtDateTime(task.dueDate)} accent={isOverdue(task)} />
             <Row icon={<Flag size={14} />} label="Priority" value={PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS] ?? task.priority} />
             <Row icon={<AlertCircle size={14} />} label="Status">

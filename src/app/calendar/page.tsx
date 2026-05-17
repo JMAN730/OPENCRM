@@ -5,6 +5,7 @@ import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
 import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -328,9 +329,16 @@ function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => voi
       : PRIORITY_COLORS[task.priority ?? "MEDIUM"];
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         width: "100%",
         padding: "10px 12px",
@@ -356,16 +364,22 @@ function DayTaskCard({ task, onClick }: { task: CalendarTask; onClick: () => voi
         {task.title}
       </span>
       {task.lead && (
-        <span style={{ fontSize: 11, color: "#3b82f6", display: "flex", alignItems: "center", gap: 4 }}>
+        <Link
+          href={`/leads?leadId=${task.lead.id}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ fontSize: 11, color: "#3b82f6", display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+        >
           <Link2 size={10} /> {leadLabel(task.lead)}
-        </span>
+        </Link>
       )}
       {task.assignedTo && (
         <span style={{ fontSize: 11, color: "var(--crm-fg-faint)", display: "flex", alignItems: "center", gap: 4 }}>
           <User size={10} /> {task.assignedTo.name}
         </span>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -435,9 +449,20 @@ function TaskDrawer({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <DetailRow icon={<User size={14} />} label="Assigned To" value={task.assignedTo?.name ?? "—"} />
-            {task.lead && (
-              <DetailRow icon={<Link2 size={14} />} label="Lead" value={leadLabel(task.lead)} />
-            )}
+            <DetailRow icon={<Link2 size={14} />} label="Lead">
+              {task.lead ? (
+                <Link
+                  href={`/leads?leadId=${task.lead.id}`}
+                  style={{ fontSize: 13, color: "#3b82f6", fontWeight: 500, textDecoration: "none" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                >
+                  {leadLabel(task.lead)}
+                </Link>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--crm-fg-faint)" }}>No lead</div>
+              )}
+            </DetailRow>
             <DetailRow
               icon={<Clock size={14} />}
               label="Due"
@@ -511,11 +536,13 @@ function DetailRow({
   label,
   value,
   accent,
+  children,
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value?: string;
   accent?: boolean;
+  children?: React.ReactNode;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -533,7 +560,7 @@ function DetailRow({
         >
           {label}
         </div>
-        <div style={{ fontSize: 13, color: accent ? "#ef4444" : "var(--crm-fg)" }}>{value}</div>
+        {children ?? <div style={{ fontSize: 13, color: accent ? "#ef4444" : "var(--crm-fg)" }}>{value}</div>}
       </div>
     </div>
   );
