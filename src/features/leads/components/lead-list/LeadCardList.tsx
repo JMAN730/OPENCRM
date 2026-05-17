@@ -187,6 +187,31 @@ export function LeadCardList({
                   ) : null}
                 </div>
 
+                {lead.tags && lead.tags.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 6 }}>
+                    {lead.tags.slice(0, 4).map((tag) => (
+                      <span
+                        key={tag.id}
+                        style={{
+                          fontSize: 10.5, fontWeight: 500,
+                          padding: "1px 7px", borderRadius: 999,
+                          background: "var(--crm-surface-2)",
+                          border: "1px solid var(--crm-border)",
+                          color: "var(--crm-fg-muted)",
+                          lineHeight: "18px",
+                        }}
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                    {lead.tags.length > 4 ? (
+                      <span style={{ fontSize: 10.5, color: "var(--crm-fg-faint)", lineHeight: "18px" }}>
+                        +{lead.tags.length - 4}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="focus-card-actions" onClick={(event) => event.stopPropagation()}>
                   {lead.phone ? (
                     <a className="crm-btn primary sm" href={`tel:${lead.phone}`}>
