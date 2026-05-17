@@ -41,11 +41,10 @@ Resolved since audit date:
 
 Still outstanding:
 
-  ❌ Leads_SBL_Tampa.xlsx in git history — file removed from working tree
-     but still present in full git history. Requires git filter-repo + force-push
-     to fully purge. Deferred: destructive history rewrite requires coordinating
-     with all collaborators (force-push + re-clone). Must be done before any
-     public repository access. (Critical — PII exposure)
+  ✅ Leads_SBL_Tampa.xlsx in git history — purged from all 331 commits via
+     git filter-repo on 2026-05-17. Force-pushed to origin. GitHub's cache
+     may serve the file for up to 24h; contact GitHub support to expedite
+     cache invalidation if needed. All collaborators must re-clone.
 
 Audit corrections (items reported as issues but already correct in codebase):
 
@@ -732,7 +731,7 @@ IMMEDIATE — Before Next Feature Sprint
 
   Priority    Action                                          File(s)                     Effort   Status
   ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-  🔴 Critical  Remove Leads_SBL_Tampa.xlsx from git history   Repo root                   1h       ❌ OPEN
+  🔴 Critical  Remove Leads_SBL_Tampa.xlsx from git history   Repo root                   1h       ✅ DONE (filter-repo 2026-05-17)
   🔴 Critical  Fix dialer endCall() to prompt for outcome      src/app/dialer/page.tsx:49  2h       ✅ DONE
   🔴 High      Fix deleteNote activity type "NOTE_DELETED"     leads/server/router.ts:613  10m      ✅ DONE (was already correct)
   🔴 High      Delete LeadDetailsModal.tsx + its test          features/leads/components/  30m      ✅ DONE (already deleted)
@@ -794,7 +793,7 @@ What would worry a senior engineer most?
      users share one "unknown" IP bucket for registration
 
 What should be fixed BEFORE scaling?
-  1. Git history scrub for Leads_SBL_Tampa.xlsx              ❌ OPEN
+  1. Git history scrub for Leads_SBL_Tampa.xlsx              ✅ DONE
   2. Dialer endCall() status corruption bug                  ✅ DONE (dialer disabled)
   3. deleteNote activity type bug                            ✅ DONE (was already correct)
   4. Analytics page 100-lead cap                             ✅ DONE (server-side analyticsRouter)
@@ -945,7 +944,7 @@ APPENDIX F — RISKY FILES INVENTORY
 
   File                                    Risk                              Severity    Status
   ──────────────────────────────────────────────────────────────────────────────────────────────
-  Leads_SBL_Tampa.xlsx                    Real customer PII in git history  🔴 Critical  ❌ OPEN (still in git history)
+  Leads_SBL_Tampa.xlsx                    Real customer PII in git history  🔴 Critical  ✅ DONE (purged 2026-05-17)
   src/app/dialer/page.tsx                 Silently corrupts all call data   🔴 Critical  ✅ FIXED (dialer disabled)
   src/lib/rateLimit.ts                    IP detection broken in many setups 🟠 High     ✅ FIXED (x-real-ip priority)
   src/features/teams/server/router.ts     Admin-set-password in API body    🟠 High      ❌ OPEN
