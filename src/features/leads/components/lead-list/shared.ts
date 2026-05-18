@@ -25,6 +25,7 @@ export type Lead = {
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
+  secondaryOutcomeId?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;
@@ -32,6 +33,11 @@ export type Lead = {
     image: string | null;
   } | null;
   customOutcome?: {
+    id: string;
+    label: string;
+    hint?: string | null;
+  } | null;
+  secondaryOutcome?: {
     id: string;
     label: string;
     hint?: string | null;

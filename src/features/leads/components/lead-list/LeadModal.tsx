@@ -414,6 +414,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [addingOutcome, setAddingOutcome] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newHint, setNewHint] = useState("");
+  const [dispositionOpen, setDispositionOpen] = useState(false);
+  const [dispositionId, setDispositionId] = useState<string | null>(
+    lead.secondaryOutcome?.id ?? null,
+  );
+  const dispositionRef = useRef<HTMLDivElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
@@ -470,6 +475,13 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       toast.success("Outcome saved");
       void utils.leads.getAll.invalidate();
       void utils.leads.getActivities.invalidate({ leadId: lead.id });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const setDispositionMutation = trpc.leads.setDisposition.useMutation({
+    onSuccess: () => {
+      toast.success("Disposition saved");
+      void utils.leads.getAll.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -639,6 +651,25 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [tagMenuOpen]);
+
+  useEffect(() => {
+    if (!dispositionOpen) return;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (dispositionRef.current && !dispositionRef.current.contains(event.target as Node)) {
+        setDispositionOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [dispositionOpen]);
+
+  const chooseDisposition = (nextId: string | null) => {
+    setDispositionId(nextId);
+    setDispositionOpen(false);
+    setDispositionMutation.mutate({ id: lead.id, secondaryOutcomeId: nextId });
+  };
 
   const chooseOutcome = (nextOutcome: string | null, nextCustomId: string | null = null) => {
     setOutcome(nextOutcome);
@@ -863,6 +894,63 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 </div>
               ) : null}
             </div>
+
+            {customOutcomes.length > 0 ? (
+              <div className="crm-outcome-wrap" ref={dispositionRef}>
+                <button
+                  type="button"
+                  className={`crm-btn crm-outcome-btn ${dispositionId ? "set" : ""}`}
+                  onClick={() => setDispositionOpen((v) => !v)}
+                  aria-expanded={dispositionOpen}
+                >
+                  <Check size={13} />
+                  {dispositionId ? (
+                    <>
+                      <span style={{ color: "var(--crm-fg-faint)" }}>Disposition:</span>
+                      <span style={{ fontWeight: 500 }}>
+                        {customOutcomes.find((co) => co.id === dispositionId)?.label ?? "Custom"}
+                      </span>
+                    </>
+                  ) : (
+                    <>Set disposition</>
+                  )}
+                  <span className="crm-outcome-caret">
+                    <ArrowDown size={10} />
+                  </span>
+                </button>
+
+                {dispositionOpen ? (
+                  <div className="crm-outcome-pop" role="menu">
+                    <div className="crm-outcome-pop-head">Disposition</div>
+                    {customOutcomes.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="menuitem"
+                        className={`crm-outcome-item ${dispositionId === item.id ? "active" : ""}`}
+                        onClick={() => chooseDisposition(item.id)}
+                      >
+                        <span className="crm-outcome-dot t-cool" />
+                        <span className="lab">
+                          <span className="t">{item.label}</span>
+                          {item.hint ? <span className="h">{item.hint}</span> : null}
+                        </span>
+                        {dispositionId === item.id ? <Check size={11} /> : null}
+                      </button>
+                    ))}
+                    {dispositionId ? (
+                      <button
+                        type="button"
+                        className="crm-outcome-clear"
+                        onClick={() => chooseDisposition(null)}
+                      >
+                        Clear disposition
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button
@@ -1163,6 +1251,20 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   <span className="crm-v" style={{ color: "var(--crm-fg-muted)" }}>
                     {new Date(lead.createdAt).toLocaleDateString()}
                   </span>
+                  {lead.secondaryOutcome ? (
+                    <>
+                      <span className="crm-k">Disposition</span>
+                      <span className="crm-v" style={{ color: "var(--crm-fg-muted)" }}>
+                        {lead.secondaryOutcome.label}
+                        {lead.secondaryOutcome.hint ? (
+                          <span style={{ color: "var(--crm-fg-faint)", fontSize: 11 }}>
+                            {" · "}
+                            {lead.secondaryOutcome.hint}
+                          </span>
+                        ) : null}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div>
