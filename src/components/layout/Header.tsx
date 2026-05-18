@@ -63,6 +63,17 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [openPanel]);
 
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        setOpenPanel((p) => (p === "ai" ? null : "ai"));
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const toggle = (panel: Panel) => setOpenPanel((p) => (p === panel ? null : panel));
 
   return (
