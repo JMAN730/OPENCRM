@@ -19,7 +19,36 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
+
+const DEFAULT_STAGE_NAMES = new Set([
+  "potential",
+  "qualified",
+  "proposal",
+  "negotiation",
+  "won",
+  "lost",
+]);
+
+function isDefaultStage(name: string) {
+  return DEFAULT_STAGE_NAMES.has(name.trim().toLowerCase());
+}
+
+type SortMode = "value" | "name" | "updated";
+const SORT_LABELS: Record<SortMode, string> = {
+  value: "Value",
+  name: "Name",
+  updated: "Recently updated",
+};
 
 type BoardData = inferRouterOutputs<AppRouter>["pipeline"]["getBoard"];
 type Stage = BoardData["stages"][number];
@@ -249,7 +278,7 @@ function LeadCard({ lead, onDragStart, onDragEnd, onValueChange }: {
 
 // ── Stage column ──────────────────────────────────────────────────────────────
 
-function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal, onValueChange }: {
+function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal, onRename, onDuplicate, onDelete, onValueChange }: {
   stage: Stage; leads: Lead[]; dragOverStageId: string | null;
   onDragStart:   (e: React.DragEvent, lead: Lead) => void;
   onDragEnd:     (e: React.DragEvent) => void;
@@ -257,13 +286,23 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
   onDragLeave:   (e: React.DragEvent, stageId: string) => void;
   onDrop:        (e: React.DragEvent, stageId: string) => void;
   onAddDeal:     (stage: Stage) => void;
+  onRename:      (stage: Stage) => void;
+  onDuplicate:   (stage: Stage) => void;
+  onDelete:      (stage: Stage) => void;
   onValueChange: (leadId: string, value: number | null) => void;
 }) {
-  const name    = stageDisplayName(stage.name);
-  const cfg     = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
-  const total   = leads.reduce((s, l) => s + (l.value ?? 0), 0);
-  const barPct  = name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
-  const isOver  = dragOverStageId === stage.id;
+  const name        = stageDisplayName(stage.name);
+  const cfg         = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
+  const total       = leads.reduce((s, l) => s + (l.value ?? 0), 0);
+  const barPct      = name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
+  const isOver      = dragOverStageId === stage.id;
+  const isDefault   = isDefaultStage(stage.name);
+  const hasLeads    = stage.leads.length > 0;
+  const deleteHint  = isDefault
+    ? "Default stages cannot be deleted"
+    : hasLeads
+      ? "Move deals out of this stage before deleting"
+      : undefined;
 
   return (
     <section className={`crm-pipeline-col${isOver ? " drag-over" : ""}`}>
@@ -272,9 +311,32 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
           <span className="crm-pipeline-col-dot" style={{ background: cfg.color }} />
           <span className="crm-pipeline-col-name">{name}</span>
           <span className="crm-pipeline-col-count">{leads.length}</span>
-          <button className="crm-btn ghost icon crm-pipeline-col-menu" aria-label="Column actions" style={{ marginLeft: "auto" }}>
-            <MoreVertical size={13} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  className="crm-btn ghost icon crm-pipeline-col-menu"
+                  aria-label="Column actions"
+                  style={{ marginLeft: "auto" }}
+                />
+              }
+            >
+              <MoreVertical size={13} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onRename(stage)}>Rename</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(stage)}>Duplicate</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={isDefault || hasLeads}
+                title={deleteHint}
+                onClick={() => onDelete(stage)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="crm-pipeline-col-meta">
           <span className="crm-pipeline-col-value">{fmtValue(total)}</span>
@@ -533,7 +595,46 @@ export function PipelineBoard() {
   const [dealCompany, setDealCompany]       = useState("");
   const [dealValue, setDealValue]           = useState("");
 
+  const [sortMode, setSortMode]             = useState<SortMode>("value");
+  const [filterOwnerId, setFilterOwnerId]   = useState<string>("");
+  const [filterMinValue, setFilterMinValue] = useState<string>("");
+  const [filterMaxValue, setFilterMaxValue] = useState<string>("");
+
+  const [renamingStage, setRenamingStage] = useState<Stage | null>(null);
+  const [renameValue, setRenameValue]     = useState("");
+
   const { data, isLoading } = trpc.pipeline.getBoard.useQuery();
+  const { data: members }   = trpc.teams.organizationMembers.useQuery();
+
+  const renameStage = trpc.pipeline.renameStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage renamed");
+      setRenamingStage(null);
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to rename stage"),
+  });
+
+  const duplicateStage = trpc.pipeline.duplicateStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage duplicated");
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to duplicate stage"),
+  });
+
+  const deleteStage = trpc.pipeline.deleteStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage deleted");
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete stage"),
+  });
+
+  const openRenameDialog = useCallback((stage: Stage) => {
+    setRenameValue(stageDisplayName(stage.name));
+    setRenamingStage(stage);
+  }, []);
 
   const createDeal = trpc.pipeline.createDeal.useMutation({
     onSuccess: () => {
@@ -674,22 +775,6 @@ export function PipelineBoard() {
   }, [moveLead]);
 
   const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
-  const filterLeads = useCallback(
-    (leads: Lead[]): Lead[] => {
-      if (activeFilter === "mine") return leads.filter((l) => l.assignedTo?.id === userId);
-      if (activeFilter === "hot") return leads.filter((l) => l.temperatureOverride === "HOT");
-      if (activeFilter === "idle") return leads.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
-      if (activeFilter === "closing") {
-        const now = new Date();
-        return leads.filter((l) => {
-          const d = new Date(l.updatedAt);
-          return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-        });
-      }
-      return leads;
-    },
-    [activeFilter, userId],
-  );
 
   if (isLoading) {
     return (
@@ -704,10 +789,65 @@ export function PipelineBoard() {
 
   const { stages } = data;
 
+  const minVal = filterMinValue.trim() === "" ? null : Number(filterMinValue);
+  const maxVal = filterMaxValue.trim() === "" ? null : Number(filterMaxValue);
+  const minActive = minVal != null && Number.isFinite(minVal);
+  const maxActive = maxVal != null && Number.isFinite(maxVal);
+  const filterActive = !!filterOwnerId || minActive || maxActive;
+  const filterCount  = (filterOwnerId ? 1 : 0) + (minActive ? 1 : 0) + (maxActive ? 1 : 0);
+
+  function filterLeads(leads: Lead[]): Lead[] {
+    let out = leads;
+    if (activeFilter === "mine")    out = out.filter((l) => l.assignedTo?.id === userId);
+    else if (activeFilter === "hot")     out = out.filter((l) => l.temperatureOverride === "HOT");
+    else if (activeFilter === "idle")    out = out.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
+    else if (activeFilter === "closing") {
+      const now = new Date();
+      out = out.filter((l) => {
+        const d = new Date(l.updatedAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+    }
+    if (filterOwnerId) out = out.filter((l) => l.assignedTo?.id === filterOwnerId);
+    if (minActive) out = out.filter((l) => (l.value ?? 0) >= (minVal as number));
+    if (maxActive) out = out.filter((l) => (l.value ?? 0) <= (maxVal as number));
+    return sortLeads(out, sortMode);
+  }
+
+  function sortLeads(leads: Lead[], mode: SortMode): Lead[] {
+    const copy = [...leads];
+    if (mode === "value") {
+      copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    } else if (mode === "name") {
+      copy.sort((a, b) => leadDisplayName(a).localeCompare(leadDisplayName(b)));
+    } else {
+      copy.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    return copy;
+  }
+
+  function handleDeleteStage(stage: Stage) {
+    if (typeof window !== "undefined" && !window.confirm(`Delete "${stageDisplayName(stage.name)}"?`)) return;
+    deleteStage.mutate({ stageId: stage.id });
+  }
+
+  function submitRename() {
+    if (!renamingStage) return;
+    const name = renameValue.trim();
+    if (!name) {
+      toast.error("Name is required");
+      return;
+    }
+    if (name === stageDisplayName(renamingStage.name)) {
+      setRenamingStage(null);
+      return;
+    }
+    renameStage.mutate({ stageId: renamingStage.id, name });
+  }
 
   const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
-  const activeStages = ACTIVE_STAGES.map((n) => stageByName[n]).filter(Boolean) as Stage[];
   const lostStage    = stageByName[LOST_STAGE];
+  const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
 
   const CHIP_LABELS: { id: FilterChip; label: string }[] = [
     { id: "all",     label: "All deals"         },
@@ -750,8 +890,102 @@ export function PipelineBoard() {
           <button key={id} className="crm-pipeline-chip" aria-pressed={activeFilter === id} onClick={() => setActiveFilter(id)}>{label}</button>
         ))}
         <span style={{ flex: 1 }} />
-        <button className="crm-btn ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}><Filter size={13} /> Filter</button>
-        <button className="crm-btn ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}><ArrowUpDown size={13} /> Sort: Value</button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="crm-btn ghost"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              />
+            }
+          >
+            <Filter size={13} /> Filter{filterActive ? ` (${filterCount})` : ""}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64 p-3">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <Label htmlFor="filter-owner" style={{ fontSize: 12 }}>Owner</Label>
+                <select
+                  id="filter-owner"
+                  value={filterOwnerId}
+                  onChange={(e) => setFilterOwnerId(e.target.value)}
+                  style={{
+                    height: 32,
+                    fontSize: 13,
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--crm-border)",
+                    background: "var(--crm-bg-card)",
+                  }}
+                >
+                  <option value="">Anyone</option>
+                  {members?.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                  <Label htmlFor="filter-min" style={{ fontSize: 12 }}>Min value</Label>
+                  <Input
+                    id="filter-min"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={filterMinValue}
+                    onChange={(e) => setFilterMinValue(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                  <Label htmlFor="filter-max" style={{ fontSize: 12 }}>Max value</Label>
+                  <Input
+                    id="filter-max"
+                    inputMode="decimal"
+                    placeholder="∞"
+                    value={filterMaxValue}
+                    onChange={(e) => setFilterMaxValue(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!filterActive}
+                  onClick={() => {
+                    setFilterOwnerId("");
+                    setFilterMinValue("");
+                    setFilterMaxValue("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="crm-btn ghost"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              />
+            }
+          >
+            <ArrowUpDown size={13} /> Sort: {SORT_LABELS[sortMode]}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup
+              value={sortMode}
+              onValueChange={(v) => setSortMode(v as SortMode)}
+            >
+              <DropdownMenuRadioItem value="value">Value (high to low)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="name">Name (A–Z)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="updated">Recently updated</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {viewTab === "board" ? (
@@ -770,6 +1004,9 @@ export function PipelineBoard() {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onAddDeal={openDealDialog}
+                  onRename={openRenameDialog}
+                  onDuplicate={(s) => duplicateStage.mutate({ stageId: s.id })}
+                  onDelete={handleDeleteStage}
                   onValueChange={handleValueChange}
                 />
               ))}
@@ -791,6 +1028,49 @@ export function PipelineBoard() {
       ) : (
         <TableView stages={stages} filterLeads={filterLeads} onValueChange={handleValueChange} />
       )}
+
+      <Dialog
+        open={!!renamingStage}
+        onOpenChange={(open) => { if (!open) setRenamingStage(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename stage</DialogTitle>
+            <DialogDescription>
+              {renamingStage ? `Rename "${stageDisplayName(renamingStage.name)}".` : null}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => { e.preventDefault(); submitRename(); }}
+            className="flex flex-col gap-3"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="rename-stage">Name</Label>
+              <Input
+                id="rename-stage"
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                disabled={renameStage.isPending}
+                maxLength={50}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenamingStage(null)}
+                disabled={renameStage.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={renameStage.isPending}>
+                {renameStage.isPending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dealDialogOpen} onOpenChange={setDealDialogOpen}>
         <DialogContent>

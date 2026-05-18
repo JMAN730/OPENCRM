@@ -745,18 +745,18 @@ export const leadsRouter = createTRPCRouter({
   createTag: organizationProcedure
     .input(z.object({ name: z.string().trim().min(1).max(50) }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.leadTag.count({
+        where: { organizationId: ctx.organizationId },
+      });
+      if (existing >= 100) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum 100 tags per organization." });
+      }
       const name = input.name.trim();
       const tagKey = name.toLocaleLowerCase();
-
       return ctx.prisma.leadTag.upsert({
-        where: {
-          organizationId_tagKey: {
-            organizationId: ctx.organizationId,
-            tagKey,
-          },
-        },
-        update: {},
+        where: { organizationId_tagKey: { organizationId: ctx.organizationId, tagKey } },
         create: { name, tagKey, organizationId: ctx.organizationId },
+        update: {},
         select: { id: true, name: true },
       });
     }),
@@ -770,7 +770,7 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
       await ctx.prisma.leadTag.delete({ where: { id: tag.id } });
-      return { success: true };
+      return { ok: true };
     }),
 
   addTagToLead: organizationProcedure
@@ -791,11 +791,11 @@ export const leadsRouter = createTRPCRouter({
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
 
-      return ctx.prisma.lead.update({
+      await ctx.prisma.lead.update({
         where: { id: lead.id },
         data: { tags: { connect: { id: tag.id } } },
-        include: includeAssignee,
       });
+      return { ok: true };
     }),
 
   removeTagFromLead: organizationProcedure
@@ -809,11 +809,11 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
-      return ctx.prisma.lead.update({
+      await ctx.prisma.lead.update({
         where: { id: lead.id },
         data: { tags: { disconnect: { id: input.tagId } } },
-        include: includeAssignee,
       });
+      return { ok: true };
     }),
 
   export: organizationProcedure
@@ -1021,44 +1021,6 @@ export const leadsRouter = createTRPCRouter({
       return { lead: updated, summary };
     }),
 
-  // ── Tags ──────────────────────────────────────────────────────────────────────
-
-  listOrgTags: organizationProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.leadTag.findMany({
-      where: { organizationId: ctx.organizationId },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    });
-  }),
-
-  createTag: organizationProcedure
-    .input(z.object({ name: z.string().trim().min(1).max(50) }))
-    .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.prisma.leadTag.count({
-        where: { organizationId: ctx.organizationId },
-      });
-      if (existing >= 100) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum 100 tags per organization." });
-      }
-      return ctx.prisma.leadTag.upsert({
-        where: { name_organizationId: { name: input.name, organizationId: ctx.organizationId } },
-        create: { name: input.name, organizationId: ctx.organizationId },
-        update: {},
-        select: { id: true, name: true },
-      });
-    }),
-
-  deleteTag: organizationProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const tag = await ctx.prisma.leadTag.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
-      });
-      if (!tag) throw new TRPCError({ code: "NOT_FOUND" });
-      await ctx.prisma.leadTag.delete({ where: { id: tag.id } });
-      return { ok: true };
-    }),
-
   getLeadTags: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -1069,43 +1031,6 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
       return lead.tags;
-    }),
-
-  addTagToLead: organizationProcedure
-    .input(z.object({ leadId: z.string(), tagId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      const tag = await ctx.prisma.leadTag.findFirst({
-        where: { id: input.tagId, organizationId: ctx.organizationId },
-        select: { id: true },
-      });
-      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
-      await ctx.prisma.lead.update({
-        where: { id: lead.id },
-        data: { tags: { connect: { id: tag.id } } },
-      });
-      return { ok: true };
-    }),
-
-  removeTagFromLead: organizationProcedure
-    .input(z.object({ leadId: z.string(), tagId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      await ctx.prisma.lead.update({
-        where: { id: lead.id },
-        data: { tags: { disconnect: { id: input.tagId } } },
-      });
-      return { ok: true };
     }),
 
   customOutcomes: customOutcomesRouter,

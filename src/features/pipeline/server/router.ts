@@ -14,6 +14,12 @@ const DEFAULT_STAGES = [
   { name: 'Lost',        order: 5 },
 ];
 
+const DEFAULT_STAGE_NAMES = new Set(DEFAULT_STAGES.map((s) => s.name.toLowerCase()));
+
+function isDefaultStageName(name: string) {
+  return DEFAULT_STAGE_NAMES.has(name.trim().toLowerCase());
+}
+
 async function getOrCreateDefaultPipeline(prisma: PrismaClient, organizationId: string) {
   let pipeline = await prisma.pipeline.findFirst({
     where: { organizationId },
@@ -95,6 +101,71 @@ export const pipelineRouter = createTRPCRouter({
         where: { id: input.leadId, organizationId: ctx.organizationId },
         data: { pipelineStageId: input.stageId },
       });
+    }),
+
+  renameStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1), name: z.string().trim().min(1).max(50) }))
+    .mutation(async ({ ctx, input }) => {
+      const stage = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true },
+      });
+      if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      return ctx.prisma.pipelineStage.update({
+        where: { id: stage.id },
+        data: { name: input.name },
+      });
+    }),
+
+  deleteStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const stage = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true, _count: { select: { leads: true } } },
+      });
+      if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      if (isDefaultStageName(stage.name)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Default stages cannot be deleted' });
+      }
+      if (stage._count.leads > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Move deals out of this stage before deleting',
+        });
+      }
+      await ctx.prisma.pipelineStage.delete({ where: { id: stage.id } });
+      return { ok: true };
+    }),
+
+  duplicateStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const source = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true },
+      });
+      if (!source || source.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      const created = await ctx.prisma.$transaction(async (tx) => {
+        await tx.pipelineStage.updateMany({
+          where: { pipelineId: source.pipelineId, order: { gt: source.order } },
+          data: { order: { increment: 1 } },
+        });
+        return tx.pipelineStage.create({
+          data: {
+            name: `${source.name} (Copy)`,
+            order: source.order + 1,
+            pipelineId: source.pipelineId,
+          },
+        });
+      });
+      return created;
     }),
 
   updateDealValue: organizationProcedure
