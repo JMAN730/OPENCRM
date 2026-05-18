@@ -154,6 +154,7 @@ export const leadsRouter = createTRPCRouter({
             .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
             .optional(),
           hasPhone: z.boolean().optional(),
+          assignedToIds: z.array(z.string()).optional(),
           limit: z.number().int().min(1).max(100).default(100),
           // Cursor encodes the last seen lead's id (the primary sort key
           // tie-breaker). Prisma's native cursor pagination handles the
@@ -189,6 +190,15 @@ export const leadsRouter = createTRPCRouter({
           throw new TRPCError({ code: "FORBIDDEN" });
         }
         where.assignedToId = input.assignedToId;
+      }
+
+      if (input.assignedToIds?.length) {
+        const visibleUsers = baseScope.kind === "all" ? null : baseScope.userIds;
+        const allowed = visibleUsers
+          ? input.assignedToIds.filter((id) => visibleUsers.includes(id))
+          : input.assignedToIds;
+        if (!allowed.length) throw new TRPCError({ code: "FORBIDDEN" });
+        where.assignedToId = { in: allowed };
       }
 
       if (input.status) {
