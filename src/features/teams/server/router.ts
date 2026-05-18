@@ -213,6 +213,26 @@ export const teamsRouter = createTRPCRouter({
 
   // ── Admin/leader management ────────────────────────────────────────────────
 
+  /**
+   * Change a user's role. Only ADMINs can promote to MANAGER/ADMIN.
+   * Uses assertCanGrantRole from authz.ts for escalation checks.
+   */
+  promoteRole: organizationProcedure
+    .input(z.object({ userId: z.string(), role: z.enum(ROLE_VALUES) }))
+    .mutation(async ({ ctx, input }) => {
+      assertCanGrantRole(ctx.session.user.role, input.role);
+      const target = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" });
+      return ctx.prisma.user.update({
+        where: { id: input.userId },
+        data: { role: input.role },
+        select: { id: true, role: true },
+      });
+    }),
+
   create: organizationProcedure
     .input(z.object({ name: z.string().min(1).max(80), leaderId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
