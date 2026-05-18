@@ -136,7 +136,13 @@ export function LeadsList() {
     data: leadsPage,
     isLoading,
     isFetching,
-  } = trpc.leads.getAll.useQuery({ search: debouncedSearch, limit: 100, cursor: pageCursor });
+  } = trpc.leads.getAll.useQuery({
+    search: debouncedSearch,
+    limit: 100,
+    cursor: pageCursor,
+    ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+    ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+  });
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
@@ -336,6 +342,8 @@ export function LeadsList() {
       else next.add(id);
       return next;
     });
+    setPageCursor(undefined);
+    setCursorHistory([]);
   };
 
   const toggleTag = (id: string) => {
@@ -574,7 +582,11 @@ export function LeadsList() {
                 setColumnsOpen(false);
               }}
               onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-              onQuickFilterChange={setQuickFilter}
+              onQuickFilterChange={(value) => {
+                setQuickFilter(value);
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onShowNewLead={() => setShowAdd(true)}
             />
 
