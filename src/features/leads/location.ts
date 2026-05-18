@@ -143,6 +143,19 @@ export function parseCityState(value?: string | null): { city?: string; state?: 
   return { city: clean };
 }
 
+export function getMapsUrl(lead: {
+  mapsUrl?: string | null;
+  company?: string | null;
+  city?: string | null;
+  state?: string | null;
+}): string | null {
+  if (lead.mapsUrl) return lead.mapsUrl;
+  const location = formatLocation(lead.city, lead.state);
+  const parts = [lead.company, location].filter(Boolean).join(" ");
+  if (!parts) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts)}`;
+}
+
 export function parseLocationSearch(query?: string | null): { city?: string; state: string } | null {
   const clean = query?.trim();
   if (!clean) return null;
