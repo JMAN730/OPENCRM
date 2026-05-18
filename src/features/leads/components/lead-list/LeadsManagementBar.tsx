@@ -109,6 +109,8 @@ export function LeadsManagementBar({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [columnsOpen, filterOpen, onColumnsOpenChange, onFilterOpenChange]);
 
+  const totalStageCount = Object.values(stageCounts).reduce((sum, n) => sum + n, 0);
+
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
@@ -332,7 +334,7 @@ export function LeadsManagementBar({
       <div className="focus-chip-row">
         <button className="crm-chip" aria-pressed={stageFilter.size === 0} onClick={onClearStageFilters}>
           All
-          <span className="crm-chip-count">{allLeadsCount}</span>
+          <span className="crm-chip-count">{totalStageCount}</span>
         </button>
         {STAGE_ORDER.map((stage) => (
           <button
