@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("callsRouter", () => {
@@ -7,6 +7,34 @@ describe("callsRouter", () => {
 
   beforeEach(() => {
     ({ caller, prisma } = createTestCaller());
+  });
+
+  describe("generateToken", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("returns a token when Twilio env vars are set", async () => {
+      vi.stubEnv("TWILIO_ACCOUNT_SID", "ACtest");
+      vi.stubEnv("TWILIO_API_KEY", "SKtest");
+      vi.stubEnv("TWILIO_API_SECRET", "secret");
+      vi.stubEnv("TWILIO_TWIML_APP_SID", "APtest");
+
+      const result = await caller.calls.generateToken();
+      expect(result.token).toBeTruthy();
+      expect(typeof result.token).toBe("string");
+    });
+
+    it("throws PRECONDITION_FAILED when Twilio is not configured", async () => {
+      vi.stubEnv("TWILIO_ACCOUNT_SID", "");
+      vi.stubEnv("TWILIO_API_KEY", "");
+      vi.stubEnv("TWILIO_API_SECRET", "");
+      vi.stubEnv("TWILIO_TWIML_APP_SID", "");
+
+      await expect(caller.calls.generateToken()).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+      });
+    });
   });
 
   describe("logCall", () => {
@@ -26,7 +54,34 @@ describe("callsRouter", () => {
           userId: "user-1",
           status: "CONNECTED",
           duration: 30,
+          twilioCallSid: undefined,
         },
+      });
+    });
+
+    it("creates a call log without a leadId", async () => {
+      prisma.callLog.create.mockResolvedValue({ id: "call-2" });
+
+      await caller.calls.logCall({ status: "NO_ANSWER" });
+
+      expect(prisma.lead.findUnique).not.toHaveBeenCalled();
+      expect(prisma.callLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ leadId: undefined, status: "NO_ANSWER" }),
+      });
+    });
+
+    it("persists twilioCallSid when provided", async () => {
+      prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1" });
+      prisma.callLog.create.mockResolvedValue({ id: "call-3" });
+
+      await caller.calls.logCall({
+        leadId: "lead-1",
+        status: "CONNECTED",
+        twilioCallSid: "CA123",
+      });
+
+      expect(prisma.callLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ twilioCallSid: "CA123" }),
       });
     });
 
