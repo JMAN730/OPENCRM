@@ -51,6 +51,7 @@ import {
   type AssignableUser,
   type Lead,
   type LeadNote,
+  type ScoringRuleConfig,
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
@@ -179,7 +180,6 @@ type LeadModalProps = {
 
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const name = fullNameOf(lead);
-  const score = scoreOf(lead);
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
@@ -238,6 +238,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
+  const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
+  const score = scoreOf(lead, scoringRules);
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
@@ -279,14 +282,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onSuccess: () => {
       toast.success("Temperature updated");
       void utils.leads.getAll.invalidate();
-    },
-    onError: (error) => toast.error(error.message),
-  });
-  const qualifyLead = trpc.leads.qualify.useMutation({
-    onSuccess: () => {
-      toast.success("Lead qualified");
-      void utils.leads.getAll.invalidate();
-      void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -361,11 +356,18 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const [localSummary, setLocalSummary] = useState<string | null>(lead.qualificationSummary ?? null);
+
+  const generateQualification = trpc.leads.generateQualification.useMutation({
+    onSuccess: (data) => {
+      setLocalSummary(data.summary);
+      toast.success("Lead qualified");
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
-  const qualificationSummary =
-    qualifyLead.data?.id === lead.id
-      ? qualifyLead.data.qualificationSummary ?? ""
-      : lead.qualificationSummary ?? "";
 
   useEffect(() => {
     if (!outcomeOpen) return;
@@ -987,44 +989,28 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     </select>
                   </div>
                   <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 8,
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>
-                        AI qualification
-                      </div>
+                    <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span>AI qualification</span>
                       <button
-                        type="button"
                         className="crm-btn ghost sm"
-                        style={{ height: 22, padding: "0 7px", fontSize: 12, gap: 5 }}
-                        disabled={qualifyLead.isPending}
-                        onClick={() => qualifyLead.mutate({ id: lead.id })}
+                        style={{ height: 20, padding: "0 6px", fontSize: 11, gap: 4 }}
+                        disabled={generateQualification.isPending}
+                        onClick={() => generateQualification.mutate({ id: lead.id })}
+                        title="Generate AI qualification summary"
                       >
-                        <Sparkles size={12} />
-                        {qualifyLead.isPending
-                          ? "Qualifying..."
-                          : qualificationSummary
-                            ? "Refresh"
-                            : "Qualify"}
+                        <Sparkles size={11} />
+                        {generateQualification.isPending ? "Qualifying…" : localSummary ? "Refresh" : "Qualify"}
                       </button>
                     </div>
-                    <div
-                      style={{
-                        minHeight: 34,
-                        color: qualificationSummary ? "var(--crm-fg-muted)" : "var(--crm-fg-faint)",
-                        fontSize: 12,
-                        fontStyle: qualificationSummary ? "normal" : "italic",
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {qualificationSummary || "No qualification yet. Click Qualify to generate."}
-                    </div>
+                    {localSummary ? (
+                      <div style={{ fontSize: 12, color: "var(--crm-fg-muted)", lineHeight: 1.5, padding: "6px 8px", background: "var(--crm-bg-muted)", borderRadius: "var(--crm-radius-sm)" }}>
+                        {localSummary}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", fontStyle: "italic" }}>
+                        No qualification yet. Click Qualify to generate.
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>

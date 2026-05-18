@@ -89,6 +89,9 @@ vi.mock("@/app/_trpc/client", () => ({
       delete: {
         useMutation: vi.fn(() => ({ mutate: deleteLeadMutate, isPending: false })),
       },
+      generateQualification: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },
         create: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },

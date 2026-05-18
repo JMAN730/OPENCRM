@@ -48,13 +48,53 @@ const startInput = z.object({
 });
 
 export const scraperRouter = createTRPCRouter({
-  config: organizationProcedure.query(() => ({
-    enabled: scraperConfig.enabled,
-    categories: SCRAPER_CATEGORIES,
-    maxLocations: scraperConfig.maxLocations,
-    maxLimit: scraperConfig.maxLimit,
-    maxConcurrency: scraperConfig.maxConcurrency,
-  })),
+  config: organizationProcedure.query(async ({ ctx }) => {
+    const orgCategories = await ctx.prisma.orgScraperCategory.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    return {
+      enabled: scraperConfig.enabled,
+      categories: SCRAPER_CATEGORIES,
+      orgCategories,
+      maxLocations: scraperConfig.maxLocations,
+      maxLimit: scraperConfig.maxLimit,
+      maxConcurrency: scraperConfig.maxConcurrency,
+    };
+  }),
+
+  listCategories: organizationProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.orgScraperCategory.findMany({
+      where: { organizationId: ctx.organizationId },
+      orderBy: { name: "asc" },
+    });
+  }),
+
+  createCategory: organizationProcedure
+    .input(z.object({ name: z.string().min(1).max(100).trim() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.orgScraperCategory.count({
+        where: { organizationId: ctx.organizationId },
+      });
+      if (existing >= 50) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum 50 custom categories." });
+      }
+      return ctx.prisma.orgScraperCategory.create({
+        data: { name: input.name, organizationId: ctx.organizationId },
+      });
+    }),
+
+  deleteCategory: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const cat = await ctx.prisma.orgScraperCategory.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+      });
+      if (!cat) throw new TRPCError({ code: "NOT_FOUND" });
+      await ctx.prisma.orgScraperCategory.delete({ where: { id: cat.id } });
+      return { ok: true };
+    }),
 
   list: organizationProcedure.query(async ({ ctx }) => {
     const jobs = await ctx.prisma.scraperJob.findMany({
@@ -135,9 +175,21 @@ export const scraperRouter = createTRPCRouter({
         });
       }
 
+      const orgCategoryNames =
+        input.categories && input.categories.length > 0
+          ? (
+              await ctx.prisma.orgScraperCategory.findMany({
+                where: { organizationId, name: { in: input.categories } },
+                select: { name: true },
+              })
+            ).map((c) => c.name)
+          : [];
+
       const validCategories =
-        input.categories?.filter((c) =>
-          (SCRAPER_CATEGORIES as readonly string[]).includes(c)
+        input.categories?.filter(
+          (c) =>
+            (SCRAPER_CATEGORIES as readonly string[]).includes(c) ||
+            orgCategoryNames.includes(c),
         ) ?? [];
 
       const job = await ctx.prisma.scraperJob.create({

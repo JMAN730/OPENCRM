@@ -255,13 +255,14 @@ export const leadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
+      const uniqueIds = [...new Set(input.leadIds)];
 
       const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
         select: { id: true },
       });
-      if (leads.length !== input.leadIds.length) {
+      if (leads.length !== uniqueIds.length) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "One or more leads are outside your scope.",
@@ -269,11 +270,11 @@ export const leadsRouter = createTRPCRouter({
       }
 
       const result = await ctx.prisma.lead.deleteMany({
-        where: { id: { in: input.leadIds } },
+        where: { id: { in: uniqueIds } },
       });
 
       await Promise.all(
-        input.leadIds.map((leadId) =>
+        uniqueIds.map((leadId) =>
           logActivity(ctx.prisma, {
             leadId,
             userId,
@@ -744,18 +745,18 @@ export const leadsRouter = createTRPCRouter({
   createTag: organizationProcedure
     .input(z.object({ name: z.string().trim().min(1).max(50) }))
     .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.leadTag.count({
+        where: { organizationId: ctx.organizationId },
+      });
+      if (existing >= 100) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum 100 tags per organization." });
+      }
       const name = input.name.trim();
       const tagKey = name.toLocaleLowerCase();
-
       return ctx.prisma.leadTag.upsert({
-        where: {
-          organizationId_tagKey: {
-            organizationId: ctx.organizationId,
-            tagKey,
-          },
-        },
-        update: {},
+        where: { organizationId_tagKey: { organizationId: ctx.organizationId, tagKey } },
         create: { name, tagKey, organizationId: ctx.organizationId },
+        update: {},
         select: { id: true, name: true },
       });
     }),
@@ -769,7 +770,7 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
       await ctx.prisma.leadTag.delete({ where: { id: tag.id } });
-      return { success: true };
+      return { ok: true };
     }),
 
   addTagToLead: organizationProcedure
@@ -790,11 +791,11 @@ export const leadsRouter = createTRPCRouter({
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
 
-      return ctx.prisma.lead.update({
+      await ctx.prisma.lead.update({
         where: { id: lead.id },
         data: { tags: { connect: { id: tag.id } } },
-        include: includeAssignee,
       });
+      return { ok: true };
     }),
 
   removeTagFromLead: organizationProcedure
@@ -808,11 +809,117 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
-      return ctx.prisma.lead.update({
+      await ctx.prisma.lead.update({
         where: { id: lead.id },
         data: { tags: { disconnect: { id: input.tagId } } },
-        include: includeAssignee,
       });
+      return { ok: true };
+    }),
+
+  export: organizationProcedure
+    .input(
+      z
+        .object({
+          search: z.string().max(100).optional(),
+          status: z
+            .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
+            .optional(),
+          assignedToId: z.string().optional(),
+        })
+        .optional()
+        .default({}),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+      const search = input.search?.trim();
+
+      const baseScope = await getLeadScope(ctx, userId, role);
+      const where: Record<string, unknown> = {
+        ...leadWhereFromScope(baseScope),
+        ...searchWhere(search),
+      };
+
+      if (input.status) {
+        where.status = input.status;
+        where.callOutcome = { not: "CUSTOM" };
+      }
+      if (input.assignedToId) where.assignedToId = input.assignedToId;
+
+      const leads = await ctx.prisma.lead.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 10_000,
+        include: { assignedTo: { select: { name: true, email: true } } },
+      });
+
+      const headers = [
+        "First Name", "Last Name", "Company", "Email", "Phone",
+        "City", "State", "Status", "Call Outcome", "Rating",
+        "Review Count", "Source", "Website", "Assigned To", "Created At",
+      ];
+
+      const esc = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        return s.includes(",") || s.includes('"') || s.includes("\n")
+          ? `"${s.replace(/"/g, '""')}"`
+          : s;
+      };
+
+      const rows = leads.map((l) =>
+        [
+          l.firstName, l.lastName, l.company, l.email, l.phone,
+          l.city, l.state, l.status, l.callOutcome, l.rating,
+          l.reviewCount, l.source, l.website,
+          l.assignedTo?.name ?? l.assignedTo?.email ?? "",
+          l.createdAt.toISOString(),
+        ]
+          .map(esc)
+          .join(","),
+      );
+
+      return { csv: [headers.join(","), ...rows].join("\n"), count: leads.length };
+    }),
+
+  bulkSetTemperature: organizationProcedure
+    .input(
+      z.object({
+        leadIds: z.array(z.string()).min(1).max(500),
+        temperature: z.enum(["HOT", "WARM", "COOL"]).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+      const uniqueIds = [...new Set(input.leadIds)];
+
+      const scope = await getLeadScope(ctx, userId, role);
+      const leads = await ctx.prisma.lead.findMany({
+        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (leads.length !== uniqueIds.length) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "One or more leads are outside your scope." });
+      }
+
+      await ctx.prisma.lead.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { temperatureOverride: input.temperature as LeadTemperatureOverride | null },
+      });
+
+      await ctx.prisma.activity.createMany({
+        data: leads.map((l) => ({
+          leadId: l.id,
+          userId,
+          type: "LEAD_TEMPERATURE_OVERRIDE" as const,
+          description: input.temperature
+            ? `Set temperature to ${input.temperature.toLowerCase()}`
+            : "Cleared temperature override",
+          organizationId: ctx.organizationId,
+        })),
+      });
+
+      return { count: leads.length };
     }),
 
   qualify: organizationProcedure
@@ -841,6 +948,89 @@ export const leadsRouter = createTRPCRouter({
       });
 
       return updated;
+    }),
+
+  generateQualification: organizationProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+        include: includeAssignee,
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      const apiKey = process.env.OPENAI_API_KEY;
+      let summary: string;
+
+      if (apiKey) {
+        const prompt = [
+          `Qualify this lead in 2–3 sentences. Be concise and actionable.`,
+          `Name: ${[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "(unknown)"}`,
+          `Company: ${lead.company ?? "(none)"}`,
+          `Location: ${[lead.city, lead.state].filter(Boolean).join(", ") || "(unknown)"}`,
+          `Rating: ${lead.rating ?? "N/A"} (${lead.reviewCount ?? 0} reviews)`,
+          `Status: ${lead.status} / Outcome: ${lead.callOutcome}`,
+          `Source: ${lead.source ?? "unknown"}`,
+          `Phone: ${lead.phone ? "Yes" : "No"} · Email: ${lead.email ? "Yes" : "No"}`,
+        ].join("\n");
+
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: prompt }],
+            max_tokens: 150,
+            temperature: 0.4,
+          }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `OpenAI error: ${text.slice(0, 200)}` });
+        }
+        const json = await res.json() as { choices: Array<{ message: { content: string } }> };
+        summary = json.choices[0]?.message?.content?.trim() ?? "No qualification generated.";
+      } else {
+        // Heuristic fallback when no OpenAI key is configured
+        const parts: string[] = [];
+        if (lead.rating && lead.rating >= 4.5 && (lead.reviewCount ?? 0) >= 50)
+          parts.push(`Established business with ${lead.rating}★ rating (${lead.reviewCount} reviews).`);
+        else if (lead.rating && lead.rating >= 4.0)
+          parts.push(`Decent reputation with ${lead.rating}★ rating.`);
+        if (lead.phone && lead.email)
+          parts.push("Multiple contact channels available (phone + email).");
+        else if (lead.phone)
+          parts.push("Phone contact available.");
+        if (lead.status === "CONNECTED")
+          parts.push("Previously connected — warm lead.");
+        else if (lead.status === "NOT_CONTACTED")
+          parts.push("Not yet contacted — first-touch opportunity.");
+        if (parts.length === 0)
+          parts.push("Limited data available for qualification. Add more contact info to improve scoring.");
+        summary = parts.join(" ");
+      }
+
+      const updated = await ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { qualificationSummary: summary },
+        include: includeAssignee,
+      });
+
+      return { lead: updated, summary };
+    }),
+
+  getLeadTags: organizationProcedure
+    .input(z.object({ leadId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { tags: { select: { id: true, name: true } } },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
+      return lead.tags;
     }),
 
   customOutcomes: customOutcomesRouter,

@@ -240,3 +240,44 @@ describe("pipelineRouter.duplicateStage", () => {
     expect(result.id).toBe("stage-new");
   });
 });
+
+describe("pipelineRouter.updateDealValue", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+  });
+
+  it("updates the value on an existing lead", async () => {
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1", value: 5000 });
+
+    const result = await caller.pipeline.updateDealValue({ leadId: "lead-1", value: 5000 });
+
+    expect(prisma.lead.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "lead-1" }, data: { value: 5000 } }),
+    );
+    expect(result).toMatchObject({ id: "lead-1" });
+  });
+
+  it("allows clearing the value with null", async () => {
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1", value: null });
+
+    await caller.pipeline.updateDealValue({ leadId: "lead-1", value: null });
+
+    expect(prisma.lead.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { value: null } }),
+    );
+  });
+
+  it("throws NOT_FOUND when the lead is not in the org", async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
+
+    await expect(caller.pipeline.updateDealValue({ leadId: "other-lead", value: 100 })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+});

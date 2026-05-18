@@ -10,11 +10,13 @@ import { scoringRouter } from "@/features/scoring/server/router";
 import { websitesRouter } from "@/features/websites/server/router";
 import { pipelineRouter } from "@/features/pipeline/server/router";
 import { analyticsRouter } from "@/features/analytics/server/router";
+import { scheduledScraperRouter } from "@/features/scraper/server/scheduledRouter";
 
 export const appRouter = createTRPCRouter({
   leads: leadsRouter,
   calls: callsRouter,
   scraper: scraperRouter,
+  scraperSchedules: scheduledScraperRouter,
   tasks: tasksRouter,
   dashboard: dashboardRouter,
   auth: authRouter,

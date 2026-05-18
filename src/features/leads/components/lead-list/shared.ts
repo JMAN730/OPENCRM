@@ -21,10 +21,10 @@ export type Lead = {
   starred?: boolean | null;
   touchCount?: number | null;
   lastTouchedAt?: string | Date | null;
+  qualificationSummary?: string | null;
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
-  qualificationSummary?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;

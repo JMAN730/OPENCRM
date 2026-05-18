@@ -25,7 +25,7 @@ export const dashboardRouter = createTRPCRouter({
           callsTodayCount,
           followupsDueCount,
           connectedLast30dCount,
-          callStatusDistribution,
+          outcomeDistribution,
           leadsByStatusResult,
           recentCalls,
           callsPerDayRows,
@@ -47,9 +47,9 @@ export const dashboardRouter = createTRPCRouter({
               updatedAt: { gte: thirtyDaysAgo },
             },
           }),
-          ctx.prisma.callLog.groupBy({
-            by: ["status"],
-            where: { lead: { organizationId }, createdAt: { gte: thirtyDaysAgo } },
+          ctx.prisma.lead.groupBy({
+            by: ["callOutcome"],
+            where: { organizationId, callOutcome: { not: "NOT_CONTACTED" } },
             _count: { id: true },
           }),
           ctx.prisma.lead.groupBy({
@@ -61,7 +61,7 @@ export const dashboardRouter = createTRPCRouter({
             where: { lead: { organizationId } },
             orderBy: { createdAt: "desc" },
             take: 15,
-            include: { lead: { select: { phone: true } } },
+            include: { lead: { select: { phone: true, callOutcome: true } } },
           }),
           // Single grouped query for the per-day chart bucket. date_trunc +
           // index-on-(userId, createdAt) keeps this O(matching rows) instead
@@ -119,14 +119,15 @@ export const dashboardRouter = createTRPCRouter({
           recentCalls: recentCalls.map((c) => ({
             id: c.id,
             status: c.status,
+            callOutcome: c.lead.callOutcome,
             duration: c.duration,
             createdAt: c.createdAt.toISOString(),
             phone: c.lead.phone ?? "Unknown",
           })),
           charts: {
             callsPerDay,
-            statusDistribution: callStatusDistribution.map((item) => ({
-              status: item.status,
+            outcomeDistribution: outcomeDistribution.map((item) => ({
+              outcome: item.callOutcome,
               count: item._count.id,
             })),
           },

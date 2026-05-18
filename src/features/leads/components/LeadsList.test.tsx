@@ -201,6 +201,15 @@ vi.mock("@/app/_trpc/client", () => ({
       bulkDelete: {
         useMutation: vi.fn(() => ({ mutateAsync: bulkDeleteMutateAsync, isPending: false })),
       },
+      export: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      bulkSetTemperature: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      listOrgTags: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
       },
@@ -222,6 +231,11 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       organizationMembers: {
         useQuery: vi.fn(() => ({ data: orgMembersState })),
+      },
+    },
+    scoring: {
+      getRules: {
+        useQuery: vi.fn(() => ({ data: [] })),
       },
     },
   },

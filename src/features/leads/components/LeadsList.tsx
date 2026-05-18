@@ -31,6 +31,7 @@ import {
   type Lead,
   type LeadSort,
   type LeadVisibleColumn,
+  type ScoringRuleConfig,
 } from "./lead-list/shared";
 
 type LeadsViewMode = "focus" | "classic";
@@ -83,6 +84,7 @@ export function LeadsList() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState(new Set<string>());
   const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
+  const [tagFilter, setTagFilter] = useState(new Set<string>());
   const [scoreMin, setScoreMin] = useState<number | null>(null);
   const [scoreMax, setScoreMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<LeadSort>({ key: "createdAt", dir: "desc" });
@@ -90,6 +92,7 @@ export function LeadsList() {
   const [showAdd, setShowAdd] = useState(showAddFromQuery);
   const [showAssign, setShowAssign] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [quickFilter, setQuickFilter] = useState<FocusQuickFilter>("ALL");
@@ -145,6 +148,9 @@ export function LeadsList() {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
+  const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
+  const { data: orgTags } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 120_000 });
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
@@ -190,6 +196,15 @@ export function LeadsList() {
   });
 
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
+  const exportMutation = trpc.leads.export.useMutation();
+  const bulkSetTemperature = trpc.leads.bulkSetTemperature.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const allLeads = useMemo<Lead[]>(() => (leadsPage?.items as Lead[]) ?? [], [leadsPage]);
   const dueTodayTasks = useMemo(() => dueTodayQuery.data ?? [], [dueTodayQuery.data]);
@@ -248,13 +263,18 @@ export function LeadsList() {
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
-      .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
-      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true))
+      .filter((lead) =>
+        tagFilter.size
+          ? (lead.tags ?? []).some((t) => tagFilter.has(t.id))
+          : true,
+      )
+      .filter((lead) => (scoreMin !== null ? scoreOf(lead, scoringRules) >= scoreMin : true))
+      .filter((lead) => (scoreMax !== null ? scoreOf(lead, scoringRules) <= scoreMax : true))
       .filter((lead) => (sortBy.key === "starred" ? lead.starred === true : true));
 
     rows.sort((left, right) => {
       const getValue = (lead: Lead) => {
-        if (sortBy.key === "score") return scoreOf(lead);
+        if (sortBy.key === "score") return scoreOf(lead, scoringRules);
         if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
         if (sortBy.key === "starred") return lead.createdAt;
         return lead[sortBy.key as keyof Lead] ?? "";
@@ -272,7 +292,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, stageFilter, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
@@ -295,8 +315,9 @@ export function LeadsList() {
         overdueTasks,
         dueTodayTasks,
         upcomingFollowUpTasks,
+        scoringRules,
       }),
-    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks],
+    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks, scoringRules],
   );
 
   const toggleStage = (stage: string) => {
@@ -310,6 +331,15 @@ export function LeadsList() {
 
   const toggleOwner = (id: string) => {
     setOwnerFilter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTag = (id: string) => {
+    setTagFilter((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -428,6 +458,27 @@ export function LeadsList() {
     })();
   };
 
+  const handleExport = () => {
+    setIsExporting(true);
+    exportMutation.mutate(
+      { search: debouncedSearch || undefined },
+      {
+        onSuccess: (data) => {
+          const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `leads-${new Date().toISOString().split("T")[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success(`Exported ${data.count} leads`);
+        },
+        onError: (error) => toast.error(error.message),
+        onSettled: () => setIsExporting(false),
+      },
+    );
+  };
+
   const greeting = useMemo(() => {
     const base = greetingForHour(new Date().getHours());
     const firstName = session?.user?.name?.split(" ")[0];
@@ -534,7 +585,9 @@ export function LeadsList() {
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
               importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              isExporting={isExporting}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
@@ -542,9 +595,11 @@ export function LeadsList() {
               sortBy={sortBy}
               stageCounts={stageCounts}
               stageFilter={stageFilter}
+              tagFilter={tagFilter}
               visibleColumns={visibleColumns}
               onClearStageFilters={() => setStageFilter(new Set())}
               onColumnsOpenChange={setColumnsOpen}
+              onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
               onOwnerToggle={toggleOwner}
               onScoreChange={(min, max) => {
@@ -568,6 +623,7 @@ export function LeadsList() {
                   key,
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleColumn={toggleVisibleColumn}
               onToggleStage={toggleStage}
             />
@@ -588,6 +644,7 @@ export function LeadsList() {
               onOpenLead={(lead) => setSelectedLeadId(lead.id)}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
+              scoringRules={scoringRules}
               selectedIds={selected}
               visibleColumns={visibleColumns}
             />
@@ -616,9 +673,11 @@ export function LeadsList() {
               isLoading={isLoading}
               canGoPrevious={cursorHistory.length > 0}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
+              tagFilter={tagFilter}
               onClearStageFilters={() => setStageFilter(new Set())}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
@@ -644,9 +703,11 @@ export function LeadsList() {
                   dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
               onToggleStage={toggleStage}
+              scoringRules={scoringRules}
               search={search}
               selectedIds={selected}
               sortBy={sortBy}
@@ -669,6 +730,9 @@ export function LeadsList() {
               setSelected(new Set());
               setShowAssign(false);
             }}
+            onSetTemperature={(temperature) =>
+              bulkSetTemperature.mutate({ leadIds: Array.from(selected), temperature })
+            }
             onToggleAssignMenu={() => setShowAssign((current) => !current)}
             selectedCount={selected.size}
             showAssignMenu={showAssign}
