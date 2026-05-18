@@ -56,6 +56,12 @@ export type LeadNote = {
   content: string;
   createdAt: string | Date;
   userId: string;
+  user?: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
 };
 
 export type AssignableUser = {

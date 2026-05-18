@@ -171,6 +171,221 @@ function LogNoteDialog({
   );
 }
 
+function ViewNotesDialog({
+  notes,
+  currentUserId,
+  isAdminOrManager,
+  leadId,
+  onClose,
+  onAddNote,
+}: {
+  notes: LeadNote[];
+  currentUserId: string | undefined;
+  isAdminOrManager: boolean;
+  leadId: string;
+  onClose: () => void;
+  onAddNote: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const deleteNote = trpc.leads.deleteNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note deleted");
+      void utils.leads.getNotes.invalidate({ leadId });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const sorted = [...notes].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "oklch(15% 0.012 70 / 0.45)",
+        backdropFilter: "blur(2px)",
+        zIndex: 70,
+        display: "grid",
+        placeItems: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "var(--crm-surface)",
+          border: "1px solid var(--crm-border)",
+          borderRadius: "var(--crm-radius-lg)",
+          padding: 0,
+          width: 480,
+          maxHeight: "70vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "var(--crm-shadow-pop)",
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--crm-border)",
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              color: "var(--crm-fg)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <NotebookPen size={14} />
+            Notes ({sorted.length})
+          </h3>
+          <button
+            type="button"
+            className="crm-btn ghost icon"
+            onClick={onClose}
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div
+          style={{
+            overflowY: "auto",
+            padding: "8px 4px",
+            flex: 1,
+            minHeight: 80,
+          }}
+        >
+          {sorted.length === 0 ? (
+            <div
+              style={{
+                padding: "32px 20px",
+                textAlign: "center",
+                color: "var(--crm-fg-faint)",
+                fontSize: 13,
+                fontStyle: "italic",
+              }}
+            >
+              No notes yet.
+            </div>
+          ) : (
+            sorted.map((note) => {
+              const canDelete =
+                (currentUserId && note.userId === currentUserId) || isAdminOrManager;
+              const author = note.user?.name || note.user?.email || "Unknown";
+              return (
+                <div
+                  key={note.id}
+                  style={{
+                    padding: "10px 16px",
+                    borderBottom: "1px solid var(--crm-border)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--crm-fg-faint)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, color: "var(--crm-fg-muted)" }}>
+                        {author}
+                      </span>
+                      <span>·</span>
+                      <span>{relativeTime(note.createdAt)}</span>
+                    </div>
+                    {canDelete ? (
+                      <button
+                        type="button"
+                        title="Delete note"
+                        style={{
+                          opacity: 0.5,
+                          lineHeight: 1,
+                          flexShrink: 0,
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "var(--crm-fg-faint)",
+                          padding: 2,
+                        }}
+                        onClick={() => deleteNote.mutate({ noteId: note.id })}
+                        disabled={deleteNote.isPending}
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "var(--crm-fg)",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {note.content}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: "12px 20px",
+            borderTop: "1px solid var(--crm-border)",
+          }}
+        >
+          <button
+            type="button"
+            className="crm-btn ghost"
+            style={{ flex: 1, justifyContent: "center" }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            className="crm-btn primary"
+            style={{ flex: 1, justifyContent: "center" }}
+            onClick={onAddNote}
+          >
+            <NotebookPen size={13} /> Add note
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type LeadModalProps = {
   lead: Lead;
   onClose: () => void;
@@ -201,6 +416,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [assignOpen, setAssignOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [viewNotesOpen, setViewNotesOpen] = useState(false);
   const [websiteDialogOpen, setWebsiteDialogOpen] = useState(false);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [creatingTag, setCreatingTag] = useState(false);
@@ -209,7 +425,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const assignRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
   const tagRef = useRef<HTMLDivElement | null>(null);
-  const activityRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
   const userRole = (session?.user as SessionUser | undefined)?.role;
@@ -447,6 +662,19 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   return (
     <>
       {noteOpen ? <LogNoteDialog leadId={lead.id} onClose={() => setNoteOpen(false)} /> : null}
+      {viewNotesOpen ? (
+        <ViewNotesDialog
+          notes={notes}
+          currentUserId={currentUserId}
+          isAdminOrManager={isAdminOrManager}
+          leadId={lead.id}
+          onClose={() => setViewNotesOpen(false)}
+          onAddNote={() => {
+            setViewNotesOpen(false);
+            setNoteOpen(true);
+          }}
+        />
+      ) : null}
       <WebsiteGeneratorDialog
         open={websiteDialogOpen}
         onClose={() => setWebsiteDialogOpen(false)}
@@ -684,7 +912,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                       }}
                       onClick={() => {
                         setMoreOpen(false);
-                        activityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        setViewNotesOpen(true);
                       }}
                     >
                       <NotebookPen size={13} />
@@ -1190,7 +1418,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
-            <div ref={activityRef}>
+            <div>
               <h4>Recent activity</h4>
               <div className="crm-timeline">
                 <div className="crm-tl-row">
