@@ -2,8 +2,10 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import { trpc } from "@/app/_trpc/client";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import type { AppRouter } from "@/server/api/root";
 
 type MemberDetail = inferRouterOutputs<AppRouter>["teams"]["memberDetail"];
@@ -40,7 +42,21 @@ const STAGE_TONE: Record<string, string> = {
 };
 
 export function TeamMemberDetail({ userId }: { userId: string }) {
+  const { data: session } = useSession();
+  const callerRole = (session?.user as { role?: string } | undefined)?.role;
+  const isAdmin = callerRole === "ADMIN";
+
+  const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.teams.memberDetail.useQuery({ userId });
+
+  const promoteRole = trpc.teams.promoteRole.useMutation({
+    onSuccess: () => {
+      toast.success("Role updated");
+      void utils.teams.memberDetail.invalidate({ userId });
+      void utils.teams.organizationMembers.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   if (isLoading) {
     return (
@@ -75,9 +91,35 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
           </div>
           <div>
             <h1 className="crm-page-title">{name}</h1>
-            <div className="crm-page-sub">
-              {user.role} {user.team ? `· ${user.team.name}` : ""}
-              {user.email ? ` · ${user.email}` : ""}
+            <div className="crm-page-sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {isAdmin ? (
+                <select
+                  value={user.role}
+                  onChange={(e) =>
+                    promoteRole.mutate({
+                      userId: user.id,
+                      role: e.target.value as "ADMIN" | "MANAGER" | "USER",
+                    })
+                  }
+                  disabled={promoteRole.isPending}
+                  style={{
+                    padding: "2px 6px",
+                    background: "var(--crm-surface)",
+                    border: "1px solid var(--crm-border)",
+                    borderRadius: "var(--crm-radius-sm)",
+                    color: "var(--crm-fg-faint)",
+                    fontSize: 12,
+                  }}
+                >
+                  <option value="USER">User</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              ) : (
+                <span>{user.role}</span>
+              )}
+              {user.team ? <span>· {user.team.name}</span> : null}
+              {user.email ? <span>· {user.email}</span> : null}
             </div>
           </div>
         </div>
