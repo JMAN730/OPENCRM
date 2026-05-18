@@ -187,3 +187,41 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1); // 7-day rollup
   });
 });
+
+describe("dashboardRouter.getMyPhoneReach", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+    prisma.lead.groupBy.mockResolvedValue([]);
+  });
+
+  it("returns empty array when user has no organizationId", async () => {
+    const { caller: orphan } = createTestCaller({
+      sessionOverrides: { organizationId: null },
+    });
+    const result = await orphan.dashboard.getMyPhoneReach();
+    expect(result).toEqual([]);
+  });
+
+  it("maps groupBy results to {outcome, count} pairs", async () => {
+    prisma.lead.groupBy.mockResolvedValue([
+      { callOutcome: "ANSWERED", _count: { id: 5 } },
+      { callOutcome: "NO_ANSWER", _count: { id: 3 } },
+    ]);
+    const result = await caller.dashboard.getMyPhoneReach();
+    expect(result).toEqual([
+      { outcome: "ANSWERED", count: 5 },
+      { outcome: "NO_ANSWER", count: 3 },
+    ]);
+  });
+
+  it("scopes query to the caller's userId and organizationId, excluding NOT_CONTACTED", async () => {
+    await caller.dashboard.getMyPhoneReach();
+    const callArgs = prisma.lead.groupBy.mock.calls[0][0];
+    expect(callArgs.where.organizationId).toBe("org-1");
+    expect(callArgs.where.assignedToId).toBe("user-1");
+    expect(callArgs.where.callOutcome).toEqual({ not: "NOT_CONTACTED" });
+  });
+});
