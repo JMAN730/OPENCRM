@@ -17,7 +17,7 @@ const optionalShortString = (max: number) =>
   z.string().max(max).optional();
 const optionalRating = z.number().min(0).max(5).optional();
 const optionalReviewCount = z.number().int().min(0).optional();
-const optionalTemperatureOverride = z.enum(["HOT"]).nullable();
+const optionalTemperatureOverride = z.enum(["HOT", "WARM", "COOL"]).nullable();
 
 const leadInputSchema = z.object({
   firstName: optionalShortString(100),
@@ -942,7 +942,7 @@ export const leadsRouter = createTRPCRouter({
     .input(
       z.object({
         leadIds: z.array(z.string()).min(1).max(500),
-        temperature: z.enum(["HOT"]).nullable(),
+        temperature: z.enum(["HOT", "WARM", "COOL"]).nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
