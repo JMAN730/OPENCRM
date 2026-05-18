@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
+  BookOpen,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -58,6 +59,69 @@ import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+
+const SALES_SCRIPTS = [
+  {
+    category: "Opening",
+    scripts: [
+      {
+        title: "Cold Call Opener",
+        body: "Hi [Prospect Name], this is [Your Name] with [Company]. I know I'm catching you out of the blue — I'll keep it quick. We help [industry] businesses [core benefit]. Is that something worth a 2-minute chat about?",
+      },
+      {
+        title: "Warm Follow-up",
+        body: "Hi [Prospect Name], this is [Your Name] calling back — we spoke briefly about [topic]. I just wanted to follow up and see if you had any questions or if it makes sense to take the next step.",
+      },
+    ],
+  },
+  {
+    category: "Objection Handling",
+    scripts: [
+      {
+        title: "Too Busy",
+        body: "Totally understand — I'll be quick. I'm only reaching out because we've seen similar businesses save [X hours/dollars] using our solution. Would 5 minutes this week or next be worth it?",
+      },
+      {
+        title: "Not Interested",
+        body: "I appreciate the honesty. Can I ask — is it that you already have this handled, or is it more that the timing isn't right? I want to make sure I'm not wasting your time.",
+      },
+      {
+        title: "Already Have a Solution",
+        body: "That's great — it means you see the value in this. A lot of our clients switched from [Competitor]. The main reason was [key differentiator]. Would it make sense to do a quick comparison?",
+      },
+      {
+        title: "Send Me an Email",
+        body: "Absolutely, I'll send something over. Just so I can keep it relevant — what's the biggest challenge you're facing with [topic] right now?",
+      },
+    ],
+  },
+  {
+    category: "Closing",
+    scripts: [
+      {
+        title: "Trial Close",
+        body: "Based on what we've talked about, it sounds like this could be a good fit for you. What would need to happen on your end to move forward?",
+      },
+      {
+        title: "Schedule a Demo",
+        body: "I'd love to show you how this works in practice. I have time Tuesday at 10am or Thursday at 2pm — does either of those work for a quick 20-minute walkthrough?",
+      },
+      {
+        title: "Next Steps",
+        body: "Great — so the next step would be [action]. I'll send over [materials] today. Does that sound good?",
+      },
+    ],
+  },
+  {
+    category: "Voicemail",
+    scripts: [
+      {
+        title: "Standard Voicemail",
+        body: "Hi [Prospect Name], this is [Your Name] from [Company]. I'm calling because we help [industry] businesses with [benefit]. I'll be quick — give me a call back at [phone] when you get a chance, or I'll try you again [day]. Thanks!",
+      },
+    ],
+  },
+];
 
 function taskDueDateParts(task: { id: string; dueDate: Date | string }) {
   const { dueDate } = task;
@@ -387,6 +451,190 @@ function ViewNotesDialog({
   );
 }
 
+function ScriptsDialog({ onClose }: { onClose: () => void }) {
+  const [openCat, setOpenCat] = useState<string | null>(SALES_SCRIPTS[0]?.category ?? null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const handleCopy = (key: string, text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "oklch(15% 0.012 70 / 0.45)",
+        backdropFilter: "blur(2px)",
+        zIndex: 70,
+        display: "grid",
+        placeItems: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "var(--crm-surface)",
+          border: "1px solid var(--crm-border)",
+          borderRadius: "var(--crm-radius-lg)",
+          padding: 0,
+          width: 520,
+          maxHeight: "70vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "var(--crm-shadow-pop)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--crm-border)",
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              color: "var(--crm-fg)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <BookOpen size={14} />
+            Scripts
+          </h3>
+          <button type="button" className="crm-btn ghost icon" onClick={onClose} title="Close">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 80 }}>
+          {SALES_SCRIPTS.map((group) => {
+            const isOpen = openCat === group.category;
+            return (
+              <div key={group.category} style={{ borderBottom: "1px solid var(--crm-border)" }}>
+                <button
+                  type="button"
+                  onClick={() => setOpenCat(isOpen ? null : group.category)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "11px 20px",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--crm-fg)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textAlign: "left",
+                  }}
+                >
+                  <span>{group.category}</span>
+                  <span style={{ color: "var(--crm-fg-faint)", fontSize: 11 }}>
+                    {group.scripts.length} {group.scripts.length === 1 ? "script" : "scripts"}
+                    {" "}
+                    <ArrowDown
+                      size={11}
+                      style={{
+                        display: "inline",
+                        verticalAlign: "middle",
+                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform 0.15s",
+                      }}
+                    />
+                  </span>
+                </button>
+
+                {isOpen
+                  ? group.scripts.map((script) => {
+                      const key = `${group.category}::${script.title}`;
+                      return (
+                        <div
+                          key={script.title}
+                          style={{
+                            margin: "0 12px 10px",
+                            border: "1px solid var(--crm-border)",
+                            borderRadius: "var(--crm-radius-md)",
+                            background: "var(--crm-surface-2, var(--crm-surface))",
+                            padding: "12px 14px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: "var(--crm-fg)",
+                              }}
+                            >
+                              {script.title}
+                            </span>
+                            <button
+                              type="button"
+                              className="crm-btn ghost"
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              onClick={() => handleCopy(key, script.body)}
+                            >
+                              {copied === key ? <><Check size={11} /> Copied</> : "Copy"}
+                            </button>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "var(--crm-fg-muted, var(--crm-fg))",
+                              whiteSpace: "pre-wrap",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            {script.body}
+                          </div>
+                        </div>
+                      );
+                    })
+                  : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            padding: "12px 20px",
+            borderTop: "1px solid var(--crm-border)",
+          }}
+        >
+          <button
+            type="button"
+            className="crm-btn ghost"
+            style={{ width: "100%", justifyContent: "center" }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type LeadModalProps = {
   lead: Lead;
   onClose: () => void;
@@ -424,6 +672,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [viewNotesOpen, setViewNotesOpen] = useState(false);
+  const [viewScriptsOpen, setViewScriptsOpen] = useState(false);
   const [websiteDialogOpen, setWebsiteDialogOpen] = useState(false);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [creatingTag, setCreatingTag] = useState(false);
@@ -708,6 +957,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
           }}
         />
       ) : null}
+      {viewScriptsOpen ? <ScriptsDialog onClose={() => setViewScriptsOpen(false)} /> : null}
       <WebsiteGeneratorDialog
         open={websiteDialogOpen}
         onClose={() => setWebsiteDialogOpen(false)}
@@ -951,6 +1201,10 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 ) : null}
               </div>
             ) : null}
+
+            <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
+              <BookOpen size={13} /> Scripts
+            </button>
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button
