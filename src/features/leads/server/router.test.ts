@@ -599,4 +599,89 @@ describe("leadsRouter", () => {
       });
     });
   });
+
+  describe("lead tags and qualification", () => {
+    it("upserts tags by normalized key to prevent case-insensitive duplicates", async () => {
+      prisma.leadTag.upsert.mockResolvedValue({ id: "tag-1", name: "Priority" });
+
+      const result = await caller.leads.createTag({ name: "priority" });
+
+      expect(result).toEqual({ id: "tag-1", name: "Priority" });
+      expect(prisma.leadTag.upsert).toHaveBeenCalledWith({
+        where: {
+          organizationId_tagKey: {
+            organizationId: "org-1",
+            tagKey: "priority",
+          },
+        },
+        update: {},
+        create: { name: "priority", tagKey: "priority", organizationId: "org-1" },
+        select: { id: true, name: true },
+      });
+    });
+
+    it("connects only scoped leads to organization tags", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", tags: [{ id: "tag-1", name: "Priority" }] });
+
+      await caller.leads.addTagToLead({ leadId: "lead-1", tagId: "tag-1" });
+
+      expect(prisma.lead.findFirst).toHaveBeenCalledWith({
+        where: { id: "lead-1", organizationId: "org-1" },
+        select: { id: true },
+      });
+      expect(prisma.leadTag.findFirst).toHaveBeenCalledWith({
+        where: { id: "tag-1", organizationId: "org-1" },
+        select: { id: true },
+      });
+      expect(prisma.lead.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "lead-1" },
+          data: { tags: { connect: { id: "tag-1" } } },
+        }),
+      );
+    });
+
+    it("stores a generated qualification summary on the scoped lead", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        firstName: null,
+        lastName: null,
+        company: "Big Rapids Fleet",
+        city: "Big Rapids",
+        state: "MI",
+        source: "Mobile Mechanics",
+        phone: "1234567890",
+        email: null,
+        website: null,
+        rating: 4.3,
+        reviewCount: 6,
+        status: "NOT_CONTACTED",
+        callOutcome: "NOT_CONTACTED",
+        temperatureOverride: "COOL",
+      });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", qualificationSummary: "summary" });
+
+      await caller.leads.qualify({ id: "lead-1" });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "lead-1" },
+          data: {
+            qualificationSummary: expect.stringContaining("Big Rapids Fleet in Big Rapids, MI"),
+          },
+        }),
+      );
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: {
+          leadId: "lead-1",
+          userId: "user-1",
+          type: "LEAD_QUALIFIED",
+          description: "Generated lead qualification summary",
+          organizationId: "org-1",
+        },
+      });
+    });
+  });
 });

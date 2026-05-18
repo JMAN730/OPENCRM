@@ -24,6 +24,7 @@ export type Lead = {
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
+  qualificationSummary?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;
@@ -35,6 +36,10 @@ export type Lead = {
     label: string;
     hint?: string | null;
   } | null;
+  tags?: Array<{
+    id: string;
+    name: string;
+  }> | null;
   _count?: {
     calls?: number;
     notes?: number;

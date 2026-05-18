@@ -27,8 +27,11 @@ import {
   MoreHorizontal,
   NotebookPen,
   Phone,
+  Plus,
+  Sparkles,
   SquareCheck,
   Star,
+  Tag,
   Trash2,
   X,
 } from "lucide-react";
@@ -199,9 +202,13 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [websiteDialogOpen, setWebsiteDialogOpen] = useState(false);
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const [creatingTag, setCreatingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const assignRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  const tagRef = useRef<HTMLDivElement | null>(null);
   const activityRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
@@ -249,6 +256,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const { data: customOutcomes = [] } = trpc.leads.customOutcomes.list.useQuery(undefined, {
     staleTime: 30_000,
   });
+  const { data: orgTags = [] } = trpc.leads.listOrgTags.useQuery(undefined, {
+    staleTime: 30_000,
+  });
+  const leadTags = lead.tags ?? [];
+  const availableTags = orgTags.filter((tag) => !leadTags.some((leadTag) => leadTag.id === tag.id));
   const createCustomOutcome = trpc.leads.customOutcomes.create.useMutation({
     onSuccess: (created) => {
       toast.success("Outcome added");
@@ -267,6 +279,40 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onSuccess: () => {
       toast.success("Temperature updated");
       void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const qualifyLead = trpc.leads.qualify.useMutation({
+    onSuccess: () => {
+      toast.success("Lead qualified");
+      void utils.leads.getAll.invalidate();
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const addTagToLead = trpc.leads.addTagToLead.useMutation({
+    onSuccess: () => {
+      toast.success("Tag added");
+      setTagMenuOpen(false);
+      setCreatingTag(false);
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const removeTagFromLead = trpc.leads.removeTagFromLead.useMutation({
+    onSuccess: () => {
+      toast.success("Tag removed");
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const createTag = trpc.leads.createTag.useMutation({
+    onSuccess: (tag) => {
+      toast.success("Tag created");
+      setNewTagName("");
+      setCreatingTag(false);
+      void utils.leads.listOrgTags.invalidate();
+      addTagToLead.mutate({ leadId: lead.id, tagId: tag.id });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -316,6 +362,10 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onError: (error) => toast.error(error.message),
   });
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
+  const qualificationSummary =
+    qualifyLead.data?.id === lead.id
+      ? qualifyLead.data.qualificationSummary ?? ""
+      : lead.qualificationSummary ?? "";
 
   useEffect(() => {
     if (!outcomeOpen) return;
@@ -356,6 +406,20 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [moreOpen]);
+
+  useEffect(() => {
+    if (!tagMenuOpen) return;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (tagRef.current && !tagRef.current.contains(event.target as Node)) {
+        setTagMenuOpen(false);
+        setCreatingTag(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [tagMenuOpen]);
 
   const chooseOutcome = (nextOutcome: string | null, nextCustomId: string | null = null) => {
     setOutcome(nextOutcome);
@@ -923,6 +987,46 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                     </select>
                   </div>
                   <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>
+                        AI qualification
+                      </div>
+                      <button
+                        type="button"
+                        className="crm-btn ghost sm"
+                        style={{ height: 22, padding: "0 7px", fontSize: 12, gap: 5 }}
+                        disabled={qualifyLead.isPending}
+                        onClick={() => qualifyLead.mutate({ id: lead.id })}
+                      >
+                        <Sparkles size={12} />
+                        {qualifyLead.isPending
+                          ? "Qualifying..."
+                          : qualificationSummary
+                            ? "Refresh"
+                            : "Qualify"}
+                      </button>
+                    </div>
+                    <div
+                      style={{
+                        minHeight: 34,
+                        color: qualificationSummary ? "var(--crm-fg-muted)" : "var(--crm-fg-faint)",
+                        fontSize: 12,
+                        fontStyle: qualificationSummary ? "normal" : "italic",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {qualificationSummary || "No qualification yet. Click Qualify to generate."}
+                    </div>
+                  </div>
+                  <div>
                     <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>
                       Last activity
                     </div>
@@ -939,6 +1043,165 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 18,
+                borderTop: "1px solid var(--crm-border)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <h4 style={{ margin: 0 }}>Tags</h4>
+                <div ref={tagRef} style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="crm-btn ghost sm"
+                    style={{ height: 26, padding: "0 8px", fontSize: 12, gap: 5 }}
+                    onClick={() => setTagMenuOpen((value) => !value)}
+                    aria-expanded={tagMenuOpen}
+                  >
+                    <Plus size={12} />
+                    Add tag
+                  </button>
+                  {tagMenuOpen ? (
+                    <div
+                      className="crm-card"
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        right: 0,
+                        width: 220,
+                        padding: 6,
+                        zIndex: 80,
+                        boxShadow: "0 6px 24px rgba(0,0,0,.25)",
+                        borderRadius: "var(--crm-radius-md)",
+                      }}
+                    >
+                      {availableTags.length > 0 ? (
+                        availableTags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            className="crm-nav-item"
+                            style={{
+                              borderRadius: "var(--crm-radius-sm)",
+                              fontSize: 12,
+                              width: "100%",
+                              textAlign: "left",
+                            }}
+                            disabled={addTagToLead.isPending}
+                            onClick={() => addTagToLead.mutate({ leadId: lead.id, tagId: tag.id })}
+                          >
+                            <Tag size={12} />
+                            <span>{tag.name}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div style={{ padding: "8px 10px", fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                          No available tags
+                        </div>
+                      )}
+                      <div style={{ height: 1, background: "var(--crm-border)", margin: "6px 4px" }} />
+                      {creatingTag ? (
+                        <div style={{ padding: 4 }}>
+                          <input
+                            autoFocus
+                            placeholder="New tag name"
+                            value={newTagName}
+                            onChange={(event) => setNewTagName(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && newTagName.trim()) {
+                                createTag.mutate({ name: newTagName.trim() });
+                              }
+                              if (event.key === "Escape") setCreatingTag(false);
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "6px 8px",
+                              border: "1px solid var(--crm-border)",
+                              borderRadius: "var(--crm-radius-sm)",
+                              background: "var(--crm-surface-2)",
+                              color: "var(--crm-fg)",
+                              fontSize: 12,
+                              outline: "none",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="crm-btn primary"
+                            style={{ width: "100%", height: 28, marginTop: 6, justifyContent: "center", fontSize: 12 }}
+                            disabled={!newTagName.trim() || createTag.isPending || addTagToLead.isPending}
+                            onClick={() => createTag.mutate({ name: newTagName.trim() })}
+                          >
+                            {createTag.isPending ? "Creating..." : "Create & add"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="crm-nav-item"
+                          style={{
+                            borderRadius: "var(--crm-radius-sm)",
+                            fontSize: 12,
+                            width: "100%",
+                            textAlign: "left",
+                          }}
+                          onClick={() => setCreatingTag(true)}
+                        >
+                          <Plus size={12} />
+                          <span>New tag</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              {leadTags.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {leadTags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        height: 24,
+                        padding: "0 8px",
+                        border: "1px solid var(--crm-border)",
+                        borderRadius: "var(--crm-radius-sm)",
+                        background: "var(--crm-surface-2)",
+                        color: "var(--crm-fg-muted)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <Tag size={11} />
+                      {tag.name}
+                      <button
+                        type="button"
+                        title={`Remove ${tag.name}`}
+                        disabled={removeTagFromLead.isPending}
+                        onClick={() => removeTagFromLead.mutate({ leadId: lead.id, tagId: tag.id })}
+                        style={{ display: "inline-flex", opacity: 0.65, lineHeight: 1 }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: "var(--crm-fg-faint)", fontSize: 12, fontStyle: "italic" }}>No tags</div>
+              )}
             </div>
 
             <div ref={activityRef}>
