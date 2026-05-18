@@ -28,6 +28,7 @@
 *.pem
 /.npm-cache
 /.claude/settings.local.json
+/.recovery/
 
 # debug
 npm-debug.log*

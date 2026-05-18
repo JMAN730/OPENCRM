@@ -151,6 +151,7 @@ model Lead {
 
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
+  qualificationSummary String?
 
   calls      CallLog[]
   notes      Note[]
@@ -188,14 +189,16 @@ enum LeadTemperatureOverride {
 }
 
 model LeadTag {
-  id    String @id @default(cuid())
-  name  String
-  leads Lead[]
+  id     String @id @default(cuid())
+  name   String
+  tagKey String
+  leads  Lead[]
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([name, organizationId])
+  @@unique([organizationId, tagKey])
 }
 
 model Pipeline {
@@ -303,6 +306,7 @@ enum ActivityType {
   CALL_OUTCOME
   CALL_LOGGED
   LEAD_TEMPERATURE_OVERRIDE
+  LEAD_QUALIFIED
   TASK_CREATED
   TASK_COMPLETED
   NOTE_ADDED
