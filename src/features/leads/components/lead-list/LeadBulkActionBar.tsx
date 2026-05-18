@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { avatarClass, initials, type AssignableUser } from "./shared";
 
-type Temperature = "HOT" | "WARM" | "COOL";
+type Temperature = "HOT";
 
 type LeadBulkActionBarProps = {
   assignableUsers: AssignableUser[];
@@ -20,8 +20,6 @@ type LeadBulkActionBarProps = {
 
 const TEMP_OPTIONS: Array<{ value: Temperature | null; label: string }> = [
   { value: "HOT", label: "🔥 Hot" },
-  { value: "WARM", label: "🌤 Warm" },
-  { value: "COOL", label: "❄️ Cool" },
   { value: null, label: "Clear" },
 ];
 
