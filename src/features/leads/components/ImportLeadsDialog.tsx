@@ -30,11 +30,13 @@ const FIELD_MAP: Record<string, string> = {
   // Contact
   email: "email", "email address": "email",
   phone: "phone", "phone number": "phone", mobile: "phone", telephone: "phone",
+  "normalized phone": "phone",
   // Location
   city: "city", "city/town": "city", town: "city", location: "city",
   state: "state", province: "state", region: "state",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
+  "google maps url": "mapsUrl", "maps url": "mapsUrl", "google maps": "mapsUrl",
   rating: "rating", stars: "rating", "star rating": "rating", reviews: "reviewCount",
   "review count": "reviewCount", "total reviews": "reviewCount",
   source: "source", "lead source": "source", category: "source",
@@ -50,6 +52,7 @@ type ParsedLead = {
   city?: string;
   state?: string;
   website?: string;
+  mapsUrl?: string;
   rating?: number;
   reviewCount?: number;
   source?: string;
@@ -107,6 +110,11 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
     const coerced = coerceUrl(lead.website);
     if (coerced) lead.website = coerced;
     else delete lead.website;
+  }
+
+  // Validate mapsUrl — must be an absolute URL
+  if (lead.mapsUrl) {
+    if (!isValidUrl(lead.mapsUrl)) delete lead.mapsUrl;
   }
 
   const validStatuses = ["NOT_CONTACTED","CONNECTED","AI_VOICEMAIL","NO_ANSWER","HUNG_UP"] as const;

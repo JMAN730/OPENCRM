@@ -28,6 +28,7 @@ const leadInputSchema = z.object({
   city: optionalShortString(100),
   state: optionalShortString(40),
   website: optionalUrl,
+  mapsUrl: optionalUrl,
   rating: optionalRating,
   reviewCount: optionalReviewCount,
   status: z
@@ -394,6 +395,7 @@ export const leadsRouter = createTRPCRouter({
         if (row.city) data.city = row.city;
         if (row.state) data.state = row.state;
         if (row.website) data.website = row.website;
+        if (row.mapsUrl) data.mapsUrl = row.mapsUrl;
         if (row.source) data.source = row.source;
         if (typeof row.rating === "number") data.rating = row.rating;
         if (typeof row.reviewCount === "number") data.reviewCount = row.reviewCount;
