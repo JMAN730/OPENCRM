@@ -285,9 +285,8 @@ export function tempOf(score: number): LeadTemperature {
 
 export function effectiveTempOf(lead: Lead): LeadTemperature {
   if (lead.temperatureOverride === "HOT") return "hot";
-  if (lead.temperatureOverride === "WARM") return "warm";
-  if (lead.temperatureOverride === "COOL") return "cool";
-  return tempOf(scoreOf(lead));
+  if (lead.status === "CONNECTED") return "warm";
+  return "cool";
 }
 
 export function normalizeWebsiteHref(website?: string | null): string | null {

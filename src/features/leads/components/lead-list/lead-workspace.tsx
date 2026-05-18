@@ -37,7 +37,6 @@ import {
   OUTCOMES,
   relativeTime,
   reviewSummary,
-  scoreOf,
   tempLabel,
   type Lead,
   type LeadNote,
@@ -483,8 +482,6 @@ export function EngagementCard({
         >
           <option value="">Auto ({tempLabel(effectiveTempOf(lead))})</option>
           <option value="HOT">Hot</option>
-          <option value="WARM">Warm</option>
-          <option value="COOL">Cool</option>
         </select>
       </label>
       {kv("Last activity", "Recent")}
@@ -497,8 +494,7 @@ export function EngagementCard({
       </button>
       {showWhy ? (
         <div className="rounded-lg bg-muted/50 p-3 text-xs leading-5 text-muted-foreground">
-          Score uses review quality, review volume, and engagement status. Current base score is{" "}
-          {scoreOf(lead)}.
+          Leads start cool. They move to warm automatically once connected. Hot must be set manually.
         </div>
       ) : null}
     </Card>

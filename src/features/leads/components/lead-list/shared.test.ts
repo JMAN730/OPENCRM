@@ -19,19 +19,34 @@ describe("lead score helpers", () => {
     expect(high).toBeGreaterThan(low);
   });
 
-  it("applies manual temperature override without changing numeric score", () => {
-    const lead = makeLead({
-      rating: 4.2,
-      reviewCount: 20,
-      temperatureOverride: "HOT",
-    });
-
-    expect(scoreOf(lead)).toBeLessThan(70);
-    expect(effectiveTempOf(lead)).toBe("hot");
-  });
-
   it("formats review summary text", () => {
     expect(reviewSummary(makeLead({ rating: 4.6, reviewCount: 128 }))).toBe("4.6 ★ (128 reviews)");
+  });
+});
+
+describe("effectiveTempOf", () => {
+  it("returns cool for a new lead with no contact", () => {
+    expect(effectiveTempOf(makeLead())).toBe("cool");
+  });
+
+  it("returns warm automatically when the lead is connected", () => {
+    expect(effectiveTempOf(makeLead({ status: "CONNECTED" }))).toBe("warm");
+  });
+
+  it("returns cool for non-connected statuses", () => {
+    expect(effectiveTempOf(makeLead({ status: "NO_ANSWER" }))).toBe("cool");
+    expect(effectiveTempOf(makeLead({ status: "AI_VOICEMAIL" }))).toBe("cool");
+    expect(effectiveTempOf(makeLead({ status: "HUNG_UP" }))).toBe("cool");
+  });
+
+  it("returns hot when manually overridden regardless of status", () => {
+    expect(effectiveTempOf(makeLead({ status: "NOT_CONTACTED", temperatureOverride: "HOT" }))).toBe("hot");
+    expect(effectiveTempOf(makeLead({ status: "CONNECTED", temperatureOverride: "HOT" }))).toBe("hot");
+  });
+
+  it("ignores WARM/COOL overrides and falls back to status-based logic", () => {
+    expect(effectiveTempOf(makeLead({ status: "NOT_CONTACTED", temperatureOverride: "WARM" }))).toBe("cool");
+    expect(effectiveTempOf(makeLead({ status: "CONNECTED", temperatureOverride: "COOL" }))).toBe("warm");
   });
 });
 
