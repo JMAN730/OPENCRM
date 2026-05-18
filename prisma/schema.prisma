@@ -150,7 +150,10 @@ model Lead {
   assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   customOutcomeId String?
-  customOutcome   CustomOutcome? @relation(fields: [customOutcomeId], references: [id], onDelete: SetNull)
+  customOutcome   CustomOutcome? @relation("PrimaryOutcome", fields: [customOutcomeId], references: [id], onDelete: SetNull)
+
+  secondaryOutcomeId String?
+  secondaryOutcome   CustomOutcome? @relation("SecondaryOutcome", fields: [secondaryOutcomeId], references: [id], onDelete: SetNull)
 
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
@@ -272,7 +275,8 @@ model CustomOutcome {
   hint           String?      @db.VarChar(200)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leads          Lead[]
+  primaryLeads   Lead[] @relation("PrimaryOutcome")
+  secondaryLeads Lead[] @relation("SecondaryOutcome")
 
   createdAt DateTime @default(now())
 
