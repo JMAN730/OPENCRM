@@ -231,11 +231,11 @@ model PipelineStage {
 }
 
 model CallLog {
-  id     String @id @default(cuid())
-  leadId String
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id     String  @id @default(cuid())
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   duration     Int?
   status       CallStatus

@@ -1,31 +1,173 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { Call as TwilioCall, Device } from "@twilio/voice-sdk";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Phone, PhoneOff, Delete, Mic, MicOff, Volume2, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { trpc } from "@/app/_trpc/client";
+import { formatDistanceToNow } from "date-fns";
 
-export function Dialer() {
-  const [phoneNumber, setPhoneNumber] = useState("");
+const STATUS_BADGES: Record<string, string> = {
+  CONNECTED: "bg-green-100 text-green-700",
+  BUSY: "bg-yellow-100 text-yellow-700",
+  NO_ANSWER: "bg-yellow-100 text-yellow-700",
+  FAILED: "bg-red-100 text-red-700",
+  CANCELED: "bg-gray-100 text-gray-600",
+};
+
+function mapCallStatus(twilioStatus: string): "BUSY" | "NO_ANSWER" | "CONNECTED" | "FAILED" | "CANCELED" {
+  switch (twilioStatus) {
+    case "open": return "CONNECTED";
+    case "busy": return "BUSY";
+    case "no-answer": return "NO_ANSWER";
+    case "canceled": return "CANCELED";
+    default: return "FAILED";
+  }
+}
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+interface DialerProps {
+  leadId?: string;
+  initialPhone?: string;
+}
+
+export function Dialer({ leadId, initialPhone }: DialerProps) {
+  const [phoneNumber, setPhoneNumber] = useState(initialPhone ?? "");
   const [isInCall, setIsInCall] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [deviceReady, setDeviceReady] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+
+  const deviceRef = useRef<Device | null>(null);
+  const activeCallRef = useRef<TwilioCall | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { data: tokenData, error: tokenError } = trpc.calls.generateToken.useQuery(undefined, {
+    retry: false,
+  });
+  const logCallMutation = trpc.calls.logCall.useMutation();
+  const { data: recentCalls, refetch: refetchRecent } = trpc.calls.getRecent.useQuery();
+
+  // Initialize Twilio Device when token arrives
+  useEffect(() => {
+    if (!tokenData?.token) return;
+
+    let device: Device;
+    (async () => {
+      const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
+      device = new TwilioDevice(tokenData.token, { logLevel: "warn" });
+
+      device.on("registered", () => setDeviceReady(true));
+      device.on("error", (err: { message: string }) => {
+        toast.error(`Dialer error: ${err.message}`);
+      });
+
+      await device.register();
+      deviceRef.current = device;
+    })();
+
+    return () => {
+      device?.destroy();
+      deviceRef.current = null;
+      setDeviceReady(false);
+    };
+  }, [tokenData?.token]);
+
+  // Duration timer while in call
+  useEffect(() => {
+    if (!isInCall) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setCallDuration(0);
+      return;
+    }
+    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isInCall]);
 
   const handleNumberClick = (num: string) => {
     if (phoneNumber.length < 15) setPhoneNumber((prev) => prev + num);
+    // Send DTMF if in a live call
+    activeCallRef.current?.sendDigits(num);
   };
 
   const handleDelete = () => setPhoneNumber((prev) => prev.slice(0, -1));
 
-  const toggleCall = () => {
+  const startCall = async () => {
     if (!phoneNumber) { toast.error("Please enter a phone number"); return; }
-    if (isInCall) { setIsInCall(false); toast.info("Call ended"); }
-    else { setIsInCall(true); toast.success(`Calling ${phoneNumber}...`); }
+    if (!deviceRef.current || !deviceReady) {
+      toast.error("Dialer not ready — check Twilio configuration");
+      return;
+    }
+
+    setIsConnecting(true);
+    try {
+      const call = await deviceRef.current.connect({ params: { To: phoneNumber } });
+      activeCallRef.current = call;
+      setIsInCall(true);
+      setIsConnecting(false);
+      toast.success(`Calling ${phoneNumber}…`);
+
+      call.on("accept", () => { /* call connected */ });
+
+      call.on("disconnect", () => {
+        const status = mapCallStatus(call.status());
+        activeCallRef.current = null;
+        setIsInCall(false);
+        setIsMuted(false);
+        const duration = callDuration > 0 ? callDuration : undefined;
+        logCallMutation.mutate(
+          {
+            leadId,
+            status,
+            duration,
+            twilioCallSid: call.parameters.CallSid,
+          },
+          { onSuccess: () => refetchRecent() }
+        );
+        toast.info("Call ended");
+      });
+
+      call.on("cancel", () => {
+        activeCallRef.current = null;
+        setIsInCall(false);
+        setIsConnecting(false);
+      });
+
+      call.on("error", (err: { message: string }) => {
+        toast.error(`Call error: ${err.message}`);
+        activeCallRef.current = null;
+        setIsInCall(false);
+        setIsConnecting(false);
+      });
+    } catch (err) {
+      toast.error("Failed to start call");
+      setIsConnecting(false);
+    }
   };
 
-  const keypad = ["1","2","3","4","5","6","7","8","9","*","0","#"];
+  const endCall = () => {
+    activeCallRef.current?.disconnect();
+  };
+
+  const toggleMute = () => {
+    if (!activeCallRef.current) return;
+    const next = !isMuted;
+    activeCallRef.current.mute(next);
+    setIsMuted(next);
+  };
+
+  const twilioUnconfigured = tokenError?.data?.code === "PRECONDITION_FAILED";
+  const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -43,8 +185,9 @@ export function Dialer() {
               onChange={(e) => setPhoneNumber(e.target.value)}
               className="text-2xl h-14 text-center font-bold tracking-widest"
               placeholder="000-000-0000"
+              disabled={isInCall}
             />
-            {phoneNumber && (
+            {phoneNumber && !isInCall && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -55,6 +198,12 @@ export function Dialer() {
               </Button>
             )}
           </div>
+
+          {isInCall && (
+            <div className="text-center text-lg font-mono text-muted-foreground">
+              {formatDuration(callDuration)}
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             {keypad.map((key) => (
@@ -75,8 +224,11 @@ export function Dialer() {
                 <Button
                   variant="outline"
                   size="icon"
-                  className={cn("h-14 w-14 rounded-full", isMuted && "bg-destructive/10 text-destructive border-destructive/20")}
-                  onClick={() => setIsMuted(!isMuted)}
+                  className={cn(
+                    "h-14 w-14 rounded-full",
+                    isMuted && "bg-destructive/10 text-destructive border-destructive/20"
+                  )}
+                  onClick={toggleMute}
                 >
                   {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
                 </Button>
@@ -88,13 +240,22 @@ export function Dialer() {
             <Button
               className={cn(
                 "h-14 w-14 rounded-full shadow-lg transition-all",
-                isInCall ? "bg-destructive hover:bg-destructive/90" : "bg-green-500 hover:bg-green-600"
+                isInCall
+                  ? "bg-destructive hover:bg-destructive/90"
+                  : "bg-green-500 hover:bg-green-600"
               )}
-              onClick={toggleCall}
+              disabled={isConnecting}
+              onClick={isInCall ? endCall : startCall}
             >
               {isInCall ? <PhoneOff size={24} /> : <Phone size={24} />}
             </Button>
           </div>
+
+          {!deviceReady && !isInCall && !twilioUnconfigured && (
+            <p className="text-xs text-center text-muted-foreground">
+              {tokenData ? "Connecting to dialer…" : "Loading…"}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -106,11 +267,48 @@ export function Dialer() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-            <Phone size={36} className="text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground">No calls yet.</p>
-            <p className="text-xs text-muted-foreground">Calls you make will appear here.</p>
-          </div>
+          {twilioUnconfigured ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <Phone size={36} className="text-muted-foreground/20" />
+              <p className="text-sm font-medium text-muted-foreground">Twilio not configured</p>
+              <p className="text-xs text-muted-foreground">
+                Add TWILIO_ACCOUNT_SID, TWILIO_API_KEY, TWILIO_API_SECRET, and TWILIO_TWIML_APP_SID
+                to your environment variables.
+              </p>
+            </div>
+          ) : recentCalls && recentCalls.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {recentCalls.map((call: { id: string; status: string; duration: number | null; createdAt: string | Date; lead: { firstName: string | null; lastName: string | null } | null }) => (
+                <li key={call.id} className="flex items-center justify-between py-3 gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {call.lead
+                        ? `${call.lead.firstName ?? ""} ${call.lead.lastName ?? ""}`.trim() || "Unknown"
+                        : "No lead"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(call.createdAt), { addSuffix: true })}
+                      {call.duration ? ` · ${formatDuration(call.duration)}` : ""}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs font-medium px-2 py-0.5 rounded-full shrink-0",
+                      STATUS_BADGES[call.status] ?? "bg-gray-100 text-gray-600"
+                    )}
+                  >
+                    {call.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <Phone size={36} className="text-muted-foreground/20" />
+              <p className="text-sm text-muted-foreground">No calls yet.</p>
+              <p className="text-xs text-muted-foreground">Calls you make will appear here.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

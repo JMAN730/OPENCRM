@@ -984,9 +984,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
 
           <div className="crm-modal-actions">
             {lead.phone ? (
-              <a className="crm-btn primary" href={`tel:${lead.phone}`}>
+              <Link
+                className="crm-btn primary"
+                href={`/dialer?leadId=${lead.id}&phone=${encodeURIComponent(lead.phone)}`}
+              >
                 <Phone size={13} /> Call
-              </a>
+              </Link>
             ) : null}
             {lead.email ? (
               <a className="crm-btn" href={`mailto:${lead.email}`}>
