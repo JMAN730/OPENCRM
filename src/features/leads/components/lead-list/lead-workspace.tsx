@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatLocation } from "@/features/leads/location";
+import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
   Activity as ActivityIcon,
@@ -109,7 +110,7 @@ export function LeadHeader({
               {lead.company ? <span>{lead.company}</span> : null}
               {lead.source ? <span>{lead.source}</span> : null}
               {lead.email ? <a href={`mailto:${lead.email}`} className="hover:text-foreground">{lead.email}</a> : null}
-              {lead.phone ? <a href={`tel:${lead.phone}`} className="hover:text-foreground">{lead.phone}</a> : null}
+              {lead.phone ? <a href={`tel:${lead.phone}`} className="hover:text-foreground">{formatPhone(lead.phone)}</a> : null}
               {lead.website && websiteHref ? (
                 <a href={websiteHref} target="_blank" rel="noreferrer" className="hover:text-foreground">
                   {lead.website}
@@ -443,7 +444,7 @@ export function DetailsCard({ lead }: { lead: Lead }) {
       {kv("Owner", lead.assignedTo?.name ?? lead.assignedTo?.email ?? "Unassigned")}
       {kv("Source", lead.source ?? "-")}
       {kv("Location", location ?? "-")}
-      {kv("Phone", lead.phone ?? "-")}
+      {kv("Phone", lead.phone ? formatPhone(lead.phone) : "-")}
       {kv("Website", lead.website ?? "-")}
       {kv("Reviews", reviewSummary(lead) ?? "-")}
       {kv("Created", new Date(lead.createdAt).toLocaleDateString())}

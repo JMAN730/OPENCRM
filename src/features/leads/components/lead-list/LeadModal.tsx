@@ -2,7 +2,8 @@
 
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
-import { formatLocation } from "@/features/leads/location";
+import { formatLocation, getMapsUrl } from "@/features/leads/location";
+import { formatPhone } from "@/lib/phone";
 import {
   Dialog,
   DialogContent,
@@ -399,6 +400,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const websiteHref = normalizeWebsiteHref(lead.website);
   const reviews = reviewSummary(lead);
   const location = formatLocation(lead.city, lead.state);
+  const resolvedMapsUrl = getMapsUrl(lead);
 
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(
@@ -1104,7 +1106,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                         className="crm-v"
                         style={{ fontFamily: "var(--crm-font-mono)", fontSize: 12.5 }}
                       >
-                        {lead.phone}
+                        {formatPhone(lead.phone)}
                       </span>
                     </>
                   ) : null}
@@ -1122,12 +1124,12 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                       </span>
                     </>
                   ) : null}
-                  {lead.mapsUrl ? (
+                  {resolvedMapsUrl ? (
                     <>
                       <span className="crm-k">Maps</span>
                       <span className="crm-v" style={{ color: "var(--crm-accent-fg)" }}>
                         <a
-                          href={lead.mapsUrl}
+                          href={resolvedMapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ display: "inline-flex", alignItems: "center", gap: 4 }}

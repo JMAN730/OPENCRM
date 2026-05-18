@@ -17,6 +17,7 @@ import { useSession } from "next-auth/react";
 import { useState } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import Link from "next/link";
+import { formatPhone } from "@/lib/phone";
 
 function formatDueDate(date: string | Date | null | undefined): string {
   if (!date) return "";
@@ -296,7 +297,7 @@ function CallsCard({
                   <td>
                     <div className="crm-contact-cell">
                       <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>{call.phone.slice(-2)}</div>
-                      <div className="crm-meta"><span className="crm-n">{call.phone}</span></div>
+                      <div className="crm-meta"><span className="crm-n">{formatPhone(call.phone)}</span></div>
                     </div>
                   </td>
                   <td>
