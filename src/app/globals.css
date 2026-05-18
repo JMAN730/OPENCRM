@@ -1164,7 +1164,7 @@
   animation: crm-fade 0.16s ease-out;
 }
 .crm-modal {
-  width: min(620px, 92%);
+  width: min(820px, 92%);
   max-height: 86%;
   background: var(--crm-surface);
   border-radius: var(--crm-radius-lg);
