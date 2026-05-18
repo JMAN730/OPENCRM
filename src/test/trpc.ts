@@ -52,6 +52,7 @@ export function createMockPrisma() {
       create: vi.fn(),
       upsert: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     },
     callLog: {
       findMany: vi.fn(),
@@ -154,14 +155,6 @@ export function createMockPrisma() {
       update: vi.fn(),
       delete: vi.fn(),
     },
-    leadTag: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findFirst: vi.fn(),
-      create: vi.fn(),
-      upsert: vi.fn(),
-      delete: vi.fn(),
-      count: vi.fn().mockResolvedValue(0),
-    },
     pipeline: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
@@ -170,7 +163,12 @@ export function createMockPrisma() {
     pipelineStage: {
       findFirst: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
       createMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
     },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
