@@ -14,7 +14,7 @@ describe("websitesRouter", () => {
 
   describe("getForLead", () => {
     it("returns the most recent generated website for the lead", async () => {
-      const website = { id: "w-1", leadId: "lead-1", template: "local_service", title: "Acme", content: {} };
+      const website = { id: "w-1", leadId: "lead-1", template: "my_template", title: "Acme", content: {} };
       prisma.generatedWebsite.findFirst.mockResolvedValue(website);
 
       const result = await caller.websites.getForLead({ leadId: "lead-1" });
@@ -50,10 +50,10 @@ describe("websitesRouter", () => {
     it("creates a new website when none exists", async () => {
       prisma.lead.findFirst.mockResolvedValue(baseLead);
       prisma.generatedWebsite.findFirst.mockResolvedValue(null);
-      const created = { id: "w-new", leadId: "lead-1", template: "local_service", title: expect.any(String), content: expect.any(Object) };
+      const created = { id: "w-new", leadId: "lead-1", template: "my_template", title: expect.any(String), content: expect.any(Object) };
       prisma.generatedWebsite.create.mockResolvedValue(created);
 
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "local_service" });
+      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
       expect(prisma.generatedWebsite.create).toHaveBeenCalled();
       expect(result).toMatchObject({ leadId: "lead-1" });
     });
@@ -61,10 +61,10 @@ describe("websitesRouter", () => {
     it("updates an existing website when one exists", async () => {
       prisma.lead.findFirst.mockResolvedValue(baseLead);
       prisma.generatedWebsite.findFirst.mockResolvedValue({ id: "w-1", leadId: "lead-1" });
-      const updated = { id: "w-1", leadId: "lead-1", template: "barbershop" };
+      const updated = { id: "w-1", leadId: "lead-1", template: "my_template" };
       prisma.generatedWebsite.update.mockResolvedValue(updated);
 
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "barbershop" });
+      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
       expect(prisma.generatedWebsite.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: "w-1" } }),
       );
@@ -74,7 +74,7 @@ describe("websitesRouter", () => {
     it("throws NOT_FOUND when the lead doesn't belong to the org", async () => {
       prisma.lead.findFirst.mockResolvedValue(null);
       await expect(
-        caller.websites.generate({ leadId: "other-lead", template: "local_service" }),
+        caller.websites.generate({ leadId: "other-lead", template: "my_template" }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
@@ -85,7 +85,7 @@ describe("websitesRouter", () => {
         Promise.resolve({ id: "w-1", ...args.data }),
       );
 
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "modern_professional" });
+      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
       expect(result.title).toContain("Acme Landscaping");
     });
   });
