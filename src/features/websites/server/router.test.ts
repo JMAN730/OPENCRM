@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 import type { MockPrisma } from "@/test/trpc";
 
@@ -104,7 +104,7 @@ describe("websitesRouter", () => {
 
     it("updates the website content", async () => {
       prisma.generatedWebsite.findFirst.mockResolvedValue({ id: "w-1" });
-      prisma.generatedWebsite.update.mockResolvedValue({ id: "w-1", ...updateInput });
+      prisma.generatedWebsite.update.mockResolvedValue({ ...updateInput, id: "w-1" });
 
       const result = await caller.websites.update(updateInput);
       expect(prisma.generatedWebsite.update).toHaveBeenCalledWith(

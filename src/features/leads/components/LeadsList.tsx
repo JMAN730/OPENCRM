@@ -292,7 +292,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter, tagFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, stageFilter, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
