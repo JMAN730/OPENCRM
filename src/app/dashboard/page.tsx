@@ -47,30 +47,30 @@ function KPICard({
 }
 
 /* ── Phone Reach Card ── */
-const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
-  CONNECTED: { label: "Connected",  color: "var(--crm-accent)" },
-  BUSY:      { label: "Busy",       color: "oklch(74% 0.14 70)" },
-  NO_ANSWER: { label: "No answer",  color: "oklch(72% 0.06 80)" },
-  FAILED:    { label: "Failed",     color: "oklch(64% 0.18 25)" },
-  CANCELED:  { label: "Canceled",   color: "oklch(70% 0.04 80)" },
+const OUTCOME_DISPLAY: Record<string, { label: string; color: string }> = {
+  ANSWERED:     { label: "Answered",     color: "var(--crm-accent)" },
+  HUNG_UP:      { label: "Hung up",      color: "oklch(64% 0.18 25)" },
+  NO_ANSWER:    { label: "No answer",    color: "oklch(72% 0.06 80)" },
+  AI_VOICEMAIL: { label: "AI voicemail", color: "oklch(72% 0.12 270)" },
+  CUSTOM:       { label: "Custom",       color: "oklch(70% 0.04 80)" },
 };
 
-function PhoneReachCard({ data, isLoading }: { data: { status: string; count: number }[]; isLoading: boolean }) {
+function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: number }[]; isLoading: boolean }) {
   const total = data.reduce((s, d) => s + d.count, 0);
 
   if (total === 0) {
     return (
       <div className="crm-card flush">
-        <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· 30 days</span></div>
+        <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· outcomes</span></div>
         <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
-          {isLoading ? "Loading…" : "No calls logged yet"}
+          {isLoading ? "Loading…" : "No outcomes logged yet"}
         </div>
       </div>
     );
   }
 
-  const connected = data.find((d) => d.status === "CONNECTED")?.count ?? 0;
-  const connectRate = ((connected / total) * 100).toFixed(1);
+  const answered = data.find((d) => d.outcome === "ANSWERED")?.count ?? 0;
+  const answerRate = ((answered / total) * 100).toFixed(1);
   const size = 140, stroke = 20, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
   const C = 2 * Math.PI * r;
   const segments = data.map((d, i) => {
@@ -86,14 +86,14 @@ function PhoneReachCard({ data, isLoading }: { data: { status: string; count: nu
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Phone reach</h3>
-        <span className="crm-sub">· last 30 days · {total} dials</span>
+        <span className="crm-sub">· {total} leads with outcomes</span>
       </div>
       <div className="crm-donut-wrap">
         <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
             {segments.map((d, i) => {
-              const cfg = STATUS_DISPLAY[d.status];
+              const cfg = OUTCOME_DISPLAY[d.outcome];
               return (
                 <circle key={i} cx={cx} cy={cy} r={r} fill="none"
                   stroke={cfg?.color ?? "var(--crm-fg-faint)"} strokeWidth={stroke}
@@ -106,17 +106,17 @@ function PhoneReachCard({ data, isLoading }: { data: { status: string; count: nu
             })}
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{connectRate}%</div>
-            <div style={{ fontSize: 10, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>connect</div>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{answerRate}%</div>
+            <div style={{ fontSize: 10, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>answered</div>
           </div>
         </div>
         <div className="crm-legend">
           {data.map((d, i) => {
-            const cfg = STATUS_DISPLAY[d.status];
+            const cfg = OUTCOME_DISPLAY[d.outcome];
             return (
               <div key={i} className="crm-legend-row">
                 <span className="crm-swatch" style={{ background: cfg?.color ?? "var(--crm-fg-faint)", width: 10, height: 10, borderRadius: 3 }} />
-                <span>{cfg?.label ?? d.status}</span>
+                <span>{cfg?.label ?? d.outcome}</span>
                 <span className="crm-pct">{((d.count / total) * 100).toFixed(1)}%</span>
                 <span className="crm-count">{d.count}</span>
               </div>
@@ -234,6 +234,15 @@ function TasksCard() {
 }
 
 /* ── Recent Calls Card ── */
+const CALL_OUTCOME_MAP: Record<string, { label: string; cls: string }> = {
+  ANSWERED:      { label: "answered",     cls: "pos"  },
+  HUNG_UP:       { label: "hung up",      cls: "neg"  },
+  NO_ANSWER:     { label: "no answer",    cls: "neg"  },
+  AI_VOICEMAIL:  { label: "AI voicemail", cls: "warn" },
+  CUSTOM:        { label: "custom",       cls: ""     },
+  NOT_CONTACTED: { label: "not contacted", cls: ""    },
+};
+
 const CALL_STATUS_MAP: Record<string, { label: string; cls: string }> = {
   CONNECTED: { label: "connected", cls: "pos"  },
   NO_ANSWER: { label: "no answer", cls: "neg"  },
@@ -247,7 +256,7 @@ function CallsCard({
   callsToday,
   isLoading,
 }: {
-  recentCalls: { id: string; phone: string; status: string; duration?: number | null; createdAt: string }[];
+  recentCalls: { id: string; phone: string; status: string; callOutcome?: string | null; duration?: number | null; createdAt: string }[];
   callsToday: number;
   isLoading: boolean;
 }) {
@@ -272,7 +281,10 @@ function CallsCard({
           </thead>
           <tbody>
             {recentCalls.map((call) => {
-              const cfg = CALL_STATUS_MAP[call.status] ?? { label: call.status, cls: "" };
+              const outcomeCfg = call.callOutcome && call.callOutcome !== "NOT_CONTACTED"
+                ? (CALL_OUTCOME_MAP[call.callOutcome] ?? { label: call.callOutcome, cls: "" })
+                : null;
+              const statusCfg = CALL_STATUS_MAP[call.status] ?? { label: call.status, cls: "" };
               const duration = call.duration
                 ? `${Math.floor(call.duration / 60)}:${String(call.duration % 60).padStart(2, "0")}`
                 : "0:00";
@@ -287,7 +299,11 @@ function CallsCard({
                       <div className="crm-meta"><span className="crm-n">{call.phone}</span></div>
                     </div>
                   </td>
-                  <td><span className={`crm-tag ${cfg.cls}`}>{cfg.label}</span></td>
+                  <td>
+                    {outcomeCfg
+                      ? <span className={`crm-tag ${outcomeCfg.cls}`}>{outcomeCfg.label}</span>
+                      : <span className={`crm-tag ${statusCfg.cls}`}>{statusCfg.label}</span>}
+                  </td>
                   <td className="mono">{duration}</td>
                   <td className="mono right">
                     {formatDistanceToNow(new Date(call.createdAt), { addSuffix: true })}
@@ -475,7 +491,7 @@ export default function DashboardPage() {
   const callsToday = stats?.callsToday ?? 0;
   const leadsByStatus = stats?.leadsByStatus ?? [];
   const recentCalls = stats?.recentCalls ?? [];
-  const statusDist = stats?.charts.statusDistribution ?? [];
+  const outcomeDist = stats?.charts.outcomeDistribution ?? [];
 
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -540,7 +556,7 @@ export default function DashboardPage() {
 
             <div className="crm-grid-row">
               <CallsCard recentCalls={recentCalls} callsToday={callsToday} isLoading={statsLoading} />
-              <PhoneReachCard data={statusDist} isLoading={statsLoading} />
+              <PhoneReachCard data={outcomeDist} isLoading={statsLoading} />
             </div>
 
             <div className="crm-grid-row">
