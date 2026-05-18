@@ -92,6 +92,7 @@ function searchWhere(search?: string): Record<string, unknown> {
 const includeAssignee = {
   assignedTo: { select: { id: true, name: true, email: true, image: true } },
   customOutcome: { select: { id: true, label: true, hint: true } },
+  secondaryOutcome: { select: { id: true, label: true, hint: true } },
   tags: { select: { id: true, name: true }, orderBy: { name: "asc" } },
   // _count is what drives the "Touches" count in the UI — it must reflect
   // real interactions (CallLog rows, Notes), not derived data like
@@ -538,6 +539,31 @@ export const leadsRouter = createTRPCRouter({
         invalidate(`dashboard:team:${ctx.organizationId}`),
       ]);
       return updated;
+    }),
+
+  setDisposition: organizationProcedure
+    .input(z.object({ id: z.string(), secondaryOutcomeId: z.string().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      if (input.secondaryOutcomeId) {
+        const custom = await ctx.prisma.customOutcome.findFirst({
+          where: { id: input.secondaryOutcomeId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!custom) throw new TRPCError({ code: "NOT_FOUND", message: "Custom outcome not found." });
+      }
+
+      return ctx.prisma.lead.update({
+        where: { id: input.id, organizationId: ctx.organizationId },
+        data: { secondaryOutcomeId: input.secondaryOutcomeId },
+      });
     }),
 
   toggleStar: organizationProcedure

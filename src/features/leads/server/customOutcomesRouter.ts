@@ -52,6 +52,10 @@ export const customOutcomesRouter = createTRPCRouter({
         where: { customOutcomeId: input.id },
         data: { callOutcome: "NOT_CONTACTED", status: "NOT_CONTACTED", customOutcomeId: null },
       });
+      await ctx.prisma.lead.updateMany({
+        where: { secondaryOutcomeId: input.id },
+        data: { secondaryOutcomeId: null },
+      });
       await ctx.prisma.customOutcome.delete({ where: { id: input.id } });
     }),
 });
