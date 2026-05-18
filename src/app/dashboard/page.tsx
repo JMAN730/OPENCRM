@@ -57,9 +57,11 @@ const OUTCOME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: number }[]; isLoading: boolean }) {
-  const total = data.reduce((s, d) => s + d.count, 0);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
-  if (total === 0) {
+  const grandTotal = data.reduce((s, d) => s + d.count, 0);
+
+  if (grandTotal === 0) {
     return (
       <div className="crm-card flush">
         <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· outcomes</span></div>
@@ -70,16 +72,26 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
     );
   }
 
-  const answered = data.find((d) => d.outcome === "ANSWERED")?.count ?? 0;
-  const answerRate = ((answered / total) * 100).toFixed(1);
+  const toggle = (outcome: string) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      next.has(outcome) ? next.delete(outcome) : next.add(outcome);
+      return next;
+    });
+
+  const visibleData = data.filter((d) => !excluded.has(d.outcome));
+  const visibleTotal = visibleData.reduce((s, d) => s + d.count, 0);
+  const answered = visibleData.find((d) => d.outcome === "ANSWERED")?.count ?? 0;
+  const answerRate = visibleTotal > 0 ? ((answered / visibleTotal) * 100).toFixed(1) : "0.0";
+
   const size = 140, stroke = 20, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
   const C = 2 * Math.PI * r;
-  const segments = data.map((d, i) => {
-    const previous = data.slice(0, i).reduce((sum, item) => sum + item.count, 0);
+  const segments = visibleData.map((d, i) => {
+    const previous = visibleData.slice(0, i).reduce((sum, item) => sum + item.count, 0);
     return {
       ...d,
-      len: (d.count / total) * C,
-      off: C - (previous / total) * C,
+      len: (d.count / visibleTotal) * C,
+      off: C - (previous / visibleTotal) * C,
     };
   });
 
@@ -87,13 +99,13 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Phone reach</h3>
-        <span className="crm-sub">· {total} leads with outcomes</span>
+        <span className="crm-sub">· {grandTotal} leads with outcomes</span>
       </div>
       <div className="crm-donut-wrap">
         <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
-            {segments.map((d, i) => {
+            {visibleTotal === 0 ? null : segments.map((d, i) => {
               const cfg = OUTCOME_DISPLAY[d.outcome];
               return (
                 <circle key={i} cx={cx} cy={cy} r={r} fill="none"
@@ -114,11 +126,25 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
         <div className="crm-legend">
           {data.map((d, i) => {
             const cfg = OUTCOME_DISPLAY[d.outcome];
+            const isExcluded = excluded.has(d.outcome);
+            const pct = visibleTotal > 0 && !isExcluded
+              ? ((d.count / visibleTotal) * 100).toFixed(1)
+              : "—";
             return (
-              <div key={i} className="crm-legend-row">
-                <span className="crm-swatch" style={{ background: cfg?.color ?? "var(--crm-fg-faint)", width: 10, height: 10, borderRadius: 3 }} />
-                <span>{cfg?.label ?? d.outcome}</span>
-                <span className="crm-pct">{((d.count / total) * 100).toFixed(1)}%</span>
+              <div
+                key={i}
+                className="crm-legend-row"
+                onClick={() => toggle(d.outcome)}
+                title={isExcluded ? "Click to include" : "Click to exclude"}
+                style={{ cursor: "pointer", opacity: isExcluded ? 0.38 : 1, transition: "opacity 0.15s" }}
+              >
+                <span className="crm-swatch" style={{
+                  background: isExcluded ? "var(--crm-fg-faint)" : (cfg?.color ?? "var(--crm-fg-faint)"),
+                  width: 10, height: 10, borderRadius: 3,
+                  transition: "background 0.15s",
+                }} />
+                <span style={{ textDecoration: isExcluded ? "line-through" : "none" }}>{cfg?.label ?? d.outcome}</span>
+                <span className="crm-pct">{pct}</span>
                 <span className="crm-count">{d.count}</span>
               </div>
             );
