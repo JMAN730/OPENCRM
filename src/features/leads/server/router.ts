@@ -513,11 +513,6 @@ export const leadsRouter = createTRPCRouter({
         : {};
       const description = `Marked call outcome as ${input.callOutcome.replace(/_/g, " ").toLowerCase()}`;
 
-      const followUpDate = new Date();
-      followUpDate.setDate(followUpDate.getDate() + 1);
-      followUpDate.setHours(9, 0, 0, 0);
-      const leadName = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.company || "Lead";
-
       const [updated] = await ctx.prisma.$transaction([
         ctx.prisma.lead.update({
           where: { id: input.id, organizationId: ctx.organizationId },
@@ -538,20 +533,6 @@ export const leadsRouter = createTRPCRouter({
             organizationId: ctx.organizationId,
           },
         }),
-        ...(input.callOutcome === "NO_ANSWER"
-          ? [ctx.prisma.task.create({
-              data: {
-                title: `Follow up with ${leadName}`,
-                leadId: lead.id,
-                userId: ctx.session.user.id,
-                assignedToId: lead.assignedToId ?? ctx.session.user.id,
-                dueDate: followUpDate,
-                priority: "HIGH",
-                status: "PENDING",
-                organizationId: ctx.organizationId,
-              },
-            })]
-          : []),
       ]);
       await Promise.all([
         invalidate(`dashboard:kpi:${ctx.organizationId}`),
