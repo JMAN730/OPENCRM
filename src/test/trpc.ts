@@ -129,7 +129,12 @@ export function createMockPrisma() {
     pipelineStage: {
       findFirst: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
       createMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
     },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
