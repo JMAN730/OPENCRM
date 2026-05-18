@@ -247,6 +247,28 @@ export const dashboardRouter = createTRPCRouter({
     );
   }),
 
+  getMyPhoneReach: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const organizationId = (ctx.session.user as { organizationId?: string }).organizationId;
+
+    if (!organizationId) return [];
+
+    const outcomes = await ctx.prisma.lead.groupBy({
+      by: ["callOutcome"],
+      where: {
+        organizationId,
+        assignedToId: userId,
+        callOutcome: { not: "NOT_CONTACTED" },
+      },
+      _count: { id: true },
+    });
+
+    return outcomes.map((item) => ({
+      outcome: item.callOutcome,
+      count: item._count.id,
+    }));
+  }),
+
   getMyStats: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const organizationId = (ctx.session.user as { organizationId?: string }).organizationId;

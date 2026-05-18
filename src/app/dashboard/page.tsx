@@ -435,8 +435,12 @@ const ACTIVITY_LABEL: Record<string, string> = {
 
 function MyStatsTab() {
   const { data: myStats, isLoading } = trpc.dashboard.getMyStats.useQuery();
+  const { data: phoneReachData, isLoading: phoneReachLoading } =
+    trpc.dashboard.getMyPhoneReach.useQuery();
+  const { data: teamStats, isLoading: teamStatsLoading } =
+    trpc.dashboard.getTeamStats.useQuery();
 
-  if (isLoading) return <div className="crm-empty">Loading your stats…</div>;
+  if (!myStats && isLoading) return <div className="crm-empty">Loading your stats…</div>;
   if (!myStats) return <div className="crm-empty">No data yet.</div>;
 
   return (
@@ -446,6 +450,13 @@ function MyStatsTab() {
         <KPICard label="Calls this week" icon={PhoneOutgoing} value={myStats.callsThisWeek} />
         <KPICard label="Leads assigned" icon={Users} value={myStats.leadsAssigned} />
         <KPICard label="Open tasks" icon={CheckCheck} value={myStats.openTasks} />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <PhoneReachCard
+          data={phoneReachData ?? []}
+          isLoading={phoneReachLoading}
+        />
       </div>
 
       <div className="crm-card flush" style={{ marginTop: 20 }}>
@@ -488,6 +499,62 @@ function MyStatsTab() {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="crm-card flush" style={{ marginTop: 20 }}>
+        <div className="crm-card-head">
+          <h3>Team activity</h3>
+          <span className="crm-sub">
+            · {teamStats ? `${teamStats.memberStats.length} members` : ""}
+          </span>
+        </div>
+        {teamStatsLoading ? (
+          <div className="crm-empty">Loading…</div>
+        ) : !teamStats || teamStats.memberStats.length === 0 ? (
+          <div className="crm-empty">No activity yet.</div>
+        ) : (
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th className="right">Calls</th>
+                <th className="right">Leads assigned</th>
+                <th className="right">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teamStats.memberStats
+                .sort((a, b) => (b.callCount ?? 0) - (a.callCount ?? 0))
+                .map((m) => (
+                  <tr key={m.userId}>
+                    <td>
+                      <div className="crm-contact-cell">
+                        <div className="crm-avatar sm c2" style={{ fontSize: 11 }}>
+                          {(m.name ?? m.email ?? "?")
+                            .split(" ")
+                            .map((p: string) => p[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
+                        </div>
+                        <div className="crm-meta">
+                          <span className="crm-n">{m.name || "—"}</span>
+                          <span style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>{m.email}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="right mono">{m.callCount}</td>
+                    <td className="right mono">{m.leadsAssigned}</td>
+                    <td className="right mono" style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                      {m.lastActive
+                        ? formatDistanceToNow(new Date(m.lastActive), { addSuffix: true })
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
