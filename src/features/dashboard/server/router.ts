@@ -119,10 +119,10 @@ export const dashboardRouter = createTRPCRouter({
           recentCalls: recentCalls.map((c) => ({
             id: c.id,
             status: c.status,
-            callOutcome: c.lead.callOutcome,
+            callOutcome: c.lead?.callOutcome ?? null,
             duration: c.duration,
             createdAt: c.createdAt.toISOString(),
-            phone: c.lead.phone ?? "Unknown",
+            phone: c.lead?.phone ?? "Unknown",
           })),
           charts: {
             callsPerDay,
