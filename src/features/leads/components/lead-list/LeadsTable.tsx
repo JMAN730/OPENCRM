@@ -32,8 +32,9 @@ import {
   type ScoringRuleConfig,
 } from "./shared";
 import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
+import { formatLocation } from "@/features/leads/location";
 
-const ALL_COLUMNS = ["Lead", "Company", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
+const ALL_COLUMNS = ["Lead", "Company", "Location", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
 type ColumnName = typeof ALL_COLUMNS[number];
 
 type CustomOutcomeTab = { id: string; label: string };
@@ -396,6 +397,7 @@ export function LeadsTable({
             </th>
             {show("Lead") && renderSortHeader("Lead", "firstName")}
             {show("Company") && renderSortHeader("Company", "company")}
+            {show("Location") && <th>Location</th>}
             {show("Owner") && renderSortHeader("Owner", "owner")}
             {show("Stage") && renderSortHeader("Stage", "status")}
             {show("Score") && renderSortHeader("Score", "score")}
@@ -482,6 +484,11 @@ export function LeadsTable({
                           </div>
                         ) : null}
                       </div>
+                    </td>
+                  )}
+                  {show("Location") && (
+                    <td style={{ color: "var(--crm-fg-muted)", fontSize: 12 }}>
+                      {formatLocation(lead.city, lead.state) ?? "—"}
                     </td>
                   )}
                   {show("Owner") && (
