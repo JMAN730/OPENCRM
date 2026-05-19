@@ -1148,8 +1148,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               ) : null}
             </div>
 
-            {customOutcomes.length > 0 ? (
-              <div className="crm-outcome-wrap" ref={dispositionRef}>
+            <div className="crm-outcome-wrap" ref={dispositionRef}>
                 <button
                   type="button"
                   className={`crm-btn crm-outcome-btn ${dispositionId ? "set" : ""}`}
@@ -1200,10 +1199,21 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                         Clear disposition
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      className="crm-outcome-clear"
+                      style={{ color: "var(--crm-accent-fg, var(--crm-fg-faint))" }}
+                      onClick={() => {
+                        setDispositionOpen(false);
+                        setOutcomeOpen(true);
+                        setAddingOutcome(true);
+                      }}
+                    >
+                      + Add outcome
+                    </button>
                   </div>
                 ) : null}
               </div>
-            ) : null}
 
             <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
               <BookOpen size={13} /> Scripts
