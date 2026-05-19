@@ -103,6 +103,7 @@ export type ScoreBreakdownItem = {
 export const LEAD_VISIBLE_COLUMNS = [
   "Lead",
   "Company",
+  "Location",
   "Owner",
   "Stage",
   "Score",
