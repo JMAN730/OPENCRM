@@ -17,6 +17,7 @@ import {
   type LeadVisibleColumn,
   type ScoringRuleConfig,
 } from "./shared";
+import { formatLocation } from "@/features/leads/location";
 
 type LeadCardListProps = {
   canGoPrevious: boolean;
@@ -146,6 +147,12 @@ export function LeadCardList({
                 ) : null}
 
                 <div className="focus-card-metadata">
+                  {show("Location") ? (
+                    <div className="focus-card-stat">
+                      <span className="label">Location</span>
+                      <span className="value">{formatLocation(lead.city, lead.state) ?? "—"}</span>
+                    </div>
+                  ) : null}
                   {show("Owner") ? (
                     <div className="focus-card-stat">
                       <span className="label">Owner</span>
