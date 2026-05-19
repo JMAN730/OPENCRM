@@ -344,9 +344,7 @@ export function LeadsManagementBar({
             onClick={() => onToggleStage(stage)}
           >
             {STATUS_LABELS[stage]?.label ?? stage}
-            <span className="crm-chip-count">
-              {stage === "NOT_CONTACTED" ? totalStageCount : (stageCounts[stage] ?? 0)}
-            </span>
+            <span className="crm-chip-count">{stageCounts[stage] ?? 0}</span>
           </button>
         ))}
         {customOutcomes?.map((co) => (
