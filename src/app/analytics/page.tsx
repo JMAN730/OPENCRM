@@ -21,11 +21,11 @@ const LEAD_STATUS_COLOR: Record<string, string> = {
   CONNECTED: "var(--crm-pos)",
 };
 
-const TEMP_LABEL: Record<string, string> = { HOT: "Hot", WARM: "Warm", COLD: "Cold", Auto: "Auto" };
+const TEMP_LABEL: Record<string, string> = { HOT: "Hot", WARM: "Warm", COOL: "Cool", Auto: "Auto" };
 const TEMP_COLOR: Record<string, string> = {
   HOT: "var(--crm-neg)",
   WARM: "var(--crm-warn)",
-  COLD: "oklch(72% 0.11 230)",
+  COOL: "oklch(72% 0.11 230)",
   Auto: "var(--crm-fg-faint)",
 };
 
