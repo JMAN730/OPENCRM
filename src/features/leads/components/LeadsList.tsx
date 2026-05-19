@@ -250,6 +250,8 @@ export function LeadsList() {
     for (const lead of allLeads) {
       if (lead.callOutcome === "CUSTOM" && lead.customOutcomeId) {
         counts[`CUSTOM:${lead.customOutcomeId}`] = (counts[`CUSTOM:${lead.customOutcomeId}`] ?? 0) + 1;
+      } else if (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED") {
+        counts["NOT_CONTACTED"] = (counts["NOT_CONTACTED"] ?? 0) + 1;
       } else {
         counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       }
@@ -261,12 +263,16 @@ export function LeadsList() {
     const rows = allLeads
       .filter((lead) => {
         if (!stageFilter.size) return true;
-        if (stageFilter.has("NOT_CONTACTED")) return true;
+        if (stageFilter.has("NOT_CONTACTED") && (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED")) return true;
         const matchesCustom =
           lead.callOutcome === "CUSTOM" &&
           lead.customOutcomeId != null &&
           stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
-        const matchesStatus = lead.callOutcome !== "CUSTOM" && stageFilter.has(lead.status);
+        const matchesStatus =
+          !!lead.callOutcome &&
+          lead.callOutcome !== "CUSTOM" &&
+          lead.callOutcome !== "NOT_CONTACTED" &&
+          stageFilter.has(lead.status);
         return matchesStatus || matchesCustom;
       })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
