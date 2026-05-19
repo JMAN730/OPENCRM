@@ -261,6 +261,7 @@ export function LeadsList() {
     const rows = allLeads
       .filter((lead) => {
         if (!stageFilter.size) return true;
+        if (stageFilter.has("NOT_CONTACTED")) return true;
         const matchesCustom =
           lead.callOutcome === "CUSTOM" &&
           lead.customOutcomeId != null &&
