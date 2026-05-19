@@ -29,6 +29,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
+import { LeadModal } from "@/features/leads/components/lead-list/LeadModal";
+import type { Lead as ModalLead } from "@/features/leads/components/lead-list/shared";
 
 const DEFAULT_STAGE_NAMES = new Set([
   "potential",
@@ -195,11 +197,12 @@ function ScoreBar({ score, temp }: { score: number; temp: Lead["temperatureOverr
 
 // ── Lead card ─────────────────────────────────────────────────────────────────
 
-function LeadCard({ lead, onDragStart, onDragEnd, onValueChange }: {
+function LeadCard({ lead, onDragStart, onDragEnd, onValueChange, onSelectLead }: {
   lead: Lead;
   onDragStart:   (e: React.DragEvent, lead: Lead) => void;
   onDragEnd:     (e: React.DragEvent) => void;
   onValueChange: (leadId: string, value: number | null) => void;
+  onSelectLead:  (leadId: string) => void;
 }) {
   const [editingValue, setEditingValue] = useState(false);
   const [valueInput, setValueInput]     = useState("");
@@ -220,7 +223,7 @@ function LeadCard({ lead, onDragStart, onDragEnd, onValueChange }: {
   };
 
   return (
-    <article className="crm-pipeline-lead" draggable onDragStart={(e) => onDragStart(e, lead)} onDragEnd={onDragEnd}>
+    <article className="crm-pipeline-lead" draggable style={{ cursor: "pointer" }} onDragStart={(e) => onDragStart(e, lead)} onDragEnd={onDragEnd} onClick={() => onSelectLead(lead.id)}>
       <div className="crm-pipeline-lead-top">
         <Avatar name={name} id={lead.id} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -278,7 +281,7 @@ function LeadCard({ lead, onDragStart, onDragEnd, onValueChange }: {
 
 // ── Stage column ──────────────────────────────────────────────────────────────
 
-function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal, onRename, onDuplicate, onDelete, onValueChange }: {
+function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal, onRename, onDuplicate, onDelete, onValueChange, onSelectLead }: {
   stage: Stage; leads: Lead[]; dragOverStageId: string | null;
   onDragStart:   (e: React.DragEvent, lead: Lead) => void;
   onDragEnd:     (e: React.DragEvent) => void;
@@ -290,6 +293,7 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
   onDuplicate:   (stage: Stage) => void;
   onDelete:      (stage: Stage) => void;
   onValueChange: (leadId: string, value: number | null) => void;
+  onSelectLead:  (leadId: string) => void;
 }) {
   const name        = stageDisplayName(stage.name);
   const cfg         = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
@@ -353,7 +357,7 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
         onDrop={(e) => onDrop(e, stage.id)}
       >
         {leads.map((lead) => (
-          <LeadCard key={lead.id} lead={lead} onDragStart={onDragStart} onDragEnd={onDragEnd} onValueChange={onValueChange} />
+          <LeadCard key={lead.id} lead={lead} onDragStart={onDragStart} onDragEnd={onDragEnd} onValueChange={onValueChange} onSelectLead={onSelectLead} />
         ))}
         <button
           type="button"
@@ -599,6 +603,12 @@ export function PipelineBoard() {
   const [filterOwnerId, setFilterOwnerId]   = useState<string>("");
   const [filterMinValue, setFilterMinValue] = useState<string>("");
   const [filterMaxValue, setFilterMaxValue] = useState<string>("");
+
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const { data: selectedLeadData } = trpc.leads.getById.useQuery(
+    { id: selectedLeadId! },
+    { enabled: !!selectedLeadId },
+  );
 
   const [renamingStage, setRenamingStage] = useState<Stage | null>(null);
   const [renameValue, setRenameValue]     = useState("");
@@ -849,6 +859,26 @@ export function PipelineBoard() {
   const lostStage    = stageByName[LOST_STAGE];
   const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
 
+  const allBoardLeadIds = useMemo(
+    () => activeStages.flatMap((s) => filterLeads(s.leads).map((l) => l.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeStages, activeFilter, filterOwnerId, filterMinValue, filterMaxValue, sortMode],
+  );
+
+  const handleSelectLead = useCallback((id: string) => setSelectedLeadId(id), []);
+
+  const handleModalPrev = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx > 0) setSelectedLeadId(allBoardLeadIds[idx - 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
+  const handleModalNext = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx < allBoardLeadIds.length - 1) setSelectedLeadId(allBoardLeadIds[idx + 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
   const CHIP_LABELS: { id: FilterChip; label: string }[] = [
     { id: "all",     label: "All deals"         },
     { id: "mine",    label: "Mine"               },
@@ -1008,6 +1038,7 @@ export function PipelineBoard() {
                   onDuplicate={(s) => duplicateStage.mutate({ stageId: s.id })}
                   onDelete={handleDeleteStage}
                   onValueChange={handleValueChange}
+                  onSelectLead={handleSelectLead}
                 />
               ))}
             </div>
@@ -1184,6 +1215,15 @@ export function PipelineBoard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {selectedLeadData && (
+        <LeadModal
+          lead={selectedLeadData as unknown as ModalLead}
+          onClose={() => setSelectedLeadId(null)}
+          onPrev={handleModalPrev}
+          onNext={handleModalNext}
+        />
+      )}
     </div>
   );
 }
