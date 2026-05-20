@@ -203,6 +203,14 @@ export function LeadsList() {
 
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
   const exportMutation = trpc.leads.export.useMutation();
+  const bulkAddTag = trpc.leads.bulkAddTag.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Tagged ${data.count} lead${data.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const bulkSetTemperature = trpc.leads.bulkSetTemperature.useMutation({
     onSuccess: (data) => {
       toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
@@ -745,6 +753,9 @@ export function LeadsList() {
               assignMutation.mutate({ leadIds: Array.from(selected), assigneeId })
             }
             onBulkDelete={handleBulkDelete}
+            onBulkTag={(tagId) =>
+              bulkAddTag.mutate({ leadIds: Array.from(selected), tagId })
+            }
             onClear={() => {
               setSelected(new Set());
               setShowAssign(false);
@@ -753,6 +764,7 @@ export function LeadsList() {
               bulkSetTemperature.mutate({ leadIds: Array.from(selected), temperature })
             }
             onToggleAssignMenu={() => setShowAssign((current) => !current)}
+            orgTags={orgTags ?? []}
             selectedCount={selected.size}
             showAssignMenu={showAssign}
           />
