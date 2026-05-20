@@ -169,7 +169,7 @@ export const pipelineRouter = createTRPCRouter({
     }),
 
   updateDealValue: organizationProcedure
-    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().nullable() }))
+    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(99999).nullable() }))
     .mutation(async ({ ctx, input }) => {
       const lead = await ctx.prisma.lead.findFirst({
         where: { id: input.leadId, organizationId: ctx.organizationId },
@@ -188,12 +188,12 @@ export const pipelineRouter = createTRPCRouter({
       z.union([
         z.object({
           leadId: z.string(),
-          value: z.number().nonnegative().nullable().optional(),
+          value: z.number().nonnegative().max(99999).nullable().optional(),
           stageId: z.string().nullable().optional(),
         }),
         z.object({
           company: z.string().trim().min(1, 'Company is required').max(200),
-          value: z.number().nonnegative().nullable().optional(),
+          value: z.number().nonnegative().max(99999).nullable().optional(),
           stageId: z.string().nullable().optional(),
         }),
       ]),
