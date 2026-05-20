@@ -792,6 +792,16 @@ export function PipelineBoard() {
   const lostStage    = stageByName[LOST_STAGE];
   const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
 
+  // These must be defined before the useMemo below because filterLeads (a hoisted
+  // function declaration) closes over them. Accessing a `const` before its
+  // declaration causes a TDZ ReferenceError when the memo callback fires.
+  const minVal = filterMinValue.trim() === "" ? null : Number(filterMinValue);
+  const maxVal = filterMaxValue.trim() === "" ? null : Number(filterMaxValue);
+  const minActive = minVal != null && Number.isFinite(minVal);
+  const maxActive = maxVal != null && Number.isFinite(maxVal);
+  const filterActive = !!filterOwnerId || minActive || maxActive;
+  const filterCount  = (filterOwnerId ? 1 : 0) + (minActive ? 1 : 0) + (maxActive ? 1 : 0);
+
   const allBoardLeadIds = useMemo(
     () => activeStages.flatMap((s) => filterLeads(s.leads).map((l) => l.id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -822,13 +832,6 @@ export function PipelineBoard() {
     );
   }
   if (!data) return null;
-
-  const minVal = filterMinValue.trim() === "" ? null : Number(filterMinValue);
-  const maxVal = filterMaxValue.trim() === "" ? null : Number(filterMaxValue);
-  const minActive = minVal != null && Number.isFinite(minVal);
-  const maxActive = maxVal != null && Number.isFinite(maxVal);
-  const filterActive = !!filterOwnerId || minActive || maxActive;
-  const filterCount  = (filterOwnerId ? 1 : 0) + (minActive ? 1 : 0) + (maxActive ? 1 : 0);
 
   function filterLeads(leads: Lead[]): Lead[] {
     let out = leads;
