@@ -566,7 +566,7 @@ describe("leadsRouter", () => {
       });
     });
 
-    it("does not add another touch when editing an existing outcome", async () => {
+    it("counts each non-NOT_CONTACTED outcome as a touch, enabling touch depth > 1", async () => {
       prisma.lead.findFirst.mockResolvedValue({
         id: "lead-1",
         organizationId: "org-1",
@@ -586,6 +586,8 @@ describe("leadsRouter", () => {
           callNotes: undefined,
           customOutcomeId: null,
           status: "NO_ANSWER",
+          touchCount: { increment: 1 },
+          lastTouchedAt: expect.any(Date),
         },
       });
       expect(prisma.activity.create).toHaveBeenCalledWith({
