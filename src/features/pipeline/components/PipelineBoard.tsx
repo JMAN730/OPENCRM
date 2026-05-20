@@ -786,6 +786,32 @@ export function PipelineBoard() {
 
   const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
 
+  // Derive stage data before early returns so hooks are always called unconditionally.
+  const stages = data?.stages ?? [];
+  const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
+  const lostStage    = stageByName[LOST_STAGE];
+  const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
+
+  const allBoardLeadIds = useMemo(
+    () => activeStages.flatMap((s) => filterLeads(s.leads).map((l) => l.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeStages, activeFilter, filterOwnerId, filterMinValue, filterMaxValue, sortMode],
+  );
+
+  const handleSelectLead = useCallback((id: string) => setSelectedLeadId(id), []);
+
+  const handleModalPrev = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx > 0) setSelectedLeadId(allBoardLeadIds[idx - 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
+  const handleModalNext = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx < allBoardLeadIds.length - 1) setSelectedLeadId(allBoardLeadIds[idx + 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
   if (isLoading) {
     return (
       <div className="crm-content">
@@ -796,8 +822,6 @@ export function PipelineBoard() {
     );
   }
   if (!data) return null;
-
-  const { stages } = data;
 
   const minVal = filterMinValue.trim() === "" ? null : Number(filterMinValue);
   const maxVal = filterMaxValue.trim() === "" ? null : Number(filterMaxValue);
@@ -854,30 +878,6 @@ export function PipelineBoard() {
     }
     renameStage.mutate({ stageId: renamingStage.id, name });
   }
-
-  const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
-  const lostStage    = stageByName[LOST_STAGE];
-  const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
-
-  const allBoardLeadIds = useMemo(
-    () => activeStages.flatMap((s) => filterLeads(s.leads).map((l) => l.id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeStages, activeFilter, filterOwnerId, filterMinValue, filterMaxValue, sortMode],
-  );
-
-  const handleSelectLead = useCallback((id: string) => setSelectedLeadId(id), []);
-
-  const handleModalPrev = useCallback(() => {
-    if (!selectedLeadId) return;
-    const idx = allBoardLeadIds.indexOf(selectedLeadId);
-    if (idx > 0) setSelectedLeadId(allBoardLeadIds[idx - 1]);
-  }, [selectedLeadId, allBoardLeadIds]);
-
-  const handleModalNext = useCallback(() => {
-    if (!selectedLeadId) return;
-    const idx = allBoardLeadIds.indexOf(selectedLeadId);
-    if (idx < allBoardLeadIds.length - 1) setSelectedLeadId(allBoardLeadIds[idx + 1]);
-  }, [selectedLeadId, allBoardLeadIds]);
 
   const CHIP_LABELS: { id: FilterChip; label: string }[] = [
     { id: "all",     label: "All deals"         },
