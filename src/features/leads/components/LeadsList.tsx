@@ -142,7 +142,16 @@ export function LeadsList() {
     cursor: pageCursor,
     ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
     ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+    ...(stageFilter.size > 0 ? { stages: Array.from(stageFilter) } : {}),
   });
+  const { data: serverStageCounts } = trpc.leads.getStageCounts.useQuery(
+    {
+      search: debouncedSearch || undefined,
+      ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+      ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+    },
+    { staleTime: 30_000 },
+  );
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
@@ -244,6 +253,7 @@ export function LeadsList() {
   };
 
   const stageCounts = useMemo(() => {
+    if (serverStageCounts) return serverStageCounts;
     const counts: Record<string, number> = {};
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
@@ -257,24 +267,10 @@ export function LeadsList() {
       }
     }
     return counts;
-  }, [allLeads, customOutcomes]);
+  }, [serverStageCounts, allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
     const rows = allLeads
-      .filter((lead) => {
-        if (!stageFilter.size) return true;
-        if (stageFilter.has("NOT_CONTACTED") && (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED")) return true;
-        const matchesCustom =
-          lead.callOutcome === "CUSTOM" &&
-          lead.customOutcomeId != null &&
-          stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
-        const matchesStatus =
-          !!lead.callOutcome &&
-          lead.callOutcome !== "CUSTOM" &&
-          lead.callOutcome !== "NOT_CONTACTED" &&
-          stageFilter.has(lead.status);
-        return matchesStatus || matchesCustom;
-      })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
       .filter((lead) =>
         tagFilter.size
@@ -305,7 +301,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, stageFilter, tagFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
@@ -340,6 +336,8 @@ export function LeadsList() {
       else next.add(stage);
       return next;
     });
+    setPageCursor(undefined);
+    setCursorHistory([]);
   };
 
   const toggleOwner = (id: string) => {
