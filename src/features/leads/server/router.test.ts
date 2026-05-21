@@ -299,19 +299,22 @@ describe("leadsRouter", () => {
 
   describe("bulkCreate", () => {
     it("attaches org/user to every row", async () => {
-      prisma.lead.createMany.mockResolvedValue({ count: 2 });
+      prisma.lead.createManyAndReturn.mockResolvedValue([{ id: "lead-1" }, { id: "lead-2" }]);
 
-      const result = await caller.leads.bulkCreate([
-        { firstName: "A", status: "NOT_CONTACTED" },
-        { firstName: "B", status: "NOT_CONTACTED" },
-      ]);
+      const result = await caller.leads.bulkCreate({
+        leads: [
+          { firstName: "A", status: "NOT_CONTACTED" },
+          { firstName: "B", status: "NOT_CONTACTED" },
+        ],
+      });
 
       expect(prisma.lead.findMany).not.toHaveBeenCalled();
-      expect(prisma.lead.createMany).toHaveBeenCalledWith({
+      expect(prisma.lead.createManyAndReturn).toHaveBeenCalledWith({
         data: [
           { firstName: "A", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
           { firstName: "B", status: "NOT_CONTACTED", organizationId: "org-1", assignedToId: "user-1" },
         ],
+        select: { id: true },
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ count: 2 });
@@ -322,11 +325,10 @@ describe("leadsRouter", () => {
         { id: "lead-1", email: "a@example.com", phone: null, status: "CONNECTED" },
       ]);
       prisma.lead.update.mockResolvedValue({ id: "lead-1" });
-      prisma.$transaction.mockResolvedValue([{ id: "lead-1" }]);
 
-      const result = await caller.leads.bulkCreate([
-        { email: "A@EXAMPLE.COM", phone: "", company: "Acme", status: "NOT_CONTACTED" },
-      ]);
+      const result = await caller.leads.bulkCreate({
+        leads: [{ email: "A@EXAMPLE.COM", phone: "", company: "Acme", status: "NOT_CONTACTED" }],
+      });
 
       expect(prisma.lead.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -349,13 +351,13 @@ describe("leadsRouter", () => {
     });
 
     it("creates rating and review count fields when present", async () => {
-      prisma.lead.createMany.mockResolvedValue({ count: 1 });
+      prisma.lead.createManyAndReturn.mockResolvedValue([{ id: "lead-1" }]);
 
-      await caller.leads.bulkCreate([
-        { company: "Acme", rating: 4.6, reviewCount: 128, status: "NOT_CONTACTED" },
-      ]);
+      await caller.leads.bulkCreate({
+        leads: [{ company: "Acme", rating: 4.6, reviewCount: 128, status: "NOT_CONTACTED" }],
+      });
 
-      expect(prisma.lead.createMany).toHaveBeenCalledWith({
+      expect(prisma.lead.createManyAndReturn).toHaveBeenCalledWith({
         data: [
           {
             company: "Acme",
@@ -366,6 +368,7 @@ describe("leadsRouter", () => {
             assignedToId: "user-1",
           },
         ],
+        select: { id: true },
       });
     });
 
@@ -381,11 +384,10 @@ describe("leadsRouter", () => {
         },
       ]);
       prisma.lead.update.mockResolvedValue({ id: "lead-1" });
-      prisma.$transaction.mockResolvedValue([{ id: "lead-1" }]);
 
-      await caller.leads.bulkCreate([
-        { email: "a@example.com", rating: 4.8, reviewCount: 44, status: "NOT_CONTACTED" },
-      ]);
+      await caller.leads.bulkCreate({
+        leads: [{ email: "a@example.com", rating: 4.8, reviewCount: 44, status: "NOT_CONTACTED" }],
+      });
 
       expect(prisma.lead.update).toHaveBeenCalledWith({
         where: { id: "lead-1" },
@@ -398,12 +400,63 @@ describe("leadsRouter", () => {
     });
 
     it("rejects empty arrays", async () => {
-      await expect(caller.leads.bulkCreate([])).rejects.toThrow();
+      await expect(caller.leads.bulkCreate({ leads: [] })).rejects.toThrow();
     });
 
     it("rejects payloads larger than 5000 rows", async () => {
       const big = Array.from({ length: 5001 }, () => ({ status: "NOT_CONTACTED" as const }));
-      await expect(caller.leads.bulkCreate(big)).rejects.toThrow();
+      await expect(caller.leads.bulkCreate({ leads: big })).rejects.toThrow();
+    });
+
+    it("assigns to specified user when assigneeId provided (admin caller)", async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: "user-2", organizationId: "org-1" });
+      prisma.lead.createManyAndReturn.mockResolvedValue([{ id: "lead-new" }]);
+
+      await caller.leads.bulkCreate({
+        leads: [{ firstName: "A", status: "NOT_CONTACTED" }],
+        assigneeId: "user-2",
+      });
+
+      expect(prisma.lead.createManyAndReturn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [expect.objectContaining({ assignedToId: "user-2" })],
+        }),
+      );
+    });
+
+    it("rejects assigneeId to other user from non-manager/admin caller", async () => {
+      const { caller: userCaller } = createTestCaller({ sessionOverrides: { role: "USER" } });
+      await expect(
+        userCaller.leads.bulkCreate({
+          leads: [{ firstName: "A", status: "NOT_CONTACTED" }],
+          assigneeId: "user-2",
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("applies tags to all affected leads when tagIds provided", async () => {
+      prisma.leadTag.findMany.mockResolvedValue([{ id: "tag-1" }]);
+      prisma.lead.createManyAndReturn.mockResolvedValue([{ id: "lead-new" }]);
+
+      await caller.leads.bulkCreate({
+        leads: [{ firstName: "A", status: "NOT_CONTACTED" }],
+        tagIds: ["tag-1"],
+      });
+
+      expect(prisma.leadTag.update).toHaveBeenCalledWith({
+        where: { id: "tag-1" },
+        data: { leads: { connect: [{ id: "lead-new" }] } },
+      });
+    });
+
+    it("rejects when a tagId does not belong to the org", async () => {
+      prisma.leadTag.findMany.mockResolvedValue([]); // tag not found in org
+      await expect(
+        caller.leads.bulkCreate({
+          leads: [{ firstName: "A", status: "NOT_CONTACTED" }],
+          tagIds: ["bad-tag"],
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
   });
 
@@ -933,6 +986,37 @@ describe("leadsRouter", () => {
       await expect(
         caller.leads.removeTagFromLead({ leadId: "other", tagId: "tag-1" }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  describe("bulkAddTag", () => {
+    it("connects a tag to all scope-allowed leads", async () => {
+      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1" });
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }, { id: "lead-2" }]);
+
+      const result = await caller.leads.bulkAddTag({ leadIds: ["lead-1", "lead-2"], tagId: "tag-1" });
+
+      expect(result).toEqual({ count: 2 });
+      expect(prisma.leadTag.update).toHaveBeenCalledWith({
+        where: { id: "tag-1" },
+        data: { leads: { connect: [{ id: "lead-1" }, { id: "lead-2" }] } },
+      });
+    });
+
+    it("throws NOT_FOUND when tagId is not in the org", async () => {
+      prisma.leadTag.findFirst.mockResolvedValue(null);
+      await expect(
+        caller.leads.bulkAddTag({ leadIds: ["lead-1"], tagId: "bad-tag" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("throws FORBIDDEN when any leadId is outside caller scope", async () => {
+      prisma.leadTag.findFirst.mockResolvedValue({ id: "tag-1" });
+      // Scope check returns only 1 lead, but 2 were requested
+      prisma.lead.findMany.mockResolvedValue([{ id: "lead-1" }]);
+      await expect(
+        caller.leads.bulkAddTag({ leadIds: ["lead-1", "outside-lead"], tagId: "tag-1" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
   });
 });
