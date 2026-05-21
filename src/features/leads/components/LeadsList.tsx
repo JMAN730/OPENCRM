@@ -177,6 +177,7 @@ export function LeadsList() {
       toast.success("Lead created");
       setShowAdd(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -193,6 +194,7 @@ export function LeadsList() {
         closeSelectedLead();
       }
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
       void utils.tasks.getDueToday.invalidate();
       void utils.tasks.getOverdue.invalidate();
       void utils.tasks.getUpcomingFollowUps.invalidate();
@@ -206,6 +208,7 @@ export function LeadsList() {
       setSelected(new Set());
       setShowAssign(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -217,6 +220,7 @@ export function LeadsList() {
       toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
       setSelected(new Set());
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -460,6 +464,7 @@ export function LeadsList() {
         setShowAssign(false);
         toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
         await utils.leads.getAll.invalidate();
+        await utils.leads.getStageCounts.invalidate();
         await utils.tasks.getDueToday.invalidate();
         await utils.tasks.getOverdue.invalidate();
         await utils.tasks.getUpcomingFollowUps.invalidate();
@@ -601,7 +606,7 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStageCounts.invalidate(); }} />}
               isExporting={isExporting}
               members={assignableUsers}
               orgTags={orgTags}
@@ -614,7 +619,7 @@ export function LeadsList() {
               stageFilter={stageFilter}
               tagFilter={tagFilter}
               visibleColumns={visibleColumns}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => { setStageFilter(new Set()); setPageCursor(undefined); setCursorHistory([]); }}
               onColumnsOpenChange={setColumnsOpen}
               onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
@@ -674,7 +679,7 @@ export function LeadsList() {
                 <div className="crm-page-sub">{classicSubtitle}</div>
               </div>
               <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
+                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStageCounts.invalidate(); }} />
                 <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
                   New lead
                 </button>
@@ -695,7 +700,7 @@ export function LeadsList() {
               scoreMin={scoreMin}
               scoreMax={scoreMax}
               tagFilter={tagFilter}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => { setStageFilter(new Set()); setPageCursor(undefined); setCursorHistory([]); }}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
                   deleteLead.mutate({ id: leadId });
