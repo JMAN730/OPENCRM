@@ -415,12 +415,44 @@ export const leadsRouter = createTRPCRouter({
     }),
 
   bulkCreate: organizationProcedure
-    .input(z.array(leadInputSchema).min(1).max(5000))
+    .input(
+      z.object({
+        leads: z.array(leadInputSchema).min(1).max(5000),
+        assigneeId: z.string().nullish(),
+        tagIds: z.array(z.string()).max(20).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const normalizeEmail = (email?: string) => (email ?? "").trim().toLowerCase();
       const normalizePhone = (phone?: string) => (phone ?? "").replace(/\D/g, "");
 
-      const cleaned = input.map((l) => {
+      // Permission check: assigning to someone else requires manager/admin
+      let effectiveAssigneeId = ctx.session.user.id;
+      if (input.assigneeId != null && input.assigneeId !== ctx.session.user.id) {
+        if (!isManagerOrAdmin(ctx.session.user.role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only managers or admins can assign leads to others." });
+        }
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assigneeId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
+        effectiveAssigneeId = input.assigneeId;
+      }
+
+      // Validate tag IDs belong to this org (deduplicate first — findMany collapses duplicates)
+      const uniqueTagIds = input.tagIds?.length ? [...new Set(input.tagIds)] : [];
+      const validTags = uniqueTagIds.length
+        ? await ctx.prisma.leadTag.findMany({
+            where: { id: { in: uniqueTagIds }, organizationId: ctx.organizationId },
+            select: { id: true },
+          })
+        : [];
+      if (uniqueTagIds.length && validTags.length !== uniqueTagIds.length) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "One or more tags not found." });
+      }
+
+      const cleaned = input.leads.map((l) => {
         const email = normalizeEmail(l.email);
         const phone = normalizePhone(l.phone);
         const normalized = normalizeLeadInput(l);
@@ -487,7 +519,7 @@ export const leadsRouter = createTRPCRouter({
           toCreate.push({
             ...row,
             organizationId: ctx.organizationId,
-            assignedToId: ctx.session.user.id,
+            assignedToId: effectiveAssigneeId,
           });
           continue;
         }
@@ -513,6 +545,11 @@ export const leadsRouter = createTRPCRouter({
           data.status = row.status;
         }
 
+        // Always apply explicit assignee override on updates
+        if (input.assigneeId != null) {
+          data.assignedToId = effectiveAssigneeId;
+        }
+
         if (Object.keys(data).length > 0) {
           toUpdate.push({ id: match.id, data });
         }
@@ -520,17 +557,29 @@ export const leadsRouter = createTRPCRouter({
 
       const ops: Prisma.PrismaPromise<unknown>[] = [];
       if (toCreate.length) {
-        ops.push(ctx.prisma.lead.createMany({ data: toCreate }));
+        ops.push(ctx.prisma.lead.createManyAndReturn({ data: toCreate, select: { id: true } }));
       }
       for (const u of toUpdate) {
         ops.push(ctx.prisma.lead.update({ where: { id: u.id }, data: u.data }));
       }
 
       const results = ops.length ? await ctx.prisma.$transaction(ops) : [];
-      const created = toCreate.length ? (results[0] as { count: number }).count : 0;
-      const updated = toUpdate.length;
+      const createdIds = toCreate.length ? (results[0] as { id: string }[]).map((r) => r.id) : [];
+      const updatedIds = toUpdate.map((u) => u.id);
+      const allAffectedIds = [...createdIds, ...updatedIds];
 
-      return { count: created + updated };
+      if (validTags.length && allAffectedIds.length) {
+        await Promise.all(
+          validTags.map((tag) =>
+            ctx.prisma.leadTag.update({
+              where: { id: tag.id },
+              data: { leads: { connect: allAffectedIds.map((id) => ({ id })) } },
+            }),
+          ),
+        );
+      }
+
+      return { count: createdIds.length + updatedIds.length };
     }),
 
   updateTemperatureOverride: organizationProcedure
@@ -946,6 +995,36 @@ export const leadsRouter = createTRPCRouter({
         data: { tags: { disconnect: { id: input.tagId } } },
       });
       return { ok: true };
+    }),
+
+  bulkAddTag: organizationProcedure
+    .input(z.object({ leadIds: z.array(z.string()).min(1).max(500), tagId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+      const uniqueIds = [...new Set(input.leadIds)];
+
+      const tag = await ctx.prisma.leadTag.findFirst({
+        where: { id: input.tagId, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
+
+      const scope = await getLeadScope(ctx, userId, role);
+      const leads = await ctx.prisma.lead.findMany({
+        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (leads.length !== uniqueIds.length) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "One or more leads are outside your scope." });
+      }
+
+      await ctx.prisma.leadTag.update({
+        where: { id: tag.id },
+        data: { leads: { connect: uniqueIds.map((id) => ({ id })) } },
+      });
+
+      return { count: uniqueIds.length };
     }),
 
   export: organizationProcedure
