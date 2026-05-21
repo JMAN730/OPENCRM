@@ -238,6 +238,7 @@ function LeadCard({ lead, onDragStart, onDragEnd, onValueChange, onSelectLead }:
             autoFocus
             className="crm-pipeline-value-input"
             inputMode="decimal"
+            maxLength={5}
             value={valueInput}
             onChange={(e) => setValueInput(e.target.value)}
             onBlur={commitValue}
@@ -546,6 +547,7 @@ function TableView({ stages, filterLeads, onValueChange }: {
                     <input
                       autoFocus
                       inputMode="decimal"
+                      maxLength={5}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={() => commitEdit(lead.id)}
@@ -963,6 +965,7 @@ export function PipelineBoard() {
                   <Input
                     id="filter-min"
                     inputMode="decimal"
+                    maxLength={5}
                     placeholder="0"
                     value={filterMinValue}
                     onChange={(e) => setFilterMinValue(e.target.value)}
@@ -973,6 +976,7 @@ export function PipelineBoard() {
                   <Input
                     id="filter-max"
                     inputMode="decimal"
+                    maxLength={5}
                     placeholder="∞"
                     value={filterMaxValue}
                     onChange={(e) => setFilterMaxValue(e.target.value)}
@@ -1196,6 +1200,7 @@ export function PipelineBoard() {
               <Input
                 id="deal-value"
                 inputMode="decimal"
+                maxLength={5}
                 value={dealValue}
                 onChange={(e) => setDealValue(e.target.value)}
                 placeholder="0"
