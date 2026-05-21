@@ -345,15 +345,15 @@ export const leadsRouter = createTRPCRouter({
         effectiveAssigneeId = input.assigneeId;
       }
 
-      // Validate tag IDs belong to this org
-      const validTags =
-        input.tagIds?.length
-          ? await ctx.prisma.leadTag.findMany({
-              where: { id: { in: input.tagIds }, organizationId: ctx.organizationId },
-              select: { id: true },
-            })
-          : [];
-      if (input.tagIds?.length && validTags.length !== input.tagIds.length) {
+      // Validate tag IDs belong to this org (deduplicate first — findMany collapses duplicates)
+      const uniqueTagIds = input.tagIds?.length ? [...new Set(input.tagIds)] : [];
+      const validTags = uniqueTagIds.length
+        ? await ctx.prisma.leadTag.findMany({
+            where: { id: { in: uniqueTagIds }, organizationId: ctx.organizationId },
+            select: { id: true },
+          })
+        : [];
+      if (uniqueTagIds.length && validTags.length !== uniqueTagIds.length) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "One or more tags not found." });
       }
 
