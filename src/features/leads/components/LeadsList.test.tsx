@@ -162,6 +162,7 @@ vi.mock("@/app/_trpc/client", () => ({
     useUtils: () => ({
       leads: {
         getAll: { invalidate: invalidateLeads },
+        getStageCounts: { invalidate: vi.fn() },
       },
       tasks: {
         getDueToday: { invalidate: invalidateDueToday },

@@ -56,6 +56,9 @@ vi.mock("@/app/_trpc/client", () => ({
       updateCallOutcome: {
         useMutation: vi.fn(() => ({ mutate: outcomeMutate, isPending: false })),
       },
+      setDisposition: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       updateTemperatureOverride: {
         useMutation: vi.fn(() => ({ mutate: tempMutate, isPending: false })),
       },
