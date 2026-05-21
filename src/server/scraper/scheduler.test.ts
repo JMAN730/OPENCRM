@@ -170,7 +170,7 @@ describe("runDueSchedules", () => {
     mockFindManySchedules.mockResolvedValue([makeSchedule()]);
     mockFindFirstUser.mockResolvedValue({ id: "admin-1" });
     mockCreateJob.mockResolvedValue({ id: "job-new" });
-    mockStartScraperJob.mockRejectedValue(new Error("python not found"));
+    mockStartScraperJob.mockRejectedValueOnce(new Error("python not found"));
 
     const result = await runDueSchedules();
 
