@@ -55,6 +55,23 @@ function normalizeLeadInput(input: LeadInput): LeadInput {
   };
 }
 
+function buildStageWhere(stages: string[]): Prisma.LeadWhereInput[] {
+  return stages.flatMap((stage): Prisma.LeadWhereInput[] => {
+    if (stage === "NOT_CONTACTED")
+      return [{ callOutcome: null }, { callOutcome: "NOT_CONTACTED" }] as Prisma.LeadWhereInput[];
+    if (stage.startsWith("CUSTOM:"))
+      return [{ callOutcome: "CUSTOM", customOutcomeId: stage.slice(7) } as Prisma.LeadWhereInput];
+    const stageToOutcome: Record<string, string> = {
+      CONNECTED: "ANSWERED",
+      AI_VOICEMAIL: "AI_VOICEMAIL",
+      NO_ANSWER: "NO_ANSWER",
+      HUNG_UP: "HUNG_UP",
+    };
+    const outcome = stageToOutcome[stage];
+    return outcome ? [{ callOutcome: outcome } as Prisma.LeadWhereInput] : [];
+  });
+}
+
 function searchWhere(search?: string): Record<string, unknown> {
   if (!search) return {};
 
@@ -156,6 +173,7 @@ export const leadsRouter = createTRPCRouter({
             .optional(),
           hasPhone: z.boolean().optional(),
           assignedToIds: z.array(z.string()).optional(),
+          stages: z.array(z.string()).optional(),
           limit: z.number().int().min(1).max(100).default(100),
           // Cursor encodes the last seen lead's id (the primary sort key
           // tie-breaker). Prisma's native cursor pagination handles the
@@ -216,6 +234,11 @@ export const leadsRouter = createTRPCRouter({
         ...searchWhere(search),
       };
 
+      if (input.stages?.length) {
+        const stageClauses = buildStageWhere(input.stages);
+        if (stageClauses.length > 0) finalWhere.AND = [{ OR: stageClauses }];
+      }
+
       // take = limit + 1 so we can detect whether another page exists
       // without a second count() round-trip.
       const rows = await ctx.prisma.lead.findMany({
@@ -235,6 +258,78 @@ export const leadsRouter = createTRPCRouter({
       }
 
       return { items: rows, nextCursor };
+    }),
+
+  getStageCounts: organizationProcedure
+    .input(
+      z
+        .object({
+          search: z.string().max(100).optional(),
+          scope: z.enum(["default", "mine", "team", "all"]).optional(),
+          assignedToIds: z.array(z.string()).optional(),
+        })
+        .optional()
+        .default({}),
+    )
+    .query(async ({ ctx, input }) => {
+      const search = input.search?.trim();
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+
+      const baseScope = await getLeadScope(ctx, userId, role);
+      let where: Record<string, unknown> = leadWhereFromScope(baseScope);
+
+      if (input.scope === "mine") {
+        where = { organizationId: ctx.organizationId, assignedToId: userId };
+      } else if (input.scope === "all" && isAdmin(role)) {
+        where = { organizationId: ctx.organizationId };
+      }
+
+      if (input.assignedToIds?.length) {
+        const visibleUsers = baseScope.kind === "all" ? null : baseScope.userIds;
+        const allowed = visibleUsers
+          ? input.assignedToIds.filter((id) => visibleUsers.includes(id))
+          : input.assignedToIds;
+        if (!allowed.length) throw new TRPCError({ code: "FORBIDDEN" });
+        where.assignedToId = { in: allowed };
+      }
+
+      const finalWhere: Record<string, unknown> = {
+        ...where,
+        ...searchWhere(search),
+      };
+
+      const groups = await ctx.prisma.lead.groupBy({
+        by: ["callOutcome", "customOutcomeId"],
+        where: finalWhere as Prisma.LeadWhereInput,
+        _count: { _all: true },
+      });
+
+      const counts: Record<string, number> = {
+        NOT_CONTACTED: 0,
+        CONNECTED: 0,
+        AI_VOICEMAIL: 0,
+        NO_ANSWER: 0,
+        HUNG_UP: 0,
+      };
+      const outcomeToStage: Record<string, string> = {
+        ANSWERED: "CONNECTED",
+        AI_VOICEMAIL: "AI_VOICEMAIL",
+        NO_ANSWER: "NO_ANSWER",
+        HUNG_UP: "HUNG_UP",
+      };
+      for (const g of groups) {
+        const n = g._count._all;
+        if (!g.callOutcome || g.callOutcome === "NOT_CONTACTED") {
+          counts.NOT_CONTACTED += n;
+        } else if (g.callOutcome === "CUSTOM" && g.customOutcomeId) {
+          counts[`CUSTOM:${g.customOutcomeId}`] = (counts[`CUSTOM:${g.customOutcomeId}`] ?? 0) + n;
+        } else {
+          const stage = outcomeToStage[g.callOutcome];
+          if (stage) counts[stage] = (counts[stage] ?? 0) + n;
+        }
+      }
+      return counts;
     }),
 
   getById: organizationProcedure
