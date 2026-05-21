@@ -502,8 +502,7 @@ export const leadsRouter = createTRPCRouter({
           ? {}
           : { status: outcomeToStatus[input.callOutcome] };
 
-      const shouldCountTouch =
-        lead.callOutcome === "NOT_CONTACTED" && input.callOutcome !== "NOT_CONTACTED";
+      const shouldCountTouch = input.callOutcome !== "NOT_CONTACTED";
       const now = new Date();
       const touchUpdate = shouldCountTouch
         ? {
