@@ -253,20 +253,52 @@ export const dashboardRouter = createTRPCRouter({
 
     if (!organizationId) return [];
 
-    const outcomes = await ctx.prisma.lead.groupBy({
-      by: ["callOutcome"],
-      where: {
-        organizationId,
-        assignedToId: userId,
-        callOutcome: { not: "NOT_CONTACTED" },
-      },
-      _count: { id: true },
-    });
+    const [standardOutcomes, customGroups] = await Promise.all([
+      ctx.prisma.lead.groupBy({
+        by: ["callOutcome"],
+        where: {
+          organizationId,
+          assignedToId: userId,
+          callOutcome: { notIn: ["NOT_CONTACTED", "CUSTOM"] },
+        },
+        _count: { id: true },
+      }),
+      ctx.prisma.lead.groupBy({
+        by: ["customOutcomeId"],
+        where: {
+          organizationId,
+          assignedToId: userId,
+          callOutcome: "CUSTOM",
+        },
+        _count: { id: true },
+      }),
+    ]);
 
-    return outcomes.map((item) => ({
-      outcome: item.callOutcome,
-      count: item._count.id,
-    }));
+    const customIds = customGroups
+      .map((g) => g.customOutcomeId)
+      .filter((id): id is string => !!id);
+
+    const customLabels = customIds.length > 0
+      ? await ctx.prisma.customOutcome.findMany({
+          where: { id: { in: customIds } },
+          select: { id: true, label: true },
+        })
+      : [];
+
+    const labelById = new Map(customLabels.map((c) => [c.id, c.label]));
+
+    return [
+      ...standardOutcomes.map((item) => ({
+        outcome: item.callOutcome as string,
+        count: item._count.id,
+      })),
+      ...customGroups.map((item) => ({
+        outcome: "CUSTOM" as string,
+        customOutcomeId: item.customOutcomeId ?? undefined,
+        label: item.customOutcomeId ? (labelById.get(item.customOutcomeId) ?? "Custom") : "Custom",
+        count: item._count.id,
+      })),
+    ];
   }),
 
   getMyStats: protectedProcedure.query(async ({ ctx }) => {
