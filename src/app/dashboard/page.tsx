@@ -53,10 +53,24 @@ const OUTCOME_DISPLAY: Record<string, { label: string; color: string }> = {
   HUNG_UP:      { label: "Hung up",      color: "oklch(64% 0.18 25)" },
   NO_ANSWER:    { label: "No answer",    color: "oklch(72% 0.06 80)" },
   AI_VOICEMAIL: { label: "AI voicemail", color: "oklch(72% 0.12 270)" },
-  CUSTOM:       { label: "Custom",       color: "oklch(70% 0.04 80)" },
 };
 
-function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: number }[]; isLoading: boolean }) {
+const CUSTOM_COLORS = [
+  "oklch(70% 0.14 150)",
+  "oklch(70% 0.14 200)",
+  "oklch(70% 0.14 310)",
+  "oklch(70% 0.14 50)",
+  "oklch(70% 0.14 260)",
+  "oklch(70% 0.04 80)",
+];
+
+type PhoneReachEntry = { outcome: string; count: number; customOutcomeId?: string | null; label?: string | null };
+
+function entryKey(d: PhoneReachEntry): string {
+  return d.outcome === "CUSTOM" ? (d.customOutcomeId ?? "CUSTOM_NULL") : d.outcome;
+}
+
+function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoading: boolean }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   const grandTotal = data.reduce((s, d) => s + d.count, 0);
@@ -72,14 +86,27 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
     );
   }
 
-  const toggle = (outcome: string) =>
+  const toggle = (key: string) =>
     setExcluded((prev) => {
       const next = new Set(prev);
-      next.has(outcome) ? next.delete(outcome) : next.add(outcome);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
 
-  const visibleData = data.filter((d) => !excluded.has(d.outcome));
+  // Enrich each entry with its display key, label, and color
+  let customIdx = 0;
+  const enriched = data.map((d) => {
+    const key = entryKey(d);
+    if (d.outcome !== "CUSTOM") {
+      const cfg = OUTCOME_DISPLAY[d.outcome] ?? { label: d.outcome, color: "var(--crm-fg-faint)" };
+      return { ...d, key, label: cfg.label, color: cfg.color };
+    }
+    const color = CUSTOM_COLORS[customIdx % CUSTOM_COLORS.length];
+    customIdx++;
+    return { ...d, key, label: d.label ?? "Custom", color };
+  });
+
+  const visibleData = enriched.filter((d) => !excluded.has(d.key));
   const visibleTotal = visibleData.reduce((s, d) => s + d.count, 0);
   const answered = visibleData.find((d) => d.outcome === "ANSWERED")?.count ?? 0;
   const answerRate = visibleTotal > 0 ? ((answered / visibleTotal) * 100).toFixed(1) : "0.0";
@@ -105,18 +132,15 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
         <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
-            {visibleTotal === 0 ? null : segments.map((d, i) => {
-              const cfg = OUTCOME_DISPLAY[d.outcome];
-              return (
-                <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-                  stroke={cfg?.color ?? "var(--crm-fg-faint)"} strokeWidth={stroke}
-                  strokeDasharray={`${d.len - 1} ${C - d.len + 1}`}
-                  strokeDashoffset={d.off}
-                  transform={`rotate(-90 ${cx} ${cy})`}
-                  strokeLinecap="butt"
-                />
-              );
-            })}
+            {visibleTotal === 0 ? null : segments.map((d, i) => (
+              <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                stroke={d.color} strokeWidth={stroke}
+                strokeDasharray={`${d.len - 1} ${C - d.len + 1}`}
+                strokeDashoffset={d.off}
+                transform={`rotate(-90 ${cx} ${cy})`}
+                strokeLinecap="butt"
+              />
+            ))}
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
             <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{answerRate}%</div>
@@ -124,9 +148,8 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
           </div>
         </div>
         <div className="crm-legend">
-          {data.map((d, i) => {
-            const cfg = OUTCOME_DISPLAY[d.outcome];
-            const isExcluded = excluded.has(d.outcome);
+          {enriched.map((d, i) => {
+            const isExcluded = excluded.has(d.key);
             const pct = visibleTotal > 0 && !isExcluded
               ? ((d.count / visibleTotal) * 100).toFixed(1)
               : "—";
@@ -134,16 +157,16 @@ function PhoneReachCard({ data, isLoading }: { data: { outcome: string; count: n
               <div
                 key={i}
                 className="crm-legend-row"
-                onClick={() => toggle(d.outcome)}
+                onClick={() => toggle(d.key)}
                 title={isExcluded ? "Click to include" : "Click to exclude"}
                 style={{ cursor: "pointer", opacity: isExcluded ? 0.38 : 1, transition: "opacity 0.15s" }}
               >
                 <span className="crm-swatch" style={{
-                  background: isExcluded ? "var(--crm-fg-faint)" : (cfg?.color ?? "var(--crm-fg-faint)"),
+                  background: isExcluded ? "var(--crm-fg-faint)" : d.color,
                   width: 10, height: 10, borderRadius: 3,
                   transition: "background 0.15s",
                 }} />
-                <span style={{ textDecoration: isExcluded ? "line-through" : "none" }}>{cfg?.label ?? d.outcome}</span>
+                <span style={{ textDecoration: isExcluded ? "line-through" : "none" }}>{d.label}</span>
                 <span className="crm-pct">{pct}</span>
                 <span className="crm-count">{d.count}</span>
               </div>
