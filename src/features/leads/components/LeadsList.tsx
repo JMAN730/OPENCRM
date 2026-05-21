@@ -142,7 +142,16 @@ export function LeadsList() {
     cursor: pageCursor,
     ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
     ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+    ...(stageFilter.size > 0 ? { stages: Array.from(stageFilter) } : {}),
   });
+  const { data: serverStageCounts } = trpc.leads.getStageCounts.useQuery(
+    {
+      search: debouncedSearch || undefined,
+      ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+      ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+    },
+    { staleTime: 30_000 },
+  );
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
@@ -168,6 +177,7 @@ export function LeadsList() {
       toast.success("Lead created");
       setShowAdd(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -184,6 +194,7 @@ export function LeadsList() {
         closeSelectedLead();
       }
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
       void utils.tasks.getDueToday.invalidate();
       void utils.tasks.getOverdue.invalidate();
       void utils.tasks.getUpcomingFollowUps.invalidate();
@@ -197,6 +208,7 @@ export function LeadsList() {
       setSelected(new Set());
       setShowAssign(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -208,6 +220,7 @@ export function LeadsList() {
       toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
       setSelected(new Set());
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStageCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -244,6 +257,7 @@ export function LeadsList() {
   };
 
   const stageCounts = useMemo(() => {
+    if (serverStageCounts) return serverStageCounts;
     const counts: Record<string, number> = {};
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
@@ -257,24 +271,10 @@ export function LeadsList() {
       }
     }
     return counts;
-  }, [allLeads, customOutcomes]);
+  }, [serverStageCounts, allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
     const rows = allLeads
-      .filter((lead) => {
-        if (!stageFilter.size) return true;
-        if (stageFilter.has("NOT_CONTACTED") && (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED")) return true;
-        const matchesCustom =
-          lead.callOutcome === "CUSTOM" &&
-          lead.customOutcomeId != null &&
-          stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
-        const matchesStatus =
-          !!lead.callOutcome &&
-          lead.callOutcome !== "CUSTOM" &&
-          lead.callOutcome !== "NOT_CONTACTED" &&
-          stageFilter.has(lead.status);
-        return matchesStatus || matchesCustom;
-      })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
       .filter((lead) =>
         tagFilter.size
@@ -305,7 +305,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, stageFilter, tagFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
@@ -340,6 +340,8 @@ export function LeadsList() {
       else next.add(stage);
       return next;
     });
+    setPageCursor(undefined);
+    setCursorHistory([]);
   };
 
   const toggleOwner = (id: string) => {
@@ -462,6 +464,7 @@ export function LeadsList() {
         setShowAssign(false);
         toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
         await utils.leads.getAll.invalidate();
+        await utils.leads.getStageCounts.invalidate();
         await utils.tasks.getDueToday.invalidate();
         await utils.tasks.getOverdue.invalidate();
         await utils.tasks.getUpcomingFollowUps.invalidate();
@@ -603,7 +606,7 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStageCounts.invalidate(); }} />}
               isExporting={isExporting}
               members={assignableUsers}
               orgTags={orgTags}
@@ -616,7 +619,7 @@ export function LeadsList() {
               stageFilter={stageFilter}
               tagFilter={tagFilter}
               visibleColumns={visibleColumns}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => { setStageFilter(new Set()); setPageCursor(undefined); setCursorHistory([]); }}
               onColumnsOpenChange={setColumnsOpen}
               onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
@@ -676,7 +679,7 @@ export function LeadsList() {
                 <div className="crm-page-sub">{classicSubtitle}</div>
               </div>
               <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
+                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStageCounts.invalidate(); }} />
                 <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
                   New lead
                 </button>
@@ -697,7 +700,7 @@ export function LeadsList() {
               scoreMin={scoreMin}
               scoreMax={scoreMax}
               tagFilter={tagFilter}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => { setStageFilter(new Set()); setPageCursor(undefined); setCursorHistory([]); }}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
                   deleteLead.mutate({ id: leadId });

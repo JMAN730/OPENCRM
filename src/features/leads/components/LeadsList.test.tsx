@@ -13,7 +13,7 @@ const assignLeadMutate = vi.fn();
 const bulkDeleteMutateAsync = vi.fn();
 
 let searchParamNew: string | null = null;
-let leadQueryCalls: Array<{ search?: string; limit: number; cursor?: string }> = [];
+let leadQueryCalls: Array<{ search?: string; limit: number; cursor?: string; stages?: string[] }> = [];
 let leadPages: Record<string, { items: Array<Record<string, unknown>>; nextCursor: string | null }> =
   {};
 let searchParamView: string | null = null;
@@ -171,13 +171,25 @@ vi.mock("@/app/_trpc/client", () => ({
     }),
     leads: {
       getAll: {
-        useQuery: vi.fn((input: { search?: string; limit: number; cursor?: string }) => {
+        useQuery: vi.fn((input: { search?: string; limit: number; cursor?: string; stages?: string[] }) => {
           leadQueryCalls.push(input);
           const page = leadPages[input.cursor ?? "root"] ?? { items: [], nextCursor: null };
           const search = input.search?.toLowerCase().trim();
-          const items = !search
+          let items = !search
             ? page.items
             : page.items.filter((lead) => JSON.stringify(lead).toLowerCase().includes(search));
+
+          if (input.stages?.length) {
+            const stageToOutcome: Record<string, string> = { CONNECTED: "ANSWERED", AI_VOICEMAIL: "AI_VOICEMAIL", NO_ANSWER: "NO_ANSWER", HUNG_UP: "HUNG_UP" };
+            items = items.filter((lead: Record<string, unknown>) => {
+              for (const stage of input.stages!) {
+                if (stage === "NOT_CONTACTED" && (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED")) return true;
+                if (stage.startsWith("CUSTOM:") && lead.callOutcome === "CUSTOM" && lead.customOutcomeId === stage.slice(7)) return true;
+                if (lead.callOutcome === stageToOutcome[stage]) return true;
+              }
+              return false;
+            });
+          }
 
           return {
             data: { items, nextCursor: page.nextCursor },
@@ -185,6 +197,9 @@ vi.mock("@/app/_trpc/client", () => ({
             isFetching: leadQueryState.isFetching,
           };
         }),
+      },
+      getStageCounts: {
+        useQuery: vi.fn(() => ({ data: undefined })),
       },
       getById: {
         useQuery: vi.fn(() => ({ data: undefined })),
@@ -347,6 +362,7 @@ describe("LeadsList", () => {
             company: "Acme Corp",
             assignedToId: "user-1",
             rating: 5,
+            temperatureOverride: "HOT",
           }),
           makeLead({
             id: "lead-2",
@@ -356,6 +372,7 @@ describe("LeadsList", () => {
             rating: 3.6,
             reviewCount: 12,
             status: "CONNECTED",
+            callOutcome: "ANSWERED",
             assignedToId: "user-2",
             assignedTo: {
               id: "user-2",
@@ -373,6 +390,7 @@ describe("LeadsList", () => {
             rating: 2.9,
             reviewCount: 3,
             status: "NO_ANSWER",
+            callOutcome: "NO_ANSWER",
             assignedToId: "user-1",
             createdAt: "2026-05-13T09:00:00.000Z",
           }),
