@@ -154,6 +154,9 @@ export const leadsRouter = createTRPCRouter({
           status: z
             .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
             .optional(),
+          stages: z
+            .array(z.enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"]))
+            .optional(),
           hasPhone: z.boolean().optional(),
           assignedToIds: z.array(z.string()).optional(),
           limit: z.number().int().min(1).max(100).default(100),
@@ -204,6 +207,11 @@ export const leadsRouter = createTRPCRouter({
 
       if (input.status) {
         where.status = input.status;
+        where.callOutcome = { not: "CUSTOM" };
+      }
+
+      if (input.stages?.length) {
+        where.status = { in: input.stages };
         where.callOutcome = { not: "CUSTOM" };
       }
 

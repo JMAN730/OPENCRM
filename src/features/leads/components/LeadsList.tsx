@@ -132,6 +132,19 @@ export function LeadsList() {
 
   const utils = trpc.useUtils();
 
+  // Only send built-in stage filters to the server when no custom outcomes are selected.
+  // Custom outcomes can't be filtered server-side, so fall back to client-side for those.
+  const hasCustomOutcomeFilter = Array.from(stageFilter).some((s) => s.startsWith("CUSTOM:"));
+  const serverStageFilter = hasCustomOutcomeFilter
+    ? []
+    : (Array.from(stageFilter).filter((s) => STAGE_ORDER.includes(s as (typeof STAGE_ORDER)[number])) as (
+        | "NOT_CONTACTED"
+        | "CONNECTED"
+        | "AI_VOICEMAIL"
+        | "NO_ANSWER"
+        | "HUNG_UP"
+      )[]);
+
   const {
     data: leadsPage,
     isLoading,
@@ -140,6 +153,7 @@ export function LeadsList() {
     search: debouncedSearch,
     limit: 100,
     cursor: pageCursor,
+    ...(serverStageFilter.length > 0 ? { stages: serverStageFilter } : {}),
     ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
     ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
   });
@@ -348,6 +362,8 @@ export function LeadsList() {
       else next.add(stage);
       return next;
     });
+    setPageCursor(undefined);
+    setCursorHistory([]);
   };
 
   const toggleOwner = (id: string) => {
@@ -624,7 +640,11 @@ export function LeadsList() {
               stageFilter={stageFilter}
               tagFilter={tagFilter}
               visibleColumns={visibleColumns}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => {
+                setStageFilter(new Set());
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onColumnsOpenChange={setColumnsOpen}
               onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
@@ -705,7 +725,11 @@ export function LeadsList() {
               scoreMin={scoreMin}
               scoreMax={scoreMax}
               tagFilter={tagFilter}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => {
+                setStageFilter(new Set());
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
                   deleteLead.mutate({ id: leadId });
