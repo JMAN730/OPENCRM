@@ -157,6 +157,12 @@ export function LeadsList() {
     ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
     ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
   });
+
+  const { data: serverStageCounts } = trpc.leads.getStatusCounts.useQuery({
+    search: debouncedSearch,
+    ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+    ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+  }, { staleTime: 30_000 });
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
@@ -182,6 +188,7 @@ export function LeadsList() {
       toast.success("Lead created");
       setShowAdd(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -198,6 +205,7 @@ export function LeadsList() {
         closeSelectedLead();
       }
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
       void utils.tasks.getDueToday.invalidate();
       void utils.tasks.getOverdue.invalidate();
       void utils.tasks.getUpcomingFollowUps.invalidate();
@@ -211,6 +219,7 @@ export function LeadsList() {
       setSelected(new Set());
       setShowAssign(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -230,6 +239,7 @@ export function LeadsList() {
       toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
       setSelected(new Set());
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -266,6 +276,8 @@ export function LeadsList() {
   };
 
   const stageCounts = useMemo(() => {
+    if (serverStageCounts) return serverStageCounts;
+    // Fallback to page-local counts while server counts load
     const counts: Record<string, number> = {};
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
@@ -279,7 +291,7 @@ export function LeadsList() {
       }
     }
     return counts;
-  }, [allLeads, customOutcomes]);
+  }, [serverStageCounts, allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
     const rows = allLeads
@@ -486,6 +498,7 @@ export function LeadsList() {
         setShowAssign(false);
         toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
         await utils.leads.getAll.invalidate();
+        await utils.leads.getStatusCounts.invalidate();
         await utils.tasks.getDueToday.invalidate();
         await utils.tasks.getOverdue.invalidate();
         await utils.tasks.getUpcomingFollowUps.invalidate();
@@ -627,7 +640,7 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
               isExporting={isExporting}
               members={assignableUsers}
               orgTags={orgTags}
@@ -704,7 +717,7 @@ export function LeadsList() {
                 <div className="crm-page-sub">{classicSubtitle}</div>
               </div>
               <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
+                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
                 <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
                   New lead
                 </button>
