@@ -245,6 +245,81 @@ export const leadsRouter = createTRPCRouter({
       return { items: rows, nextCursor };
     }),
 
+  getStatusCounts: organizationProcedure
+    .input(
+      z
+        .object({
+          search: z.string().max(100).optional(),
+          scope: z.enum(["default", "mine", "team", "all"]).optional(),
+          assignedToIds: z.array(z.string()).optional(),
+        })
+        .optional()
+        .default(() => ({})),
+    )
+    .query(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const userId = ctx.session.user.id;
+      const baseScope = await getLeadScope(ctx, userId, role);
+
+      let where: Record<string, unknown> = leadWhereFromScope(baseScope);
+
+      if (input.scope === "mine") {
+        where = { organizationId: ctx.organizationId, assignedToId: userId };
+      } else if (input.scope === "all" && !isAdmin(role)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      } else if (input.scope === "all" && isAdmin(role)) {
+        where = { organizationId: ctx.organizationId };
+      }
+
+      if (input.assignedToIds?.length) {
+        const visibleUsers = baseScope.kind === "all" ? null : baseScope.userIds;
+        const allowed = visibleUsers
+          ? input.assignedToIds.filter((id) => visibleUsers.includes(id))
+          : input.assignedToIds;
+        if (allowed.length) where.assignedToId = { in: allowed };
+      }
+
+      const search = input.search?.trim();
+      const finalWhere = { ...where, ...searchWhere(search) };
+
+      const [standardRows, customRows, notContactedCount] = await Promise.all([
+        ctx.prisma.lead.groupBy({
+          by: ["status"],
+          where: {
+            AND: [
+              finalWhere,
+              { callOutcome: { not: null } },
+              { callOutcome: { not: "NOT_CONTACTED" } },
+              { callOutcome: { not: "CUSTOM" } },
+            ],
+          } as Record<string, unknown>,
+          _count: { id: true },
+        }),
+        ctx.prisma.lead.groupBy({
+          by: ["customOutcomeId"],
+          where: {
+            AND: [finalWhere, { callOutcome: "CUSTOM" }],
+          } as Record<string, unknown>,
+          _count: { id: true },
+        }),
+        ctx.prisma.lead.count({
+          where: {
+            AND: [
+              finalWhere,
+              { OR: [{ callOutcome: null }, { callOutcome: "NOT_CONTACTED" }] },
+            ],
+          } as Record<string, unknown>,
+        }),
+      ]);
+
+      const counts: Record<string, number> = { NOT_CONTACTED: notContactedCount };
+      for (const row of standardRows) counts[row.status] = row._count.id;
+      for (const row of customRows) {
+        if (row.customOutcomeId) counts[`CUSTOM:${row.customOutcomeId}`] = row._count.id;
+      }
+      return counts;
+    }),
+
   getById: organizationProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
