@@ -73,7 +73,7 @@ function makeMember(overrides: Record<string, unknown> = {}) {
     id: "user-1",
     name: "Alice",
     email: "alice@example.com",
-    role: "ADMIN",
+    role: "ADMIN" as const,
     teamId: null,
     team: null,
     image: null,
@@ -85,8 +85,12 @@ function makeTeam(overrides: Record<string, unknown> = {}) {
   return {
     id: "team-1",
     name: "Sales",
+    organizationId: "org-1",
+    createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     leaderId: null,
     users: [],
+    leader: null,
     ...overrides,
   };
 }

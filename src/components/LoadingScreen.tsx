@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 const NB = "#5cc8ff";
 const NV = "#a06bff";
@@ -152,7 +152,7 @@ interface Particle {
 
 function ConvergeParticles({ t }: { t: number }) {
   const N = 60;
-  const seed = useMemo<Particle[]>(() =>
+  const [seed] = useState<Particle[]>(() =>
     Array.from({ length: N }, (_, i) => ({
       angle: (i / N) * Math.PI * 2 + Math.random() * 0.6,
       radius: 500 + Math.random() * 300,
@@ -161,7 +161,7 @@ function ConvergeParticles({ t }: { t: number }) {
       size: 1.5 + Math.random() * 2.5,
       hue: i % 3 === 0 ? NP : i % 2 === 0 ? NV : NB,
     })),
-  []);
+  );
 
   if (t > 2.6) return null;
 
@@ -234,8 +234,8 @@ function CenterLogo({ t }: { t: number }) {
   const pulse = 1 + Math.sin(idleT * 2.6) * 0.025 * (idleT < 2.3 ? 1 : 0);
   const fadeOut = t < 4.7 ? 1 : Math.max(0, 1 - (t - 4.7) / 0.3);
   const entryOpacity = Math.min(1, localT / 0.4);
-  const jx = scrambleAmt > 0 ? (Math.random() - 0.5) * 8 * scrambleAmt : 0;
-  const jy = scrambleAmt > 0 ? (Math.random() - 0.5) * 5 * scrambleAmt : 0;
+  const jx = scrambleAmt > 0 ? Math.sin(t * 137.1) * 4 * scrambleAmt : 0;
+  const jy = scrambleAmt > 0 ? Math.cos(t * 91.7) * 2.5 * scrambleAmt : 0;
 
   return (
     <div style={{
@@ -375,7 +375,7 @@ export function LoadingScreen({ sessionReady, onDone }: LoadingScreenProps) {
   const [t, setT] = useState(0);
   const [exiting, setExiting] = useState(false);
   const startRef = useRef<number | null>(null);
-  const mountTimeRef = useRef(Date.now());
+  const [mountTime] = useState(() => Date.now());
   const doneCalledRef = useRef(false);
 
   // rAF animation loop
@@ -394,7 +394,7 @@ export function LoadingScreen({ sessionReady, onDone }: LoadingScreenProps) {
   // Trigger exit once session is ready AND minimum display time has elapsed
   useEffect(() => {
     if (!sessionReady || doneCalledRef.current) return;
-    const elapsed = Date.now() - mountTimeRef.current;
+    const elapsed = Date.now() - mountTime;
     const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
     const timer = setTimeout(() => {
       if (doneCalledRef.current) return;
@@ -403,7 +403,7 @@ export function LoadingScreen({ sessionReady, onDone }: LoadingScreenProps) {
       setTimeout(onDone, 400);
     }, remaining);
     return () => clearTimeout(timer);
-  }, [sessionReady, onDone]);
+  }, [sessionReady, onDone, mountTime]);
 
   return (
     <div style={{

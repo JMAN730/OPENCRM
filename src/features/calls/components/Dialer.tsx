@@ -85,13 +85,12 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
 
   // Duration timer while in call
   useEffect(() => {
-    if (!isInCall) {
+    if (!isInCall) return;
+    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+    return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       setCallDuration(0);
-      return;
-    }
-    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    };
   }, [isInCall]);
 
   const handleNumberClick = (num: string) => {

@@ -206,10 +206,12 @@ describe("dashboardRouter.getMyPhoneReach", () => {
   });
 
   it("maps groupBy results to {outcome, count} pairs", async () => {
-    prisma.lead.groupBy.mockResolvedValue([
-      { callOutcome: "ANSWERED", _count: { id: 5 } },
-      { callOutcome: "NO_ANSWER", _count: { id: 3 } },
-    ]);
+    prisma.lead.groupBy
+      .mockResolvedValueOnce([
+        { callOutcome: "ANSWERED", _count: { id: 5 } },
+        { callOutcome: "NO_ANSWER", _count: { id: 3 } },
+      ])
+      .mockResolvedValueOnce([]);
     const result = await caller.dashboard.getMyPhoneReach();
     expect(result).toEqual([
       { outcome: "ANSWERED", count: 5 },
@@ -222,6 +224,6 @@ describe("dashboardRouter.getMyPhoneReach", () => {
     const callArgs = prisma.lead.groupBy.mock.calls[0][0];
     expect(callArgs.where.organizationId).toBe("org-1");
     expect(callArgs.where.assignedToId).toBe("user-1");
-    expect(callArgs.where.callOutcome).toEqual({ not: "NOT_CONTACTED" });
+    expect(callArgs.where.callOutcome).toEqual({ notIn: ["NOT_CONTACTED", "CUSTOM"] });
   });
 });

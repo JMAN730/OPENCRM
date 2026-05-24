@@ -59,6 +59,9 @@ vi.mock("@/app/_trpc/client", () => ({
       updateTemperatureOverride: {
         useMutation: vi.fn(() => ({ mutate: tempMutate, isPending: false })),
       },
+      setDisposition: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       listOrgTags: {
         useQuery: vi.fn(() => ({ data: [] })),
       },
