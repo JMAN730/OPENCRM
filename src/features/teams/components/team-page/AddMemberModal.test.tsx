@@ -43,7 +43,7 @@ function makeMember(overrides: Record<string, unknown> = {}) {
     id: "user-2",
     name: "Bob Smith",
     email: "bob@example.com",
-    role: "USER",
+    role: "USER" as const,
     teamId: null,
     team: null,
     image: null,

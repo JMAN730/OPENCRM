@@ -162,6 +162,7 @@ vi.mock("@/app/_trpc/client", () => ({
     useUtils: () => ({
       leads: {
         getAll: { invalidate: invalidateLeads },
+        getStatusCounts: { invalidate: vi.fn() },
       },
       tasks: {
         getDueToday: { invalidate: invalidateDueToday },
@@ -171,13 +172,32 @@ vi.mock("@/app/_trpc/client", () => ({
     }),
     leads: {
       getAll: {
-        useQuery: vi.fn((input: { search?: string; limit: number; cursor?: string }) => {
+        useQuery: vi.fn((input: {
+          search?: string;
+          limit: number;
+          cursor?: string;
+          stages?: string[];
+          scope?: "mine";
+          assignedToIds?: string[];
+        }) => {
           leadQueryCalls.push(input);
           const page = leadPages[input.cursor ?? "root"] ?? { items: [], nextCursor: null };
           const search = input.search?.toLowerCase().trim();
-          const items = !search
+          let items = !search
             ? page.items
             : page.items.filter((lead) => JSON.stringify(lead).toLowerCase().includes(search));
+
+          if (input.stages && input.stages.length > 0) {
+            items = items.filter((lead) => input.stages!.includes((lead as { status: string }).status));
+          }
+          if (input.scope === "mine") {
+            items = items.filter((lead) => (lead as { assignedToId: string | null }).assignedToId === "user-1");
+          }
+          if (input.assignedToIds && input.assignedToIds.length > 0) {
+            items = items.filter((lead) =>
+              input.assignedToIds!.includes((lead as { assignedToId: string | null }).assignedToId ?? ""),
+            );
+          }
 
           return {
             data: { items, nextCursor: page.nextCursor },
@@ -215,6 +235,9 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
+      },
+      getStatusCounts: {
+        useQuery: vi.fn(() => ({ data: undefined })),
       },
     },
     tasks: {
@@ -350,6 +373,7 @@ describe("LeadsList", () => {
             company: "Acme Corp",
             assignedToId: "user-1",
             rating: 5,
+            temperatureOverride: "HOT",
           }),
           makeLead({
             id: "lead-2",
@@ -359,6 +383,7 @@ describe("LeadsList", () => {
             rating: 3.6,
             reviewCount: 12,
             status: "CONNECTED",
+            callOutcome: "ANSWERED",
             assignedToId: "user-2",
             assignedTo: {
               id: "user-2",
