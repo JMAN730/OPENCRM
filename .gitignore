@@ -29,6 +29,7 @@
 /.npm-cache
 /.claude/settings.local.json
 /.claude/worktrees/
+/.claude/agent-memory/pentest-specialist/
 /.recovery/
 
 # debug
