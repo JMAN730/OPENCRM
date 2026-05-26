@@ -17,6 +17,7 @@ export function AddLeadForm({ onCancel, onSubmit }: AddLeadFormProps) {
       phone: String(formData.get("phone") ?? ""),
       city: String(formData.get("city") ?? ""),
       state: String(formData.get("state") ?? ""),
+      value: String(formData.get("value") ?? ""),
     });
   };
 
@@ -151,6 +152,29 @@ export function AddLeadForm({ onCancel, onSubmit }: AddLeadFormProps) {
               </label>
             ))}
           </div>
+          <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={{ fontSize: 12, color: "var(--crm-fg-muted)", fontWeight: 500 }}>
+              Estimated value
+            </span>
+            <input
+              name="value"
+              type="number"
+              min={0}
+              step="any"
+              placeholder="0"
+              style={{
+                height: 34,
+                padding: "0 10px",
+                border: "1px solid var(--crm-border)",
+                borderRadius: "var(--crm-radius-sm)",
+                background: "var(--crm-surface-2)",
+                fontSize: 13,
+                fontFamily: "var(--crm-font-sans)",
+                color: "var(--crm-fg)",
+                outline: "none",
+              }}
+            />
+          </label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <button
               type="button"

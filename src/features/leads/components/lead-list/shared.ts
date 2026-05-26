@@ -13,6 +13,7 @@ export type Lead = {
   mapsUrl?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
+  value?: number | null;
   status: string;
   temperatureOverride?: "HOT" | "WARM" | "COOL" | null;
   source?: string | null;
