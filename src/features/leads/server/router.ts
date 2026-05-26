@@ -17,6 +17,12 @@ const optionalShortString = (max: number) =>
   z.string().max(max).optional();
 const optionalRating = z.number().min(0).max(5).optional();
 const optionalReviewCount = z.number().int().min(0).optional();
+// Accepts a number (programmatic callers) or a numeric string (form inputs);
+// an empty string is treated as "absent" so the column stays null.
+const optionalValue = z
+  .union([z.literal(""), z.coerce.number().min(0).max(1_000_000_000)])
+  .optional()
+  .transform((v) => (v === "" ? undefined : v));
 const optionalTemperatureOverride = z.enum(["HOT", "WARM", "COOL"]).nullable();
 
 const leadInputSchema = z.object({
@@ -31,6 +37,7 @@ const leadInputSchema = z.object({
   mapsUrl: optionalUrl,
   rating: optionalRating,
   reviewCount: optionalReviewCount,
+  value: optionalValue,
   status: z
     .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
     .default("NOT_CONTACTED"),
@@ -594,6 +601,34 @@ export const leadsRouter = createTRPCRouter({
         description: input.temperatureOverride
           ? `Set temperature override to ${input.temperatureOverride.toLowerCase()}`
           : "Cleared temperature override",
+      });
+
+      return updated;
+    }),
+
+  updateValue: organizationProcedure
+    .input(z.object({ id: z.string(), value: z.number().min(0).max(1_000_000_000).nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      const updated = await ctx.prisma.lead.update({
+        where: { id: input.id },
+        data: { value: input.value },
+      });
+
+      await logActivity(ctx.prisma, {
+        leadId: lead.id,
+        userId: ctx.session.user.id,
+        type: "LEAD_VALUE_UPDATED",
+        description:
+          input.value != null
+            ? `Set estimated value to $${input.value.toLocaleString("en-US")}`
+            : "Cleared estimated value",
       });
 
       return updated;
