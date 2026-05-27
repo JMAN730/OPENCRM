@@ -5,6 +5,7 @@ import { Bell, Inbox, Sparkles, Menu, Sun, Moon, Send, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { trpc } from "@/app/_trpc/client";
+import { MarkdownMessage } from "@/components/ui/markdown";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -52,9 +53,11 @@ const AI_POPOVER_STYLE: React.CSSProperties = {
 };
 
 const SUGGESTED_PROMPTS = [
-  "How many leads do I have?",
-  "What tasks are due today?",
-  "Which leads are starred?",
+  "Who is performing best?",
+  "Why are leads not converting?",
+  "Which niches should we focus on?",
+  "Show pipeline bottlenecks",
+  "Which city converts best?",
 ];
 
 const subscribeToClientMounted = () => () => {};
@@ -82,19 +85,69 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [photoContext, setPhotoContext] = useState<{ websiteId: string; businessName: string } | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
-  const chatMutation = trpc.ai.chat.useMutation({
-    onSuccess(data) {
-      setChatMessages((prev) => [...prev, { role: "assistant", content: data.content }]);
-    },
-    onError(err) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Sorry, something went wrong: ${err.message}` },
-      ]);
-    },
-  });
+
+  // Append a chunk of streamed text to the trailing assistant message.
+  function appendToken(token: string) {
+    setChatMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      if (last?.role === "assistant") {
+        copy[copy.length - 1] = { ...last, content: last.content + token };
+      }
+      return copy;
+    });
+  }
+
+  async function streamChat(messages: ChatMessage[]) {
+    setIsStreaming(true);
+    // Show the user message immediately + an empty assistant bubble to fill.
+    setChatMessages([...messages, { role: "assistant", content: "" }]);
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages }),
+      });
+      if (!res.ok || !res.body) {
+        appendToken(
+          res.status === 429
+            ? "Too many AI requests. Try again in a moment."
+            : "Sorry, something went wrong. Please try again.",
+        );
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const event of events) {
+          const line = event.trim();
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(data) as { content?: string; error?: string };
+            if (parsed.error) appendToken(`\n\n_Error: ${parsed.error}_`);
+            else if (parsed.content) appendToken(parsed.content);
+          } catch {
+            // ignore malformed SSE fragments
+          }
+        }
+      }
+    } catch (err) {
+      appendToken(`\n\nSorry, something went wrong: ${(err as Error).message}`);
+    } finally {
+      setIsStreaming(false);
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const setPhotosMutation = (trpc.websites.setPhotos as any).useMutation({
     onSuccess() {
@@ -114,7 +167,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, chatMutation.isPending]);
+  }, [chatMessages, isStreaming]);
 
   useEffect(() => {
     function handlePhotoRequest(e: Event) {
@@ -169,7 +222,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   function sendMessage(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || chatMutation.isPending) return;
+    if (!trimmed || isStreaming || setPhotosMutation.isPending) return;
 
     // Photo collection mode: detect image URLs
     if (photoContext) {
@@ -184,13 +237,9 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       }
     }
 
-    const next: ChatMessage[] = [
-      ...chatMessages,
-      { role: "user", content: trimmed },
-    ];
-    setChatMessages(next);
+    const next: ChatMessage[] = [...chatMessages, { role: "user", content: trimmed }];
     setChatInput("");
-    chatMutation.mutate({ messages: next });
+    streamChat(next);
   }
 
   return (
@@ -324,7 +373,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                         color: "var(--crm-fg)",
                       }}
                     >
-                      Hi! I&apos;m Opulence, your CRM assistant. I can answer questions about your leads, tasks, and pipeline.
+                      Hi! I&apos;m Opulence, your AI sales manager. Ask me who&apos;s performing best, why leads aren&apos;t converting, or which niches and cities to focus on — I work from your live CRM analytics.
                     </div>
                   </div>
                   {/* Suggested prompts */}
@@ -369,45 +418,33 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                             lineHeight: 1.5,
                             maxWidth: "80%",
                             wordBreak: "break-word",
+                            whiteSpace: "pre-wrap",
                           }
                         : {
                             background: "var(--crm-surface-2)",
                             color: "var(--crm-fg)",
                             borderRadius: "2px 12px 12px 12px",
                             padding: "8px 12px",
-                            fontSize: 13,
-                            lineHeight: 1.5,
                             maxWidth: "90%",
                             wordBreak: "break-word",
-                            whiteSpace: "pre-wrap",
                           }
                     }
                   >
-                    {msg.content}
+                    {msg.role === "user" ? (
+                      msg.content
+                    ) : msg.content === "" ? (
+                      // Awaiting first streamed token — loading skeleton.
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 200, padding: "2px 0" }}>
+                        <span className="crm-skeleton-line" style={{ width: "90%" }} />
+                        <span className="crm-skeleton-line" style={{ width: "100%" }} />
+                        <span className="crm-skeleton-line" style={{ width: "70%" }} />
+                      </div>
+                    ) : (
+                      <MarkdownMessage content={msg.content} />
+                    )}
                   </div>
                 </div>
               ))}
-
-              {/* Loading indicator */}
-              {chatMutation.isPending && (
-                <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                  <div
-                    style={{
-                      background: "var(--crm-surface-2)",
-                      color: "var(--crm-fg-faint)",
-                      borderRadius: "2px 12px 12px 12px",
-                      padding: "10px 14px",
-                      display: "flex",
-                      gap: 4,
-                      alignItems: "center",
-                    }}
-                  >
-                    <span className="crm-typing-dot" />
-                    <span className="crm-typing-dot" />
-                    <span className="crm-typing-dot" />
-                  </div>
-                </div>
-              )}
 
               <div ref={chatEndRef} />
             </div>
@@ -435,13 +472,13 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                     sendMessage(chatInput);
                   }
                 }}
-                disabled={chatMutation.isPending}
+                disabled={isStreaming}
               />
               <button
                 className="crm-btn"
                 style={{ padding: "0 12px", flexShrink: 0 }}
                 onClick={() => sendMessage(chatInput)}
-                disabled={chatMutation.isPending || !chatInput.trim()}
+                disabled={isStreaming || !chatInput.trim()}
                 aria-label="Send"
               >
                 <Send size={13} />
