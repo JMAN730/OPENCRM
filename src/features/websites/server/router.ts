@@ -91,6 +91,20 @@ export const websitesRouter = createTRPCRouter({
         select: { id: true, slug: true },
       });
 
+      // Photo enrichment
+      const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
+      const businessName = lead.company ?? [lead.firstName, lead.lastName].filter(Boolean).join(" ");
+      let needsPhotos = true;
+
+      if (lead.mapsUrl && googleApiKey) {
+        const { fetchPlacePhotos } = await import("@/lib/places");
+        content.photos = await fetchPlacePhotos(businessName, lead.city, googleApiKey);
+        if (content.photos.length > 0) needsPhotos = false;
+      } else if (lead.mapsUrl) {
+        content.googleMapsUrl = lead.mapsUrl;
+        needsPhotos = false;
+      }
+
       const jsonContent = content as unknown as Prisma.InputJsonValue;
       const result = existing
         ? await ctx.prisma.generatedWebsite.update({
@@ -122,7 +136,7 @@ export const websitesRouter = createTRPCRouter({
         organizationId: ctx.organizationId,
       });
 
-      return result;
+      return { ...result, needsPhotos };
     }),
 
   update: organizationProcedure
@@ -164,5 +178,23 @@ export const websitesRouter = createTRPCRouter({
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.prisma.generatedWebsite.delete({ where: { id: input.id } });
+    }),
+
+  setPhotos: organizationProcedure
+    .input(z.object({
+      id: z.string(),
+      photos: z.array(z.string().url()).min(1).max(10),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.generatedWebsite.findFirst({
+        where: { id: input.id, lead: { organizationId: ctx.organizationId } },
+        select: { id: true, content: true },
+      });
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+      const content = existing.content as Record<string, unknown>;
+      return ctx.prisma.generatedWebsite.update({
+        where: { id: existing.id },
+        data: { content: { ...content, photos: input.photos } as Prisma.InputJsonValue },
+      });
     }),
 });

@@ -11,6 +11,8 @@ export interface DemoContent {
   contact_body: string;
   testimonials: Array<{ quote: string; author: string }>;
   city_body_copy: string;
+  photos?: string[];
+  googleMapsUrl?: string;
 }
 
 export interface EmailCopy {
@@ -59,6 +61,8 @@ function fallbackDemoContent(lead: Lead): DemoContent {
       { quote: "A straightforward local team that made the process simple from the first call.", author: "James L." },
     ],
     city_body_copy: `${name} works with customers across ${city} who want dependable ${niche.toLowerCase()} service without a complicated process.${websiteNote} This demo page is designed to make the business easier to find, evaluate, and contact.`,
+    photos: [],
+    googleMapsUrl: undefined,
   };
 }
 

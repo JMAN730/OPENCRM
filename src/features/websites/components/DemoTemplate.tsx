@@ -6,6 +6,8 @@ interface DemoTemplateProps {
   city: string | null;
   category: string | null;
   content: DemoContent;
+  photos?: string[];
+  googleMapsUrl?: string;
 }
 
 const heroImage = "/demo-template/workshop.jpg";
@@ -18,7 +20,11 @@ export function DemoTemplate({
   city,
   category,
   content,
+  photos: photosProp,
+  googleMapsUrl: googleMapsUrlProp,
 }: DemoTemplateProps) {
+  const photos = photosProp ?? content.photos ?? [];
+  const googleMapsUrl = googleMapsUrlProp ?? content.googleMapsUrl;
   const telHref = phone ? `tel:${phone.replace(/[^0-9+]/g, "")}` : undefined;
   const specialty = category ?? "Local service";
   const serviceArea = city ?? "Local area";
@@ -70,7 +76,7 @@ export function DemoTemplate({
         >
           <div
             className="absolute inset-0 scale-110 bg-cover bg-center brightness-[.36] contrast-125 saturate-110"
-            style={{ backgroundImage: `url(${heroImage})` }}
+            style={{ backgroundImage: `url(${photos[0] ?? heroImage})` }}
           />
           <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,13,34,.38),rgba(7,13,34,.16)_32%,rgba(7,13,34,.9)_88%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(rgba(244,239,230,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(244,239,230,.045)_1px,transparent_1px)] bg-[length:56px_56px]" />
@@ -161,7 +167,7 @@ export function DemoTemplate({
           <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-2">
             <div className="relative aspect-[4/5] overflow-hidden rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={heroImage} alt="" className="h-full w-full object-cover" />
+              <img src={photos[0] ?? heroImage} alt="" className="h-full w-full object-cover" />
               <span className="absolute bottom-6 left-6 rounded bg-[#f4efe6] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#0b0d14]">
                 Inside the shop
               </span>
@@ -199,8 +205,8 @@ export function DemoTemplate({
               dark
             />
             <div className="grid auto-rows-[88px] grid-cols-6 gap-4 lg:grid-cols-12">
-              <GalleryTile src={shopImage} label="The Shop" index="01/06" className="col-span-6 row-span-5 lg:col-span-7" />
-              <GalleryTile src={heroImage} label="Lift Bay" index="02/06" className="col-span-6 row-span-3 lg:col-span-5" />
+              <GalleryTile src={photos[0] ?? shopImage} label="The Shop" index="01/06" className="col-span-6 row-span-5 lg:col-span-7" />
+              <GalleryTile src={photos[1] ?? heroImage} label="Lift Bay" index="02/06" className="col-span-6 row-span-3 lg:col-span-5" />
               {content.services.slice(0, 4).map((service, index) => (
                 <GalleryTile
                   key={service}
@@ -278,14 +284,26 @@ export function DemoTemplate({
                 <ContactBlock label="Area" value={serviceArea} sub={content.contact_heading} />
               </div>
               <div className="relative min-h-[420px] overflow-hidden rounded-lg bg-[#0b0d14]">
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(244,239,230,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(244,239,230,.05)_1px,transparent_1px)] bg-[length:42px_42px]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(181,23,42,.28),transparent_42%)]" />
-                <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-3">
-                  <span className="whitespace-nowrap rounded bg-[#f4efe6] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#0b0d14]">
-                    {businessName}
-                  </span>
-                  <span className="size-4 rounded-full bg-[#b5172a] shadow-[0_0_0_8px_rgba(181,23,42,.25),0_0_0_18px_rgba(181,23,42,.12)]" />
-                </div>
+                {googleMapsUrl ? (
+                  <iframe
+                    src={`https://www.google.com/maps?q=${encodeURIComponent(businessName)}+${encodeURIComponent(city ?? "")}&output=embed`}
+                    className="absolute inset-0 h-full w-full rounded-lg border-0"
+                    loading="lazy"
+                    title="Business location"
+                    allowFullScreen
+                  />
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(244,239,230,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(244,239,230,.05)_1px,transparent_1px)] bg-[length:42px_42px]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(181,23,42,.28),transparent_42%)]" />
+                    <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-3">
+                      <span className="whitespace-nowrap rounded bg-[#f4efe6] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#0b0d14]">
+                        {businessName}
+                      </span>
+                      <span className="size-4 rounded-full bg-[#b5172a] shadow-[0_0_0_8px_rgba(181,23,42,.25),0_0_0_18px_rgba(181,23,42,.12)]" />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
