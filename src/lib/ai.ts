@@ -20,12 +20,47 @@ export interface EmailCopy {
 
 function client() {
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
   });
 }
 
-const model = () => process.env.AI_MODEL ?? "gpt-4o-mini";
+const model = () => process.env.AI_MODEL ?? "deepseek-chat";
+
+function leadDisplayName(lead: Lead) {
+  const contactName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
+  return lead.company ?? (contactName || "Your Local Business");
+}
+
+function fallbackDemoContent(lead: Lead): DemoContent {
+  const name = leadDisplayName(lead);
+  const niche = lead.source ?? "local service";
+  const city = lead.city ?? "the local area";
+  const phone = lead.phone ? ` Call ${lead.phone} to talk through availability and next steps.` : "";
+  const websiteNote = lead.website ? " The demo can be refined around the services and tone already shown online." : "";
+
+  return {
+    headline: `${name} in ${city}`,
+    subheadline: `${name} helps customers in ${city} with reliable ${niche.toLowerCase()} support, clear communication, and practical next steps.`,
+    services: [
+      `${niche} consultations`,
+      "Service estimates",
+      "Repairs and maintenance",
+      "Project planning",
+      "Customer support",
+      "Follow-up visits",
+    ],
+    local_seo_headline: `${name} serves ${city} and nearby communities`,
+    cta: lead.phone ? "Call now" : "Request a quote",
+    contact_heading: `Contact ${name}`,
+    contact_body: `Reach out to discuss what you need, compare options, and schedule service in ${city}.${phone}`,
+    testimonials: [
+      { quote: "They were easy to reach, clear about the work, and kept everything moving.", author: "Maria R." },
+      { quote: "A straightforward local team that made the process simple from the first call.", author: "James L." },
+    ],
+    city_body_copy: `${name} works with customers across ${city} who want dependable ${niche.toLowerCase()} service without a complicated process.${websiteNote} This demo page is designed to make the business easier to find, evaluate, and contact.`,
+  };
+}
 
 const DEMO_SCHEMA = {
   type: "object",
@@ -68,6 +103,10 @@ const DEMO_SCHEMA = {
 } as const;
 
 export async function generateDemoContent(lead: Lead): Promise<DemoContent> {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return fallbackDemoContent(lead);
+  }
+
   const niche = lead.source ?? "local business";
   const city = lead.city ?? "the local area";
 
@@ -103,8 +142,12 @@ export async function generateDemoContent(lead: Lead): Promise<DemoContent> {
   });
 
   const raw = completion.choices[0]?.message?.content;
-  if (!raw) throw new Error("OpenAI returned no demo content.");
-  return JSON.parse(raw) as DemoContent;
+  if (!raw) throw new Error("DeepSeek returned no demo content.");
+  try {
+    return JSON.parse(raw) as DemoContent;
+  } catch {
+    throw new Error("DeepSeek returned invalid demo JSON.");
+  }
 }
 
 const EMAIL_SCHEMA = {
@@ -150,6 +193,6 @@ export async function generateEmailCopy(lead: Lead): Promise<EmailCopy> {
   });
 
   const raw = completion.choices[0]?.message?.content;
-  if (!raw) throw new Error("OpenAI returned no email copy.");
+  if (!raw) throw new Error("DeepSeek returned no email copy.");
   return JSON.parse(raw) as EmailCopy;
 }

@@ -296,9 +296,7 @@ export const leadsRouter = createTRPCRouter({
           where: {
             AND: [
               finalWhere,
-              { callOutcome: { not: null } },
-              { callOutcome: { not: "NOT_CONTACTED" } },
-              { callOutcome: { not: "CUSTOM" } },
+              { callOutcome: { notIn: ["NOT_CONTACTED", "CUSTOM"] } },
             ],
           } as Record<string, unknown>,
           _count: { id: true },
@@ -314,7 +312,7 @@ export const leadsRouter = createTRPCRouter({
           where: {
             AND: [
               finalWhere,
-              { OR: [{ callOutcome: null }, { callOutcome: "NOT_CONTACTED" }] },
+              { callOutcome: "NOT_CONTACTED" },
             ],
           } as Record<string, unknown>,
         }),
@@ -1197,7 +1195,7 @@ export const leadsRouter = createTRPCRouter({
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = process.env.DEEPSEEK_API_KEY;
       let summary: string;
 
       if (apiKey) {
@@ -1212,11 +1210,12 @@ export const leadsRouter = createTRPCRouter({
           `Phone: ${lead.phone ? "Yes" : "No"} · Email: ${lead.email ? "Yes" : "No"}`,
         ].join("\n");
 
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        const baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: process.env.AI_MODEL ?? "deepseek-v4-flash",
             messages: [{ role: "user", content: prompt }],
             max_tokens: 150,
             temperature: 0.4,
@@ -1224,12 +1223,12 @@ export const leadsRouter = createTRPCRouter({
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `OpenAI error: ${text.slice(0, 200)}` });
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `DeepSeek error: ${text.slice(0, 200)}` });
         }
         const json = await res.json() as { choices: Array<{ message: { content: string } }> };
         summary = json.choices[0]?.message?.content?.trim() ?? "No qualification generated.";
       } else {
-        // Heuristic fallback when no OpenAI key is configured
+        // Heuristic fallback when no DeepSeek key is configured
         const parts: string[] = [];
         if (lead.rating && lead.rating >= 4.5 && (lead.reviewCount ?? 0) >= 50)
           parts.push(`Established business with ${lead.rating}★ rating (${lead.reviewCount} reviews).`);

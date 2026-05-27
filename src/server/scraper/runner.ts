@@ -235,6 +235,8 @@ export async function startScraperJob(jobId: string): Promise<void> {
     locFile,
     "--output-dir",
     outDir,
+    "--output-file",
+    "leads.csv",
     "--limit",
     String(job.limit),
     "--concurrency",
@@ -242,7 +244,9 @@ export async function startScraperJob(jobId: string): Promise<void> {
   ];
 
   if (categoryList.length > 0) {
-    args.push("--categories", categoryList.join(","));
+    const catFile = path.join(outDir, "categories.txt");
+    await fs.writeFile(catFile, categoryList.join("\n"), "utf-8");
+    args.push("--categories-file", catFile);
   }
 
   appendLog(jobId, `cmd: "${scraperConfig.pythonPath}" ${args.map((a) => `"${a}"`).join(" ")}`, outDir);

@@ -1,15 +1,24 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 import type { MockPrisma } from "@/test/trpc";
 
 describe("websitesRouter", () => {
   let caller: ReturnType<typeof createTestCaller>["caller"];
   let prisma: MockPrisma;
+  const originalDeepseekKey = process.env.DEEPSEEK_API_KEY;
 
   beforeEach(() => {
     const result = createTestCaller();
     caller = result.caller;
     prisma = result.prisma;
+  });
+
+  afterEach(() => {
+    if (originalDeepseekKey === undefined) {
+      delete process.env.DEEPSEEK_API_KEY;
+    } else {
+      process.env.DEEPSEEK_API_KEY = originalDeepseekKey;
+    }
   });
 
   describe("getForLead", () => {
@@ -87,6 +96,51 @@ describe("websitesRouter", () => {
 
       const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
       expect(result.title).toContain("Acme Landscaping");
+    });
+  });
+
+  describe("generateAi", () => {
+    it("creates an AI demo with fallback content when DeepSeek is not configured", async () => {
+      delete process.env.DEEPSEEK_API_KEY;
+
+      const lead = {
+        id: "lead-1",
+        organizationId: "org-1",
+        company: "Acme Landscaping",
+        firstName: "John",
+        lastName: "Doe",
+        phone: "555-1234",
+        email: "john@acme.com",
+        city: "Tampa",
+        rating: 4.8,
+        reviewCount: 42,
+        source: "Landscaping",
+        website: "https://acme.example",
+        qualificationSummary: null,
+      };
+      prisma.lead.findFirst.mockResolvedValue(lead);
+      prisma.generatedWebsite.findUnique.mockResolvedValue(null);
+      prisma.generatedWebsite.findFirst.mockResolvedValue(null);
+      prisma.generatedWebsite.create.mockImplementation((args) =>
+        Promise.resolve({ id: "w-ai", ...args.data }),
+      );
+
+      const result = await caller.websites.generateAi({ leadId: "lead-1" });
+
+      expect(prisma.generatedWebsite.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            leadId: "lead-1",
+            template: "ai_demo",
+            slug: "acme-landscaping-tampa",
+            content: expect.objectContaining({
+              headline: "Acme Landscaping in Tampa",
+              cta: "Call now",
+            }),
+          }),
+        }),
+      );
+      expect(result).toMatchObject({ id: "w-ai", template: "ai_demo" });
     });
   });
 

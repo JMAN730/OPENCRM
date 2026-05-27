@@ -1,4 +1,5 @@
 import { createTRPCRouter } from "@/server/trpc";
+import { aiRouter } from "@/features/ai/server/router";
 import { leadsRouter } from "@/features/leads/server/router";
 import { callsRouter } from "@/features/calls/server/router";
 import { scraperRouter } from "@/features/scraper/server/router";
@@ -14,6 +15,7 @@ import { analyticsRouter } from "@/features/analytics/server/router";
 import { scheduledScraperRouter } from "@/features/scraper/server/scheduledRouter";
 
 export const appRouter = createTRPCRouter({
+  ai: aiRouter,
   leads: leadsRouter,
   calls: callsRouter,
   scraper: scraperRouter,
