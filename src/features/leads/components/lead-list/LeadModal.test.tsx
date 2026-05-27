@@ -45,6 +45,12 @@ vi.mock("@/app/_trpc/client", () => ({
         getAll: { invalidate: invalidateTasks },
         getAllForLead: { invalidate: invalidateLeadTasks },
       },
+      websites: {
+        getForLead: { invalidate: vi.fn() },
+      },
+      emails: {
+        getDraftForLead: { invalidate: vi.fn() },
+      },
     }),
     leads: {
       getNotes: {
@@ -128,10 +134,33 @@ vi.mock("@/app/_trpc/client", () => ({
       },
     },
     websites: {
+      getForLead: {
+        useQuery: vi.fn(() => ({ data: null })),
+      },
       generate: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
+      generateAi: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       update: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    emails: {
+      getDraftForLead: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: false })),
+      },
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      updateDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      send: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      deleteDraft: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
     },

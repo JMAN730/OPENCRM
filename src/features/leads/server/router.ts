@@ -42,6 +42,7 @@ const leadInputSchema = z.object({
     .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
     .default("NOT_CONTACTED"),
   source: optionalShortString(100),
+  qualificationSummary: z.string().max(2000).optional(),
 });
 
 const callOutcomeSchema = z.object({
@@ -534,6 +535,7 @@ export const leadsRouter = createTRPCRouter({
         if (typeof row.reviewCount === "number") data.reviewCount = row.reviewCount;
         if (email) data.email = email;
         if (phone) data.phone = phone;
+        if (row.qualificationSummary) data.qualificationSummary = row.qualificationSummary;
 
         // Status: preserve existing progress unless the import explicitly advances it.
         if (row.status && match.status === "NOT_CONTACTED" && row.status !== "NOT_CONTACTED") {

@@ -96,6 +96,8 @@ model Organization {
 
   scraperCategories OrgScraperCategory[]
   scheduledScrapes  ScheduledScrape[]
+  emailDrafts       EmailDraft[]
+  emailOptOuts      EmailOptOut[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -159,12 +161,13 @@ model Lead {
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
   qualificationSummary String?
 
-  calls      CallLog[]
-  notes      Note[]
-  activities Activity[]
-  tasks      Task[]
-  tags       LeadTag[]
-  websites   GeneratedWebsite[]
+  calls        CallLog[]
+  notes        Note[]
+  activities   Activity[]
+  tasks        Task[]
+  tags         LeadTag[]
+  websites     GeneratedWebsite[]
+  emailDrafts  EmailDraft[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -319,6 +322,9 @@ enum ActivityType {
   TASK_COMPLETED
   NOTE_ADDED
   NOTE_DELETED
+  EMAIL_DRAFT_CREATED
+  EMAIL_SENT
+  DEMO_GENERATED
 }
 
 model Activity {
@@ -532,16 +538,20 @@ model ScoringRule {
 }
 
 model GeneratedWebsite {
-  id        String   @id @default(cuid())
-  leadId    String
-  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  template  String
-  title     String
-  content   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String       @id @default(cuid())
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  template       String
+  title          String
+  content        Json
+  slug           String?      @unique
+  organizationId String?
+  emailDrafts    EmailDraft[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([leadId])
+  @@index([organizationId])
 }
 
 model OrgScraperCategory {
@@ -574,4 +584,64 @@ model ScheduledScrape {
 
   @@index([organizationId])
   @@index([enabled, nextRunAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email outreach feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EmailDraftStatus {
+  DRAFT
+  SENT
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  UNSUBSCRIBED
+}
+
+model EmailDraft {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId           String
+  lead             Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteId        String?
+  website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  subject          String
+  body             String           @db.Text
+  status           EmailDraftStatus @default(DRAFT)
+  unsubscribeToken String           @unique
+  resendMessageId  String?
+  sentAt           DateTime?
+  events           EmailEvent[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([leadId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([resendMessageId])
+}
+
+model EmailEvent {
+  id        String     @id @default(cuid())
+  draftId   String
+  draft     EmailDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  event     String
+  data      Json?
+  createdAt DateTime   @default(now())
+
+  @@index([draftId, createdAt])
+}
+
+model EmailOptOut {
+  id             String       @id @default(cuid())
+  email          String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([email, organizationId])
+  @@index([organizationId])
 }
