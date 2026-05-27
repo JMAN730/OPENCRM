@@ -81,6 +81,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [photoContext, setPhotoContext] = useState<{ websiteId: string; businessName: string } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const chatMutation = trpc.ai.chat.useMutation({
@@ -94,10 +95,40 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       ]);
     },
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setPhotosMutation = (trpc.websites.setPhotos as any).useMutation({
+    onSuccess() {
+      setChatMessages(prev => [...prev, {
+        role: "assistant" as const,
+        content: `Photos saved to ${photoContext?.businessName ?? "the demo site"}! Refresh the demo page to see them.`,
+      }]);
+      setPhotoContext(null);
+    },
+    onError(err: { message: string }) {
+      setChatMessages(prev => [...prev, {
+        role: "assistant" as const,
+        content: `Couldn't save photos: ${err.message}`,
+      }]);
+    },
+  });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, chatMutation.isPending]);
+
+  useEffect(() => {
+    function handlePhotoRequest(e: Event) {
+      const { websiteId, businessName } = (e as CustomEvent<{ websiteId: string; businessName: string }>).detail;
+      setPhotoContext({ websiteId, businessName });
+      setOpenPanel("ai");
+      setChatMessages([{
+        role: "assistant",
+        content: `I just generated a demo site for **${businessName}** but couldn't find any photos automatically (no Google Maps URL is attached to this lead).\n\nPaste up to 3 photo URLs (direct image links ending in .jpg, .png, .webp, etc.) and I'll add them to the demo right away!`,
+      }]);
+    }
+    window.addEventListener("opulence:request-photos", handlePhotoRequest);
+    return () => window.removeEventListener("opulence:request-photos", handlePhotoRequest);
+  }, []);
 
   // Focus input and scroll to bottom whenever the AI panel opens
   useEffect(() => {
@@ -139,6 +170,20 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   function sendMessage(text: string) {
     const trimmed = text.trim();
     if (!trimmed || chatMutation.isPending) return;
+
+    // Photo collection mode: detect image URLs
+    if (photoContext) {
+      const urlRegex = /https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|avif|bmp|svg)(?:[?#]\S*)?/gi;
+      const detected = trimmed.match(urlRegex) ?? [];
+      if (detected.length > 0) {
+        const next: ChatMessage[] = [...chatMessages, { role: "user", content: trimmed }];
+        setChatMessages(next);
+        setChatInput("");
+        setPhotosMutation.mutate({ id: photoContext.websiteId, photos: detected.slice(0, 10) });
+        return;
+      }
+    }
+
     const next: ChatMessage[] = [
       ...chatMessages,
       { role: "user", content: trimmed },
@@ -194,7 +239,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           onClick={() => toggle("ai")}
         >
           <Sparkles size={14} />
-          Ask AI
+          Opulence
           <span className="crm-kbd">⌘J</span>
         </button>
 
@@ -232,7 +277,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               }}
             >
               <Sparkles size={14} style={{ color: "var(--crm-accent)" }} />
-              <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>Ask AI</span>
+              <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>Opulence</span>
               {chatMessages.length > 0 && (
                 <button
                   className="crm-btn ghost"
@@ -279,7 +324,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                         color: "var(--crm-fg)",
                       }}
                     >
-                      Hi! I can answer questions about your leads, tasks, and pipeline.
+                      Hi! I&apos;m Opulence, your CRM assistant. I can answer questions about your leads, tasks, and pipeline.
                     </div>
                   </div>
                   {/* Suggested prompts */}

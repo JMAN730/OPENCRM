@@ -25,7 +25,7 @@ export default async function DemoPage({
   const { slug } = await params;
   const site = await prisma.generatedWebsite.findUnique({
     where: { slug },
-    include: { lead: { select: { company: true, phone: true, city: true, source: true } } },
+    include: { lead: { select: { company: true, phone: true, city: true, source: true, mapsUrl: true } } },
   });
 
   if (!site) notFound();

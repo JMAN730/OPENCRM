@@ -843,10 +843,17 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generateWebsite = (trpc.websites.generateAi as any).useMutation({
-    onSuccess: () => {
+    onSuccess: (data: { id: string; slug?: string | null; needsPhotos?: boolean }) => {
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId: lead.id });
       void utils.leads.getActivities.invalidate({ leadId: lead.id });
+      if (data.needsPhotos && data.id) {
+        window.dispatchEvent(
+          new CustomEvent("opulence:request-photos", {
+            detail: { websiteId: data.id, businessName: lead.company ?? fullNameOf(lead) },
+          })
+        );
+      }
     },
     onError: (error: { message: string }) => toast.error(error.message),
   });
@@ -1810,7 +1817,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
-            <DemoSiteSection leadId={lead.id} sectionRef={demoSectionRef} />
+            <DemoSiteSection leadId={lead.id} leadName={lead.company ?? fullNameOf(lead)} sectionRef={demoSectionRef} />
 
             <div>
               <h4>Recent activity</h4>
@@ -2011,15 +2018,22 @@ function CreateLeadTaskDialog({
   );
 }
 
-function DemoSiteSection({ leadId, sectionRef }: { leadId: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
+function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; leadName: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
   const utils = trpc.useUtils();
   const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generateAi = (trpc.websites.generateAi as any).useMutation({
-    onSuccess: () => {
+    onSuccess: (data: { id: string; slug?: string | null; needsPhotos?: boolean }) => {
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId });
       void utils.leads.getActivities.invalidate({ leadId });
+      if (data.needsPhotos && data.id) {
+        window.dispatchEvent(
+          new CustomEvent("opulence:request-photos", {
+            detail: { websiteId: data.id, businessName: leadName },
+          })
+        );
+      }
     },
     onError: (error: { message: string }) => toast.error(error.message),
   });
