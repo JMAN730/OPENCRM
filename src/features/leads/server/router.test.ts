@@ -295,6 +295,24 @@ describe("leadsRouter", () => {
         caller.leads.create({ status: "BOGUS" })
       ).rejects.toThrow();
     });
+
+    it("coerces a numeric string value into a number", async () => {
+      prisma.lead.create.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.create({ company: "Acme", status: "NOT_CONTACTED", value: "2500" });
+
+      const args = prisma.lead.create.mock.calls[0][0];
+      expect(args.data.value).toBe(2500);
+    });
+
+    it("treats an empty-string value as absent", async () => {
+      prisma.lead.create.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.create({ company: "Acme", status: "NOT_CONTACTED", value: "" });
+
+      const args = prisma.lead.create.mock.calls[0][0];
+      expect(args.data.value).toBeUndefined();
+    });
   });
 
   describe("bulkCreate", () => {
@@ -542,6 +560,41 @@ describe("leadsRouter", () => {
           id: "lead-1",
           temperatureOverride: "COOL",
         }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  describe("updateValue", () => {
+    it("updates the estimated value when the lead is in scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", value: 2500 });
+
+      const result = await caller.leads.updateValue({ id: "lead-1", value: 2500 });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: { value: 2500 },
+      });
+      expect(result).toEqual({ id: "lead-1", value: 2500 });
+    });
+
+    it("clears the value when passed null", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", value: null });
+
+      await caller.leads.updateValue({ id: "lead-1", value: null });
+
+      expect(prisma.lead.update).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        data: { value: null },
+      });
+    });
+
+    it("rejects value updates for leads outside the caller scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.leads.updateValue({ id: "lead-1", value: 100 }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });

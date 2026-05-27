@@ -762,6 +762,13 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  const updateValue = trpc.leads.updateValue.useMutation({
+    onSuccess: () => {
+      toast.success("Value updated");
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const addTagToLead = trpc.leads.addTagToLead.useMutation({
     onSuccess: () => {
       toast.success("Tag added");
@@ -1574,6 +1581,46 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                       <option value="WARM">Warm</option>
                       <option value="COOL">Cool</option>
                     </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>
+                      Estimated value
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      aria-label="Estimated value"
+                      placeholder="0"
+                      defaultValue={lead.value ?? ""}
+                      disabled={updateValue.isPending}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        border: "1px solid var(--crm-border)",
+                        borderRadius: "var(--crm-radius-sm)",
+                        background: "var(--crm-surface-2)",
+                        color: "var(--crm-fg)",
+                        fontSize: 12.5,
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                      onBlur={(event) => {
+                        const raw = event.target.value.trim();
+                        const current = lead.value ?? null;
+                        if (raw === "") {
+                          if (current !== null) updateValue.mutate({ id: lead.id, value: null });
+                          return;
+                        }
+                        const parsed = Number(raw);
+                        if (!Number.isFinite(parsed) || parsed < 0) {
+                          event.target.value = current != null ? String(current) : "";
+                          return;
+                        }
+                        if (parsed !== current) updateValue.mutate({ id: lead.id, value: parsed });
+                      }}
+                    />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, color: "var(--crm-fg-faint)", marginBottom: 4 }}>
