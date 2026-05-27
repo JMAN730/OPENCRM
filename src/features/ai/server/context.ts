@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { cached } from "@/lib/cache";
 import { subDays } from "date-fns";
+import { type LeadScope } from "@/server/teams/scope";
 import {
   getTopCallers,
   getRepPerformance,
@@ -11,6 +12,13 @@ import {
   type PipelineMetrics,
   type ConversionInsights,
 } from "@/features/analytics/server/salesAnalytics";
+
+/** Stable, scope-specific cache-key suffix so users don't read each other's snapshots. */
+export function scopeCacheKey(scope: LeadScope): string {
+  return scope.kind === "all"
+    ? `all:${scope.organizationId}`
+    : `u:${scope.organizationId}:${[...scope.userIds].sort().join("-")}`;
+}
 
 export const SALES_MANAGER_SYSTEM_PROMPT = `You are an AI sales manager inside OpenCRM.
 
@@ -53,8 +61,13 @@ export type AIContext = {
 
 type Db = Pick<PrismaClient, "lead" | "callLog" | "activity" | "user" | "$queryRaw">;
 
-async function loadAIContext(db: Db, organizationId: string): Promise<AIContext> {
+async function loadAIContext(db: Db, scope: LeadScope): Promise<AIContext> {
+  const { organizationId } = scope;
   const sevenDaysAgo = subDays(new Date(), 7);
+
+  // Restrict calls/activity to the rep(s) the caller is allowed to see.
+  const callUserFilter = scope.kind === "users" ? { userId: { in: scope.userIds } } : {};
+  const activityUserFilter = scope.kind === "users" ? { userId: { in: scope.userIds } } : {};
 
   const [
     topCallers,
@@ -66,17 +79,24 @@ async function loadAIContext(db: Db, organizationId: string): Promise<AIContext>
     connectedCallsThisWeek,
     recentActivityRows,
   ] = await Promise.all([
-    getTopCallers(db, organizationId, { since: sevenDaysAgo }),
-    getRepPerformance(db, organizationId),
-    getPipelineMetrics(db, organizationId),
-    getConversionInsights(db, organizationId),
-    db.callLog.count({ where: { lead: { organizationId } } }),
-    db.callLog.count({ where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } } }),
+    getTopCallers(db, scope, { since: sevenDaysAgo }),
+    getRepPerformance(db, scope),
+    getPipelineMetrics(db, scope),
+    getConversionInsights(db, scope),
+    db.callLog.count({ where: { lead: { organizationId }, ...callUserFilter } }),
     db.callLog.count({
-      where: { lead: { organizationId }, status: "CONNECTED", createdAt: { gte: sevenDaysAgo } },
+      where: { lead: { organizationId }, ...callUserFilter, createdAt: { gte: sevenDaysAgo } },
+    }),
+    db.callLog.count({
+      where: {
+        lead: { organizationId },
+        ...callUserFilter,
+        status: "CONNECTED",
+        createdAt: { gte: sevenDaysAgo },
+      },
     }),
     db.activity.findMany({
-      where: { organizationId },
+      where: { organizationId, ...activityUserFilter },
       orderBy: { createdAt: "desc" },
       take: 8,
       select: { type: true, description: true, createdAt: true },
@@ -104,11 +124,11 @@ async function loadAIContext(db: Db, organizationId: string): Promise<AIContext>
   };
 }
 
-/** Cached (60s/org) structured sales analytics snapshot for the AI prompt. */
-export async function buildAIContext(db: Db, organizationId: string): Promise<AIContext> {
+/** Cached (60s) structured sales analytics snapshot for the AI prompt, scoped to the caller. */
+export async function buildAIContext(db: Db, scope: LeadScope): Promise<AIContext> {
   return cached(
-    { key: `ai:context:${organizationId}`, ttl: 60 },
-    () => loadAIContext(db, organizationId),
+    { key: `ai:context:${scopeCacheKey(scope)}`, ttl: 60 },
+    () => loadAIContext(db, scope),
   );
 }
 

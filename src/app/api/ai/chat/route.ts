@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { createTRPCContext } from "@/server/trpc";
 import { rateLimit } from "@/lib/rateLimit";
+import { resolveLeadScope } from "@/server/teams/scope";
 import { buildAIContext, formatAIContext, SALES_MANAGER_SYSTEM_PROMPT } from "@/features/ai/server/context";
 
 export const runtime = "nodejs";
@@ -46,12 +47,15 @@ function streamResponse(stream: ReadableStream<Uint8Array>): Response {
 
 export async function POST(req: NextRequest): Promise<Response> {
   const ctx = await createTRPCContext({ headers: req.headers });
-  const user = ctx.session?.user as { id?: string; organizationId?: string } | undefined;
+  const user = ctx.session?.user as
+    | { id?: string; organizationId?: string; role?: string }
+    | undefined;
   if (!user?.id || !user.organizationId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = user.id;
   const organizationId = user.organizationId;
+  const role = user.role ?? "USER";
 
   const limit = await rateLimit({ key: `ai:chat:${userId}`, limit: 30, windowSeconds: 60 });
   if (!limit.ok) {
@@ -73,7 +77,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const aiContext = await buildAIContext(ctx.prisma, organizationId);
+  const scope = await resolveLeadScope(ctx.prisma, userId, organizationId, role);
+  const aiContext = await buildAIContext(ctx.prisma, scope);
   const systemPrompt = `${SALES_MANAGER_SYSTEM_PROMPT}\n\n${formatAIContext(aiContext)}`;
 
   const client = new OpenAI({

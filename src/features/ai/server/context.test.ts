@@ -1,15 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockPrisma, type MockPrisma } from "@/test/trpc";
 import type { PrismaClient } from "@prisma/client";
+import type { LeadScope } from "@/server/teams/scope";
 import {
   buildAIContext,
   formatAIContext,
+  scopeCacheKey,
   SALES_MANAGER_SYSTEM_PROMPT,
   type AIContext,
 } from "./context";
 
 const ORG = "org-1";
 const db = (p: MockPrisma) => p as unknown as PrismaClient;
+const ALL: LeadScope = { kind: "all", organizationId: ORG };
 
 function sampleContext(): AIContext {
   return {
@@ -66,6 +69,16 @@ describe("SALES_MANAGER_SYSTEM_PROMPT", () => {
   it("frames the assistant as a sales manager and forbids hallucination", () => {
     expect(SALES_MANAGER_SYSTEM_PROMPT).toContain("AI sales manager");
     expect(SALES_MANAGER_SYSTEM_PROMPT).toContain("Never say you lack data unless the metric truly does not exist");
+  });
+});
+
+describe("scopeCacheKey", () => {
+  it("separates org-wide and per-user scopes so snapshots can't leak across scopes", () => {
+    expect(scopeCacheKey({ kind: "all", organizationId: ORG })).toBe("all:org-1");
+    const a = scopeCacheKey({ kind: "users", organizationId: ORG, userIds: ["u2", "u1"] });
+    const b = scopeCacheKey({ kind: "users", organizationId: ORG, userIds: ["u1", "u2"] });
+    expect(a).toBe(b); // order-independent
+    expect(a).not.toBe("all:org-1");
   });
 });
 
@@ -134,7 +147,7 @@ describe("buildAIContext", () => {
   });
 
   it("returns the full structured context shape", async () => {
-    const ctx = await buildAIContext(db(prisma), ORG);
+    const ctx = await buildAIContext(db(prisma), ALL);
     expect(ctx).toHaveProperty("orgStatistics");
     expect(ctx).toHaveProperty("repRankings");
     expect(ctx).toHaveProperty("repPerformance");
