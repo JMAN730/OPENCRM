@@ -2,6 +2,8 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
+import { getLeadScope } from "@/server/teams/scope";
+import { buildAIContext, formatAIContext, SALES_MANAGER_SYSTEM_PROMPT } from "./context";
 
 function client() {
   return new OpenAI({
@@ -27,7 +29,7 @@ export const aiRouter = createTRPCRouter({
     .output(z.object({ content: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const organizationId = ctx.organizationId;
+      const role = (ctx.session.user as { role: string }).role;
 
       await assertWithinRateLimit({
         key: `ai:chat:${userId}`,
@@ -44,74 +46,11 @@ export const aiRouter = createTRPCRouter({
         };
       }
 
-      // Build live CRM snapshot for the system prompt
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-        999
-      );
-
-      const [leadsByStatus, starredCount, tasksDueToday, overdueTaskCount, recentLeads] =
-        await Promise.all([
-          ctx.prisma.lead.groupBy({
-            by: ["status"],
-            where: { organizationId },
-            _count: true,
-          }),
-          ctx.prisma.lead.count({ where: { organizationId, starred: true } }),
-          ctx.prisma.task.count({
-            where: {
-              organizationId,
-              deletedAt: null,
-              status: { not: "COMPLETED" },
-              dueDate: { gte: startOfToday, lte: endOfToday },
-            },
-          }),
-          ctx.prisma.task.count({
-            where: {
-              organizationId,
-              deletedAt: null,
-              status: { not: "COMPLETED" },
-              dueDate: { lt: startOfToday },
-            },
-          }),
-          ctx.prisma.lead.findMany({
-            where: { organizationId },
-            orderBy: { createdAt: "desc" },
-            take: 5,
-            select: { company: true, firstName: true, lastName: true, status: true, starred: true },
-          }),
-        ]);
-
-      const statusSummary = leadsByStatus
-        .map((g) => `${g.status}: ${g._count}`)
-        .join(", ");
-
-      const recentLeadsSummary = recentLeads
-        .map((l) => {
-          const name =
-            l.company ??
-            [l.firstName, l.lastName].filter(Boolean).join(" ") ??
-            "Unknown";
-          return `${name} (${l.status}${l.starred ? ", ★" : ""})`;
-        })
-        .join("; ");
-
-      const systemPrompt =
-        "You are a helpful CRM assistant for OpenCRM. Answer questions concisely and " +
-        "clearly based on the live org data provided. If the user asks about something " +
-        "not in your context, say so honestly.\n\n" +
-        "Live org data (as of now):\n" +
-        `- Leads by status: ${statusSummary || "none"}\n` +
-        `- Starred leads: ${starredCount}\n` +
-        `- Tasks due today: ${tasksDueToday}  |  Overdue tasks: ${overdueTaskCount}\n` +
-        `- 5 most recent leads: ${recentLeadsSummary || "none"}`;
+      // Build structured sales analytics for the sales-manager system prompt,
+      // scoped to the leads/reps this caller is permitted to see.
+      const scope = await getLeadScope(ctx, userId, role);
+      const context = await buildAIContext(ctx.prisma, scope);
+      const systemPrompt = `${SALES_MANAGER_SYSTEM_PROMPT}\n\n${formatAIContext(context)}`;
 
       const completion = await client().chat.completions.create({
         model: model(),
@@ -119,8 +58,8 @@ export const aiRouter = createTRPCRouter({
           { role: "system", content: systemPrompt },
           ...input.messages,
         ],
-        max_tokens: 400,
-        temperature: 0.5,
+        max_tokens: 700,
+        temperature: 0.4,
       });
 
       const content = completion.choices[0]?.message?.content;
