@@ -40,6 +40,11 @@ DATABASE_URL="postgresql://crm:crm@localhost:5432/crm"
 NEXTAUTH_SECRET="your-secret"
 NEXTAUTH_URL="http://localhost:3000"
 
+# Optional – Supabase direct connection for `prisma db push` (DDL bypasses the pooler).
+# When hosting on Supabase, point DATABASE_URL at the session pooler and DIRECT_URL
+# at the direct connection. prisma.config.ts prefers DIRECT_URL when set.
+# DIRECT_URL="postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres?sslmode=require"
+
 # Required when running via docker compose (used by the postgres service)
 POSTGRES_USER="crm"
 POSTGRES_PASSWORD="crm"
@@ -220,6 +225,10 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Uses `prisma db push` (no migration history). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. The `docker-entrypoint.sh` runs `prisma db push --skip-generate` on container start so the schema is always synced.
 
 FK relations use `onDelete: Cascade` for owned rows (e.g. deleting a `Lead` removes its `CallLog`/`Note`/`Activity`/`Task`) and `onDelete: SetNull` where the parent is optional context (e.g. `assignedTo` on `Lead`).
+
+### Supabase hosting
+
+Supabase is managed PostgreSQL, so no code changes are needed — only connection config. Set `DATABASE_URL` to the **session pooler** (runtime, IPv4, prepared statements) and `DIRECT_URL` to the **direct connection** (DDL / `prisma db push`); both need `?sslmode=require`. The runtime client in `src/lib/prisma.ts` uses `DATABASE_URL` via `@prisma/adapter-pg`; `prisma.config.ts` prefers `DIRECT_URL` for CLI commands. Migrate existing data with `pg_dump --schema=public --no-owner --no-acl` → `psql "$DIRECT_URL"`, then run `prisma db push` to confirm the schema is in sync. See `README.md` for full commands.
 
 ### Key models
 

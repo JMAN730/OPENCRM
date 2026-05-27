@@ -15,7 +15,10 @@ const prismaConfig = {
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: envValue("DATABASE_URL") ?? "postgresql://crm:crm@localhost:5432/crm",
+    // CLI commands (db push, db execute) run DDL, which needs a real session —
+    // not a transaction pooler. Prefer DIRECT_URL (Supabase direct connection)
+    // and fall back to DATABASE_URL for local/self-hosted Postgres.
+    url: envValue("DIRECT_URL") ?? envValue("DATABASE_URL") ?? "postgresql://crm:crm@localhost:5432/crm",
   },
 };
 
