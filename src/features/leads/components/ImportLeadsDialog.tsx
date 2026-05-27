@@ -42,6 +42,11 @@ const FIELD_MAP: Record<string, string> = {
   "review count": "reviewCount", "total reviews": "reviewCount",
   source: "source", "lead source": "source", category: "source",
   status: "status",
+  "personalized observation": "qualificationSummary",
+  "personalized_observation": "qualificationSummary",
+  observation: "qualificationSummary",
+  notes: "qualificationSummary",
+  qualification: "qualificationSummary",
 };
 
 type ParsedLead = {
@@ -57,6 +62,7 @@ type ParsedLead = {
   rating?: number;
   reviewCount?: number;
   source?: string;
+  qualificationSummary?: string;
   status?: "NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP";
 };
 

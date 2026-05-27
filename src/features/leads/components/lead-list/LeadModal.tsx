@@ -56,6 +56,8 @@ import {
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
+import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
+import { Sparkles, ExternalLink } from "lucide-react";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
 
@@ -1800,6 +1802,19 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
+            <DemoSiteSection leadId={lead.id} />
+
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 18,
+                borderTop: "1px solid var(--crm-border)",
+              }}
+            >
+              <h4 style={{ margin: "0 0 12px" }}>Outreach Email</h4>
+              <EmailDraftPanel leadId={lead.id} />
+            </div>
+
             <div>
               <h4>Recent activity</h4>
               <div className="crm-timeline">
@@ -1996,5 +2011,59 @@ function CreateLeadTaskDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DemoSiteSection({ leadId }: { leadId: string }) {
+  const utils = trpc.useUtils();
+  const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
+  const generateAi = trpc.websites.generateAi.useMutation({
+    onSuccess: () => void utils.websites.getForLead.invalidate({ leadId }),
+  });
+
+  const siteSimple = site as { id: string; template: string; slug?: string | null } | undefined;
+  const aiDemo = siteSimple?.template === "ai_demo" ? siteSimple : null;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  return (
+    <div
+      style={{
+        marginTop: 22,
+        paddingTop: 18,
+        borderTop: "1px solid var(--crm-border)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+        <h4 style={{ margin: 0 }}>Demo Site</h4>
+        <button
+          className="crm-btn ghost sm"
+          disabled={generateAi.isPending}
+          onClick={() => generateAi.mutate({ leadId })}
+          style={{ gap: 5 }}
+        >
+          {generateAi.isPending ? (
+            <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+          ) : (
+            <Sparkles size={12} />
+          )}
+          {aiDemo ? "Regenerate" : "Generate AI demo"}
+        </button>
+      </div>
+      {aiDemo?.slug ? (
+        <a
+          href={`${appUrl}/demo/${aiDemo.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--crm-accent-fg)" }}
+        >
+          <ExternalLink size={12} />
+          /demo/{aiDemo.slug}
+        </a>
+      ) : (
+        <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", fontStyle: "italic" }}>
+          No AI demo yet — click &ldquo;Generate AI demo&rdquo; above.
+        </div>
+      )}
+    </div>
   );
 }

@@ -1180,6 +1180,7 @@
   from { opacity: 0; transform: translateY(8px) scale(0.985); }
   to   { opacity: 1; transform: translateY(0)  scale(1); }
 }
+@keyframes demo-marquee { to { transform: translateX(-33.333%); } }
 
 .crm-modal-head {
   padding: 18px 20px 14px;
