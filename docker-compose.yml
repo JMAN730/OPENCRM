@@ -1,4 +1,29 @@
 services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      # Docker provider — only expose services that opt-in via labels
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Auto-redirect HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # Let's Encrypt via HTTP-01 challenge
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik_acme:/letsencrypt"
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -51,8 +76,9 @@ services:
   app:
     build: .
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # No host port binding — Traefik proxies traffic internally
+    expose:
+      - "3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
@@ -61,13 +87,26 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      AI_MODEL: ${AI_MODEL:-deepseek-v4-flash}
+      AI_MODEL: ${AI_MODEL:-deepseek-chat}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY: ${TWILIO_API_KEY:-}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET:-}
+      TWILIO_TWIML_APP_SID: ${TWILIO_TWIML_APP_SID:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
       SCRAPER_ENABLED: ${SCRAPER_ENABLED:-true}
       SCRAPER_PYTHON_PATH: /opt/venv/bin/python3
       SCRAPER_SCRIPT_PATH: /app/scraper/scraper.py
       SCRAPER_OUTPUT_BASE_DIR: /app/scraper-output
+      TRUSTED_PROXY: "true"
     volumes:
       - scraper_output:/app/scraper-output
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app.loadbalancer.server.port=3000"
     depends_on:
       db:
         condition: service_healthy
@@ -80,3 +119,4 @@ volumes:
   postgres_data_v2:
   scraper_output:
   redis_data:
+  traefik_acme:
