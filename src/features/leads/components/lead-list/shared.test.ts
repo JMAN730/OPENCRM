@@ -29,11 +29,14 @@ describe("effectiveTempOf", () => {
     expect(effectiveTempOf(makeLead())).toBe("cool");
   });
 
-  it("returns warm automatically when the lead is connected", () => {
-    expect(effectiveTempOf(makeLead({ status: "CONNECTED" }))).toBe("warm");
+  it("returns warm for a mid-scored connected lead", () => {
+    // rating 2.0 + 5 reviews + ANSWERED outcome scores 50 → warm
+    expect(
+      effectiveTempOf(makeLead({ status: "CONNECTED", callOutcome: "ANSWERED", rating: 2.0, reviewCount: 5 })),
+    ).toBe("warm");
   });
 
-  it("returns cool for non-connected statuses", () => {
+  it("returns cool for non-connected statuses with no score data", () => {
     expect(effectiveTempOf(makeLead({ status: "NO_ANSWER" }))).toBe("cool");
     expect(effectiveTempOf(makeLead({ status: "AI_VOICEMAIL" }))).toBe("cool");
     expect(effectiveTempOf(makeLead({ status: "HUNG_UP" }))).toBe("cool");
@@ -44,9 +47,9 @@ describe("effectiveTempOf", () => {
     expect(effectiveTempOf(makeLead({ status: "CONNECTED", temperatureOverride: "HOT" }))).toBe("hot");
   });
 
-  it("ignores WARM/COOL overrides and falls back to status-based logic", () => {
-    expect(effectiveTempOf(makeLead({ status: "NOT_CONTACTED", temperatureOverride: "WARM" }))).toBe("cool");
-    expect(effectiveTempOf(makeLead({ status: "CONNECTED", temperatureOverride: "COOL" }))).toBe("warm");
+  it("respects WARM and COOL manual overrides", () => {
+    expect(effectiveTempOf(makeLead({ status: "NOT_CONTACTED", temperatureOverride: "WARM" }))).toBe("warm");
+    expect(effectiveTempOf(makeLead({ status: "CONNECTED", temperatureOverride: "COOL" }))).toBe("cool");
   });
 });
 
