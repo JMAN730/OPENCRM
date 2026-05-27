@@ -187,6 +187,52 @@ describe("analyticsRouter", () => {
     });
   });
 
+  describe("topCallers", () => {
+    it("returns ranked caller stats from call + lead groups", async () => {
+      prisma.callLog.groupBy.mockResolvedValue([
+        { userId: "u1", status: "CONNECTED", _count: { id: 4 } },
+        { userId: "u1", status: "NO_ANSWER", _count: { id: 6 } },
+      ]);
+      prisma.lead.groupBy.mockResolvedValue([
+        { assignedToId: "u1", status: "CONNECTED", _count: { id: 2 } },
+        { assignedToId: "u1", status: "NO_ANSWER", _count: { id: 8 } },
+      ]);
+      prisma.user.findMany.mockResolvedValue([{ id: "u1", name: "Jonas", email: "j@x.com" }]);
+
+      const result = await caller.analytics.topCallers();
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ name: "Jonas", connectionRate: 40, closeRate: 20, bookedAppointments: null });
+    });
+  });
+
+  describe("leadQuality", () => {
+    it("returns niche, city and source conversion buckets", async () => {
+      prisma.lead.groupBy.mockResolvedValue([
+        { source: "GoogleMaps / Landscaping / Toledo, Ohio", city: null, status: "CONNECTED", _count: { id: 3 } },
+        { source: "GoogleMaps / Landscaping / Toledo, Ohio", city: null, status: "NO_ANSWER", _count: { id: 7 } },
+      ]);
+      const result = await caller.analytics.leadQuality();
+      expect(result).toHaveProperty("byNiche");
+      expect(result).toHaveProperty("byCity");
+      expect(result).toHaveProperty("bySource");
+      expect(result.byNiche[0]).toEqual({ key: "Landscaping", total: 10, converted: 3, conversionRate: 30 });
+    });
+  });
+
+  describe("repPerformance", () => {
+    it("returns per-rep performance rows", async () => {
+      prisma.lead.groupBy
+        .mockResolvedValueOnce([{ assignedToId: "u1", _sum: { value: 2500 } }])
+        .mockResolvedValueOnce([{ assignedToId: "u1", _avg: { touchCount: 2 } }])
+        .mockResolvedValueOnce([{ assignedToId: "u1", _count: { id: 3 } }]);
+      prisma.$queryRaw.mockResolvedValue([{ userId: "u1", avg_seconds: 3600 }]);
+      prisma.user.findMany.mockResolvedValue([{ id: "u1", name: "Jonas", email: null }]);
+
+      const result = await caller.analytics.repPerformance();
+      expect(result[0]).toMatchObject({ name: "Jonas", pipelineValue: 2500, conversions: 3, avgResponseHours: 1, appointmentsBooked: null });
+    });
+  });
+
   describe("overview — day array population", () => {
     it("fills in non-zero counts on the correct dates", async () => {
       const yesterday = new Date();

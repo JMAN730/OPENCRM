@@ -1,5 +1,13 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
+import { cached } from "@/lib/cache";
+import {
+  getTopCallers,
+  getLeadQuality,
+  getRepPerformance,
+} from "./salesAnalytics";
+
+const SALES_TTL_SECONDS = 60;
 
 function buildDayArray(
   rows: Array<{ day: Date; count: bigint }>,
@@ -117,5 +125,29 @@ export const analyticsRouter = createTRPCRouter({
         .map((r) => ({ temperature: r.temperatureOverride ?? "Auto", count: r._count.id }))
         .sort((a, b) => b.count - a.count),
     };
+  }),
+
+  topCallers: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
+    return cached(
+      { key: `analytics:topCallers:${organizationId}`, ttl: SALES_TTL_SECONDS },
+      () => getTopCallers(ctx.prisma, organizationId),
+    );
+  }),
+
+  leadQuality: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
+    return cached(
+      { key: `analytics:leadQuality:${organizationId}`, ttl: SALES_TTL_SECONDS },
+      () => getLeadQuality(ctx.prisma, organizationId),
+    );
+  }),
+
+  repPerformance: organizationProcedure.query(async ({ ctx }) => {
+    const { organizationId } = ctx;
+    return cached(
+      { key: `analytics:repPerformance:${organizationId}`, ttl: SALES_TTL_SECONDS },
+      () => getRepPerformance(ctx.prisma, organizationId),
+    );
   }),
 });
