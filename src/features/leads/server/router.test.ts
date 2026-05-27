@@ -258,6 +258,41 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("getStatusCounts", () => {
+    it("uses Prisma 7-compatible call outcome filters", async () => {
+      prisma.lead.groupBy
+        .mockResolvedValueOnce([{ status: "CONNECTED", _count: { id: 3 } }])
+        .mockResolvedValueOnce([{ customOutcomeId: "co-1", _count: { id: 2 } }]);
+      prisma.lead.count.mockResolvedValue(5);
+
+      const result = await caller.leads.getStatusCounts();
+
+      expect(prisma.lead.groupBy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          by: ["status"],
+          where: {
+            AND: [
+              { organizationId: "org-1" },
+              { callOutcome: { notIn: ["NOT_CONTACTED", "CUSTOM"] } },
+            ],
+          },
+        }),
+      );
+      expect(prisma.lead.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [
+              { organizationId: "org-1" },
+              { callOutcome: "NOT_CONTACTED" },
+            ],
+          },
+        }),
+      );
+      expect(result).toEqual({ NOT_CONTACTED: 5, CONNECTED: 3, "CUSTOM:co-1": 2 });
+    });
+  });
+
   describe("create", () => {
     it("attaches organizationId and assignedToId from the session", async () => {
       prisma.lead.create.mockResolvedValue({ id: "lead-1" });
@@ -895,8 +930,8 @@ describe("leadsRouter", () => {
   });
 
   describe("generateQualification", () => {
-    it("uses heuristic fallback when OPENAI_API_KEY is not set", async () => {
-      delete process.env.OPENAI_API_KEY;
+    it("uses heuristic fallback when DEEPSEEK_API_KEY is not set", async () => {
+      delete process.env.DEEPSEEK_API_KEY;
 
       const leadFixture = {
         id: "lead-1",

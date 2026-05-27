@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CSV Export**: `leads.export` tRPC procedure returns a filtered CSV of up to 10,000 leads; Export CSV button in LeadsManagementBar triggers browser download.
 - **Bulk temperature**: `leads.bulkSetTemperature` sets HOT / WARM / COOL override (or clears it) on multiple leads; Temperature dropdown in LeadBulkActionBar.
-- **AI lead qualification**: `leads.generateQualification` produces a 2–3 sentence qualification summary via OpenAI (heuristic fallback when `OPENAI_API_KEY` is unset); Qualify button in LeadModal stores summary on the lead.
+- **AI lead qualification**: `leads.generateQualification` produces a 2–3 sentence qualification summary via DeepSeek (heuristic fallback when `DEEPSEEK_API_KEY` is unset); Qualify button in LeadModal stores summary on the lead.
 - **Custom scraper categories**: `OrgScraperCategory` model; `scraper.createCategory` / `deleteCategory` / `listCategories` procedures; org-specific categories managed inline in StartJobForm.
 - **Scheduled weekly scraper runs**: `ScheduledScrape` model; `scraperSchedules` top-level router; ScheduledScrapePanel UI; `/api/cron/scraper` POST endpoint executes due schedules; next-run date shown in UI.
 - **Pipeline revenue forecasting**: `pipeline.updateDealValue` mutation; inline editable deal values on PipelineBoard; Forecast tab (close-rate weighted totals); Table tab (all deals with value editing).

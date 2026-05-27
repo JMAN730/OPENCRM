@@ -18,7 +18,7 @@ OpenCRM is a self-hosted CRM for sales teams with lead management, team-aware pe
 - Dashboard KPIs, recent calls, and due tasks
 - Lead CRUD, search, pagination, assignment, notes, bulk import/delete, and CSV export
 - Bulk lead temperature override (HOT / WARM / COOL) from the multi-select bar
-- AI lead qualification summary (OpenAI-backed with heuristic fallback) on lead detail
+- AI lead qualification summary (DeepSeek-backed with heuristic fallback) on lead detail
 - Team management with org-scoped membership controls and email-token invite flow
 - Task list with edit, complete, delete, calendar view, and per-lead task widget
 - Password reset, auth rate limiting, and deleted-user session invalidation

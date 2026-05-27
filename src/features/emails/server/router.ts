@@ -9,6 +9,24 @@ import { trackedDemoUrl, unsubscribeUrl, validateCanSpam } from "@/lib/can-spam"
 import { logActivity, ActivityType } from "@/server/activity";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 
+type EmailDraftListPage = {
+  items: Array<{
+    id: string;
+    subject: string;
+    status: EmailDraftStatus;
+    sentAt: Date | null;
+    lead: {
+      id: string;
+      company: string | null;
+      email: string | null;
+      city: string | null;
+      state: string | null;
+    };
+    events: Array<{ event: string }>;
+  }>;
+  nextCursor: string | undefined;
+};
+
 function resendClient() {
   return new Resend(process.env.RESEND_API_KEY);
 }
@@ -259,7 +277,7 @@ Unsubscribe: ${unsub}`;
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(100).default(50),
     }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx, input }): Promise<EmailDraftListPage> => {
       const items = await ctx.prisma.emailDraft.findMany({
         where: {
           organizationId: ctx.organizationId,
@@ -276,6 +294,16 @@ Unsubscribe: ${unsub}`;
 
       const hasMore = items.length > input.limit;
       const page = hasMore ? items.slice(0, input.limit) : items;
-      return { items: page, nextCursor: hasMore ? page[page.length - 1]?.id : undefined };
+      return {
+        items: page.map((item) => ({
+          id: item.id,
+          subject: item.subject,
+          status: item.status,
+          sentAt: item.sentAt,
+          lead: item.lead,
+          events: item.events.map((event) => ({ event: event.event })),
+        })),
+        nextCursor: hasMore ? page[page.length - 1]?.id : undefined,
+      };
     }),
 });

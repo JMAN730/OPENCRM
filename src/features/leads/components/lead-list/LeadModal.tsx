@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
@@ -31,10 +31,12 @@ import {
   Phone,
   Plus,
   SquareCheck,
+  Sparkles,
   Star,
   Tag,
   Trash2,
   X,
+  ExternalLink,
 } from "lucide-react";
 import {
   avatarClass,
@@ -55,9 +57,6 @@ import {
   type ScoringRuleConfig,
 } from "./shared";
 import { ScoreBar, StageTag, TempPill } from "./LeadUi";
-import { WebsiteGeneratorDialog } from "@/features/websites/components/WebsiteGeneratorDialog";
-import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
-import { Sparkles, ExternalLink } from "lucide-react";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
 
@@ -674,7 +673,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [viewNotesOpen, setViewNotesOpen] = useState(false);
   const [viewScriptsOpen, setViewScriptsOpen] = useState(false);
-  const [websiteDialogOpen, setWebsiteDialogOpen] = useState(false);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const [creatingTag, setCreatingTag] = useState(false);
   const [newTagName, setNewTagName] = useState("");
@@ -682,6 +680,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const assignRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
   const tagRef = useRef<HTMLDivElement | null>(null);
+  const demoSectionRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
   const userRole = (session?.user as SessionUser | undefined)?.role;
@@ -726,7 +725,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       void utils.leads.getAll.invalidate();
       void utils.leads.getActivities.invalidate({ leadId: lead.id });
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error: { message: string }) => toast.error(error.message),
   });
   const setDispositionMutation = trpc.leads.setDisposition.useMutation({
     onSuccess: () => {
@@ -842,6 +841,15 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const generateWebsite = (trpc.websites.generateAi as any).useMutation({
+    onSuccess: () => {
+      toast.success("Demo website generated");
+      void utils.websites.getForLead.invalidate({ leadId: lead.id });
+      void utils.leads.getActivities.invalidate({ leadId: lead.id });
+    },
+    onError: (error: { message: string }) => toast.error(error.message),
+  });
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   useEffect(() => {
@@ -955,12 +963,6 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
         />
       ) : null}
       {viewScriptsOpen ? <ScriptsDialog onClose={() => setViewScriptsOpen(false)} /> : null}
-      <WebsiteGeneratorDialog
-        open={websiteDialogOpen}
-        onClose={() => setWebsiteDialogOpen(false)}
-        leadId={lead.id}
-        leadName={name}
-      />
       <div className="crm-modal-backdrop" onClick={onClose}>
         <div className="crm-modal crm-app" onClick={(event) => event.stopPropagation()}>
           <div className="crm-modal-head">
@@ -1282,13 +1284,19 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                         width: "100%",
                         textAlign: "left",
                       }}
+                      disabled={generateWebsite.isPending}
                       onClick={() => {
                         setMoreOpen(false);
-                        setWebsiteDialogOpen(true);
+                        demoSectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+                        generateWebsite.mutate({ leadId: lead.id });
                       }}
                     >
-                      <Globe size={13} />
-                      <span>Generate website</span>
+                      {generateWebsite.isPending ? (
+                        <span style={{ display: "inline-block", width: 13, height: 13, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+                      ) : (
+                        <Globe size={13} />
+                      )}
+                      <span>{generateWebsite.isPending ? "Generating website..." : "Generate website"}</span>
                     </button>
                     <div
                       style={{
@@ -1802,18 +1810,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
-            <DemoSiteSection leadId={lead.id} />
-
-            <div
-              style={{
-                marginTop: 22,
-                paddingTop: 18,
-                borderTop: "1px solid var(--crm-border)",
-              }}
-            >
-              <h4 style={{ margin: "0 0 12px" }}>Outreach Email</h4>
-              <EmailDraftPanel leadId={lead.id} />
-            </div>
+            <DemoSiteSection leadId={lead.id} sectionRef={demoSectionRef} />
 
             <div>
               <h4>Recent activity</h4>
@@ -2014,11 +2011,17 @@ function CreateLeadTaskDialog({
   );
 }
 
-function DemoSiteSection({ leadId }: { leadId: string }) {
+function DemoSiteSection({ leadId, sectionRef }: { leadId: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
   const utils = trpc.useUtils();
   const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
-  const generateAi = trpc.websites.generateAi.useMutation({
-    onSuccess: () => void utils.websites.getForLead.invalidate({ leadId }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const generateAi = (trpc.websites.generateAi as any).useMutation({
+    onSuccess: () => {
+      toast.success("Demo website generated");
+      void utils.websites.getForLead.invalidate({ leadId });
+      void utils.leads.getActivities.invalidate({ leadId });
+    },
+    onError: (error: { message: string }) => toast.error(error.message),
   });
 
   const siteSimple = site as { id: string; template: string; slug?: string | null } | undefined;
@@ -2027,6 +2030,7 @@ function DemoSiteSection({ leadId }: { leadId: string }) {
 
   return (
     <div
+      ref={sectionRef}
       style={{
         marginTop: 22,
         paddingTop: 18,
