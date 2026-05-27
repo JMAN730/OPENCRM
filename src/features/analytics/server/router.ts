@@ -1,6 +1,8 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
+import { getLeadScope } from "@/server/teams/scope";
+import { scopeCacheKey } from "@/features/ai/server/context";
 import {
   getTopCallers,
   getLeadQuality,
@@ -128,26 +130,29 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   topCallers: organizationProcedure.query(async ({ ctx }) => {
-    const { organizationId } = ctx;
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
-      { key: `analytics:topCallers:${organizationId}`, ttl: SALES_TTL_SECONDS },
-      () => getTopCallers(ctx.prisma, organizationId),
+      { key: `analytics:topCallers:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getTopCallers(ctx.prisma, scope),
     );
   }),
 
   leadQuality: organizationProcedure.query(async ({ ctx }) => {
-    const { organizationId } = ctx;
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
-      { key: `analytics:leadQuality:${organizationId}`, ttl: SALES_TTL_SECONDS },
-      () => getLeadQuality(ctx.prisma, organizationId),
+      { key: `analytics:leadQuality:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getLeadQuality(ctx.prisma, scope),
     );
   }),
 
   repPerformance: organizationProcedure.query(async ({ ctx }) => {
-    const { organizationId } = ctx;
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
-      { key: `analytics:repPerformance:${organizationId}`, ttl: SALES_TTL_SECONDS },
-      () => getRepPerformance(ctx.prisma, organizationId),
+      { key: `analytics:repPerformance:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getRepPerformance(ctx.prisma, scope),
     );
   }),
 });

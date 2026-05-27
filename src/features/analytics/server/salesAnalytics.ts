@@ -1,11 +1,15 @@
 import type { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { type LeadScope, leadWhereFromScope } from "@/server/teams/scope";
 
 /**
- * Sales analytics service — pure, org-scoped metric functions shared by the
- * analytics tRPC router and the AI context builder. Every query filters by
- * organizationId. Metrics are derived only from real rows; a value that cannot
- * be computed from the schema is returned as `null` so callers can say
- * "not tracked" rather than fabricate a number.
+ * Sales analytics service — pure, scope-aware metric functions shared by the
+ * analytics tRPC router and the AI context builder. Every query is constrained
+ * by the caller's LeadScope (ADMIN → whole org; team leader → their team's
+ * assignees; everyone else → only themselves), mirroring how lead access is
+ * restricted elsewhere via resolveLeadScope/leadWhereFromScope. Metrics are
+ * derived only from real rows; a value that cannot be computed from the schema
+ * is returned as `null` so callers can say "not tracked" rather than fabricate.
  *
  * Conversion definition: a lead is "converted" when its status is CONNECTED.
  */
@@ -14,6 +18,13 @@ type Db = Pick<PrismaClient, "lead" | "callLog" | "activity" | "user" | "$queryR
 
 const ROUND = (n: number, dp = 1) => Math.round(n * 10 ** dp) / 10 ** dp;
 const rate = (part: number, total: number) => (total > 0 ? ROUND((part / total) * 100) : 0);
+
+/** Lead `where` restricted to the rep(s) the scope permits (assigned leads only). */
+function assignedWhere(scope: LeadScope) {
+  return scope.kind === "users"
+    ? { organizationId: scope.organizationId, assignedToId: { in: scope.userIds } }
+    : { organizationId: scope.organizationId, assignedToId: { not: null } };
+}
 
 /**
  * Lead `source` strings carry niche + city in a "Channel / Niche / City, State"
@@ -52,27 +63,31 @@ export type CallerStat = {
 };
 
 /**
- * Per-rep calling performance. `since` (when provided) bounds the call counts
- * to a recent window; lead assignment/conversion counts are all-time because
- * assignment is not timestamped distinctly from lead creation.
+ * Per-rep calling performance within the caller's scope. `since` (when
+ * provided) bounds the call counts to a recent window; lead assignment/
+ * conversion counts are all-time because assignment is not timestamped
+ * distinctly from lead creation.
  */
 export async function getTopCallers(
   db: Db,
-  organizationId: string,
+  scope: LeadScope,
   opts: { since?: Date } = {},
 ): Promise<CallerStat[]> {
+  const callUserFilter = scope.kind === "users" ? { userId: { in: scope.userIds } } : {};
+
   const [callRows, leadRows] = await Promise.all([
     db.callLog.groupBy({
       by: ["userId", "status"],
       where: {
-        lead: { organizationId },
+        lead: { organizationId: scope.organizationId },
+        ...callUserFilter,
         ...(opts.since ? { createdAt: { gte: opts.since } } : {}),
       },
       _count: { id: true },
     }),
     db.lead.groupBy({
       by: ["assignedToId", "status"],
-      where: { organizationId, assignedToId: { not: null } },
+      where: assignedWhere(scope),
       _count: { id: true },
     }),
   ]);
@@ -99,7 +114,7 @@ export async function getTopCallers(
   if (userIds.size === 0) return [];
 
   const users = await db.user.findMany({
-    where: { id: { in: Array.from(userIds) }, organizationId },
+    where: { id: { in: Array.from(userIds) }, organizationId: scope.organizationId },
     select: { id: true, name: true, email: true },
   });
   const nameById = new Map(users.map((u) => [u.id, u.name ?? u.email ?? "Unknown"]));
@@ -140,14 +155,15 @@ export type LeadQuality = {
 };
 
 /**
- * Conversion rates by niche, city, and acquisition channel. Niche/city are
- * derived from the lead source string (city falls back to that when the column
- * is empty), grouped in the DB by (source, city, status) to keep it cheap.
+ * Conversion rates by niche, city, and acquisition channel for the leads the
+ * caller can see. Niche/city are derived from the lead source string (city
+ * falls back to that when the column is empty), grouped in the DB by
+ * (source, city, status) to keep it cheap.
  */
-export async function getLeadQuality(db: Db, organizationId: string): Promise<LeadQuality> {
+export async function getLeadQuality(db: Db, scope: LeadScope): Promise<LeadQuality> {
   const rows = await db.lead.groupBy({
     by: ["source", "city", "status"],
-    where: { organizationId },
+    where: leadWhereFromScope(scope),
     _count: { id: true },
   });
 
@@ -206,28 +222,27 @@ export type RepPerformance = {
   conversions: number;
 };
 
-export async function getRepPerformance(
-  db: Db,
-  organizationId: string,
-): Promise<RepPerformance[]> {
+export async function getRepPerformance(db: Db, scope: LeadScope): Promise<RepPerformance[]> {
+  const where = assignedWhere(scope);
+  const responseScope =
+    scope.kind === "users"
+      ? Prisma.sql`AND l."assignedToId" IN (${Prisma.join(scope.userIds)})`
+      : Prisma.sql`AND l."assignedToId" IS NOT NULL`;
+
   const [valueRows, touchRows, convRows, responseRows] = await Promise.all([
+    db.lead.groupBy({ by: ["assignedToId"], where, _sum: { value: true } }),
     db.lead.groupBy({
       by: ["assignedToId"],
-      where: { organizationId, assignedToId: { not: null } },
-      _sum: { value: true },
-    }),
-    db.lead.groupBy({
-      by: ["assignedToId"],
-      where: { organizationId, assignedToId: { not: null }, touchCount: { gt: 0 } },
+      where: { ...where, touchCount: { gt: 0 } },
       _avg: { touchCount: true },
     }),
     db.lead.groupBy({
       by: ["assignedToId"],
-      where: { organizationId, assignedToId: { not: null }, status: "CONNECTED" },
+      where: { ...where, status: "CONNECTED" },
       _count: { id: true },
     }),
     // Avg first-response time per rep: first call timestamp minus lead creation.
-    db.$queryRaw<Array<{ userId: string; avg_seconds: number | null }>>`
+    db.$queryRaw<Array<{ userId: string; avg_seconds: number | null }>>(Prisma.sql`
       SELECT l."assignedToId" AS "userId",
              AVG(EXTRACT(EPOCH FROM (fc.first_call - l."createdAt"))) AS avg_seconds
       FROM "Lead" l
@@ -236,10 +251,10 @@ export async function getRepPerformance(
         FROM "CallLog"
         GROUP BY "leadId"
       ) fc ON fc."leadId" = l.id
-      WHERE l."organizationId" = ${organizationId}
-        AND l."assignedToId" IS NOT NULL
+      WHERE l."organizationId" = ${scope.organizationId}
+        ${responseScope}
       GROUP BY l."assignedToId"
-    `,
+    `),
   ]);
 
   const valueById = new Map(
@@ -265,7 +280,7 @@ export async function getRepPerformance(
   if (userIds.size === 0) return [];
 
   const users = await db.user.findMany({
-    where: { id: { in: Array.from(userIds) }, organizationId },
+    where: { id: { in: Array.from(userIds) }, organizationId: scope.organizationId },
     select: { id: true, name: true, email: true },
   });
   const nameById = new Map(users.map((u) => [u.id, u.name ?? u.email ?? "Unknown"]));
@@ -288,10 +303,10 @@ export type PipelineMetrics = {
   byStatus: Array<{ status: string; count: number }>;
 };
 
-export async function getPipelineMetrics(db: Db, organizationId: string): Promise<PipelineMetrics> {
+export async function getPipelineMetrics(db: Db, scope: LeadScope): Promise<PipelineMetrics> {
   const rows = await db.lead.groupBy({
     by: ["status"],
-    where: { organizationId },
+    where: leadWhereFromScope(scope),
     _count: { id: true },
   });
   const byStatus = rows.map((r) => ({ status: String(r.status), count: r._count.id }));
@@ -314,15 +329,16 @@ export type ConversionInsights = {
 };
 
 /**
- * Highest-converting niche/city/source. Buckets with fewer than `minSample`
- * leads are ignored so a single lucky lead can't show as a 100% niche.
+ * Highest-converting niche/city/source for the caller's scope. Buckets with
+ * fewer than `minSample` leads are ignored so a single lucky lead can't show
+ * as a 100% niche.
  */
 export async function getConversionInsights(
   db: Db,
-  organizationId: string,
+  scope: LeadScope,
   minSample = 3,
 ): Promise<ConversionInsights> {
-  const quality = await getLeadQuality(db, organizationId);
+  const quality = await getLeadQuality(db, scope);
   const eligible = (b: QualityBucket[]) => b.filter((x) => x.total >= minSample);
   const niches = eligible(quality.byNiche);
   const cities = eligible(quality.byCity);

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockPrisma, type MockPrisma } from "@/test/trpc";
 import type { PrismaClient } from "@prisma/client";
+import type { LeadScope } from "@/server/teams/scope";
 import {
   parseSource,
   getTopCallers,
@@ -12,6 +13,8 @@ import {
 
 const ORG = "org-1";
 const db = (p: MockPrisma) => p as unknown as PrismaClient;
+const ALL: LeadScope = { kind: "all", organizationId: ORG };
+const MINE: LeadScope = { kind: "users", organizationId: ORG, userIds: ["u1"] };
 
 describe("parseSource", () => {
   it("extracts channel/niche/city from a GoogleMaps source string", () => {
@@ -48,7 +51,7 @@ describe("getTopCallers", () => {
     ]);
     prisma.user.findMany.mockResolvedValue([{ id: "u1", name: "Jonas", email: "j@x.com" }]);
 
-    const [rep] = await getTopCallers(db(prisma), ORG);
+    const [rep] = await getTopCallers(db(prisma), ALL);
     expect(rep).toMatchObject({
       userId: "u1",
       name: "Jonas",
@@ -65,7 +68,7 @@ describe("getTopCallers", () => {
   it("returns an empty array when there is no activity", async () => {
     prisma.callLog.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
-    const result = await getTopCallers(db(prisma), ORG);
+    const result = await getTopCallers(db(prisma), ALL);
     expect(result).toEqual([]);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
@@ -82,9 +85,21 @@ describe("getTopCallers", () => {
       { id: "u1", name: "Low", email: null },
       { id: "u2", name: "High", email: null },
     ]);
-    const result = await getTopCallers(db(prisma), ORG);
+    const result = await getTopCallers(db(prisma), ALL);
     expect(result[0].name).toBe("High");
     expect(result[0].connectionRate).toBe(50);
+  });
+
+  it("restricts call and lead queries to the scoped user ids", async () => {
+    prisma.callLog.groupBy.mockResolvedValue([]);
+    prisma.lead.groupBy.mockResolvedValue([]);
+    await getTopCallers(db(prisma), MINE);
+    expect(prisma.callLog.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ userId: { in: ["u1"] } }) }),
+    );
+    expect(prisma.lead.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ assignedToId: { in: ["u1"] } }) }),
+    );
   });
 });
 
@@ -102,7 +117,7 @@ describe("getLeadQuality", () => {
       { source: "GoogleMaps / Cleaning / Maumee, Ohio", city: null, status: "NO_ANSWER", _count: { id: 1 } },
     ]);
 
-    const q = await getLeadQuality(db(prisma), ORG);
+    const q = await getLeadQuality(db(prisma), ALL);
 
     // Sorted by conversion rate desc → Cleaning (50%) before Landscaping (20%)
     expect(q.byNiche[0]).toEqual({ key: "Cleaning", total: 2, converted: 1, conversionRate: 50 });
@@ -115,7 +130,7 @@ describe("getLeadQuality", () => {
     prisma.lead.groupBy.mockResolvedValue([
       { source: "GoogleMaps / Fencing / Toledo, Ohio", city: "Sylvania", status: "CONNECTED", _count: { id: 4 } },
     ]);
-    const q = await getLeadQuality(db(prisma), ORG);
+    const q = await getLeadQuality(db(prisma), ALL);
     expect(q.byCity[0].key).toBe("Sylvania");
   });
 });
@@ -134,7 +149,7 @@ describe("getRepPerformance", () => {
     prisma.$queryRaw.mockResolvedValue([{ userId: "u1", avg_seconds: 7200 }]); // 2h
     prisma.user.findMany.mockResolvedValue([{ id: "u1", name: "Jonas", email: null }]);
 
-    const [rep] = await getRepPerformance(db(prisma), ORG);
+    const [rep] = await getRepPerformance(db(prisma), ALL);
     expect(rep).toMatchObject({
       userId: "u1",
       name: "Jonas",
@@ -154,7 +169,7 @@ describe("getRepPerformance", () => {
     prisma.$queryRaw.mockResolvedValue([{ userId: "u1", avg_seconds: null }]);
     prisma.user.findMany.mockResolvedValue([{ id: "u1", name: "Jonas", email: null }]);
 
-    const [rep] = await getRepPerformance(db(prisma), ORG);
+    const [rep] = await getRepPerformance(db(prisma), ALL);
     expect(rep.avgResponseHours).toBeNull();
   });
 });
@@ -166,7 +181,7 @@ describe("getPipelineMetrics", () => {
       { status: "CONNECTED", _count: { id: 38 } },
       { status: "NO_ANSWER", _count: { id: 153 } },
     ]);
-    const m = await getPipelineMetrics(db(prisma), ORG);
+    const m = await getPipelineMetrics(db(prisma), ALL);
     expect(m.total).toBe(191);
     expect(m.connected).toBe(38);
     expect(m.conversionRate).toBe(19.9);
@@ -183,7 +198,7 @@ describe("getConversionInsights", () => {
       // Cleaning has only 1 lead → below minSample of 3, must be excluded
       { source: "GoogleMaps / Cleaning / Maumee, Ohio", city: null, status: "CONNECTED", _count: { id: 1 } },
     ]);
-    const insights = await getConversionInsights(db(prisma), ORG);
+    const insights = await getConversionInsights(db(prisma), ALL);
     expect(insights.bestNiche?.key).toBe("Landscaping");
     expect(insights.topNiches.some((n) => n.key === "Cleaning")).toBe(false);
   });
