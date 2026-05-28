@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "ClientCore sales CRM dashboard preview";
+export const alt = "ClientCore — AI CRM & Lead Automation";
 export const size = {
   width: 1200,
   height: 630,
@@ -14,76 +14,75 @@ export default function Image() {
         style={{
           width: "100%",
           height: "100%",
-          background: "#f5f7fb",
-          color: "#111827",
+          background: "#0B0A1E",
           display: "flex",
-          padding: "56px",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "64px 72px",
           fontFamily: "Arial, sans-serif",
         }}
       >
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            border: "1px solid #d9e0ea",
-            borderRadius: "28px",
-            background: "#ffffff",
-            padding: "48px",
-            boxShadow: "0 30px 80px rgba(15, 23, 42, 0.12)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+        {/* Logo + brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          <div
+            style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: "16px",
+              background: "linear-gradient(135deg, #7C3AED, #4F46E5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "32px",
+              fontWeight: 900,
+              color: "#FFFFFF",
+            }}
+          >
+            C
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ fontSize: "32px", fontWeight: 800, color: "#FFFFFF" }}>ClientCore</div>
+            <div style={{ fontSize: "18px", color: "#A78BFA" }}>AI CRM & Lead Automation</div>
+          </div>
+        </div>
+
+        {/* Headline + subtitle */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div
+            style={{
+              fontSize: "72px",
+              fontWeight: 900,
+              lineHeight: 1.0,
+              letterSpacing: "-2px",
+              color: "#FFFFFF",
+            }}
+          >
+            Automate Leads.{"\n"}Close More Deals.
+          </div>
+          <div style={{ fontSize: "26px", color: "#C4B5FD", lineHeight: 1.4, maxWidth: "780px" }}>
+            The all-in-one CRM platform to automate outreach, manage clients, and scale faster with AI.
+          </div>
+        </div>
+
+        {/* Feature pills */}
+        <div style={{ display: "flex", gap: "12px" }}>
+          {["Lead Management", "AI Automation", "Pipeline Builder", "Smart Follow-ups"].map((label) => (
             <div
+              key={label}
               style={{
-                width: "64px",
-                height: "64px",
-                borderRadius: "18px",
-                background: "#0f766e",
-                color: "#ffffff",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "30px",
-                fontWeight: 800,
+                border: "1px solid rgba(124, 58, 237, 0.5)",
+                borderRadius: "999px",
+                padding: "10px 20px",
+                background: "rgba(124, 58, 237, 0.15)",
+                color: "#DDD6FE",
+                fontSize: "18px",
+                fontWeight: 600,
               }}
             >
-              C
+              {label}
             </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: "34px", fontWeight: 800 }}>ClientCore</div>
-              <div style={{ color: "#64748b", fontSize: "22px" }}>Sales CRM</div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "760px" }}>
-            <div style={{ fontSize: "68px", lineHeight: 1.02, fontWeight: 900, letterSpacing: "-1px" }}>
-              Turn leads into booked conversations.
-            </div>
-            <div style={{ color: "#475569", fontSize: "28px", lineHeight: 1.35 }}>
-              Pipeline, call logging, outreach, tasks, and team follow-up in one focused workspace.
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: "16px" }}>
-            {["Lead pipeline", "Call workflow", "Team tasks"].map((label) => (
-              <div
-                key={label}
-                style={{
-                  display: "flex",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "999px",
-                  padding: "12px 18px",
-                  color: "#334155",
-                  fontSize: "20px",
-                  fontWeight: 700,
-                }}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     ),
