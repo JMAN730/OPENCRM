@@ -1,5 +1,5 @@
 import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
-import { subDays } from "date-fns";
+import { subDays, subWeeks } from "date-fns";
 import { cached } from "@/lib/cache";
 
 const DASHBOARD_TTL_SECONDS = 60;
@@ -15,20 +15,23 @@ export const dashboardRouter = createTRPCRouter({
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
         const thirtyDaysAgo = subDays(new Date(), 30);
+        const sixtyDaysAgo = subDays(new Date(), 60);
         const sevenDaysAgo = subDays(today, 6); // 7-day window including today
+        const fourteenDaysAgo = subDays(today, 13);
+        const eightWeeksAgo = subWeeks(today, 8);
 
-        // The previous implementation issued ~16 parallel queries, with seven
-        // redundant per-day count() calls and three duplicated lead.count
-        // queries for the same status. The fanout below collapses those into
-        // five parallel reads plus one raw groupBy.
         const [
           callsTodayCount,
           followupsDueCount,
           connectedLast30dCount,
+          connectedPrev30dCount,
           outcomeDistribution,
           leadsByStatusResult,
           recentCalls,
           callsPerDayRows,
+          leadsPerWeekRows,
+          leadsLast7dCount,
+          leadsPrev7dCount,
         ] = await Promise.all([
           ctx.prisma.callLog.count({
             where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
@@ -36,15 +39,21 @@ export const dashboardRouter = createTRPCRouter({
           ctx.prisma.task.count({
             where: { organizationId, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow }, deletedAt: null },
           }),
-          // "Connected · 30d" replaces the old monthlyRevenue metric, which
-          // summed Lead.value — a field nothing in the UI ever wrote, so the
-          // displayed revenue was always 0.
           ctx.prisma.lead.count({
             where: {
               organizationId,
               status: "CONNECTED",
               callOutcome: { not: "CUSTOM" },
               updatedAt: { gte: thirtyDaysAgo },
+            },
+          }),
+          // Previous 30-day window for delta calculation
+          ctx.prisma.lead.count({
+            where: {
+              organizationId,
+              status: "CONNECTED",
+              callOutcome: { not: "CUSTOM" },
+              updatedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
             },
           }),
           ctx.prisma.lead.groupBy({
@@ -63,9 +72,6 @@ export const dashboardRouter = createTRPCRouter({
             take: 15,
             include: { lead: { select: { phone: true, callOutcome: true } } },
           }),
-          // Single grouped query for the per-day chart bucket. date_trunc +
-          // index-on-(userId, createdAt) keeps this O(matching rows) instead
-          // of seven full table scans.
           ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
             SELECT date_trunc('day', cl."createdAt") AS day,
                    COUNT(*)::bigint AS count
@@ -76,6 +82,24 @@ export const dashboardRouter = createTRPCRouter({
             GROUP BY 1
             ORDER BY 1 ASC
           `,
+          // Weekly lead creation counts for the Leads Over Time chart
+          ctx.prisma.$queryRaw<Array<{ week: Date; count: bigint }>>`
+            SELECT date_trunc('week', "createdAt") AS week,
+                   COUNT(*)::bigint AS count
+            FROM "Lead"
+            WHERE "organizationId" = ${organizationId}
+              AND "createdAt" >= ${eightWeeksAgo}
+            GROUP BY 1
+            ORDER BY 1 ASC
+          `,
+          // Last 7 days of new leads (for delta badge)
+          ctx.prisma.lead.count({
+            where: { organizationId, createdAt: { gte: sevenDaysAgo } },
+          }),
+          // Previous 7-day window
+          ctx.prisma.lead.count({
+            where: { organizationId, createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo } },
+          }),
         ]);
 
         // Derive totals from the status groupBy result so we don't issue
@@ -108,13 +132,28 @@ export const dashboardRouter = createTRPCRouter({
             ? ((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)
             : "0.0";
 
+        // Build 8-week lead creation trend (zero-fill missing weeks)
+        const weekMap = new Map<string, number>();
+        for (const row of leadsPerWeekRows) {
+          const key = new Date(row.week).toISOString().split("T")[0];
+          weekMap.set(key, Number(row.count));
+        }
+        const leadsPerWeek = Array.from({ length: 8 }, (_, idx) => {
+          const date = subWeeks(today, 7 - idx);
+          const key = date.toISOString().split("T")[0];
+          return { date: key, count: weekMap.get(key) ?? 0 };
+        });
+
         return {
           totalLeads: totalLeadsCount,
           callsToday: callsTodayCount,
           qualifiedLeads: qualifiedLeadsCount,
           connectedLast30d: connectedLast30dCount,
+          connectedPrev30d: connectedPrev30dCount,
           followupsDue: followupsDueCount,
           conversionRate: `${conversionRate}%`,
+          leadsLast7d: leadsLast7dCount,
+          leadsPrev7d: leadsPrev7dCount,
           leadsByStatus,
           recentCalls: recentCalls.map((c) => ({
             id: c.id,
@@ -126,6 +165,7 @@ export const dashboardRouter = createTRPCRouter({
           })),
           charts: {
             callsPerDay,
+            leadsPerWeek,
             outcomeDistribution: outcomeDistribution.map((item) => ({
               outcome: item.callOutcome,
               count: item._count.id,

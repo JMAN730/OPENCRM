@@ -33,6 +33,14 @@ describe("proxy", () => {
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
+  it("bypasses the Twilio voice webhook without checking a token", async () => {
+    const response = await proxy(new NextRequest("http://localhost/api/twilio/voice"));
+
+    expect(mockGetToken).not.toHaveBeenCalled();
+    expect(getRedirectUrl(response)).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("redirects unauthenticated protected pages to sign-in", async () => {
     mockGetToken.mockResolvedValue(null);
 

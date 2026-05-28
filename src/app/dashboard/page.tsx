@@ -12,6 +12,9 @@ import {
   TrendingUp,
   Activity,
   CheckCircle2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
@@ -28,21 +31,102 @@ function formatDueDate(date: string | Date | null | undefined): string {
   return format(d, "MMM d");
 }
 
-/* ── KPI Card ── */
+/* ── Inline SVG Sparkline ── */
+function Sparkline({
+  data,
+  color = "var(--crm-accent)",
+  width = 80,
+  height = 32,
+}: {
+  data: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  if (!data.length) return null;
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - (v / max) * (height - 4) - 2;
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(" ");
+  // Area fill: close path to bottom
+  const area = `M ${pts[0]} L ${pts.join(" L ")} L ${width},${height} L 0,${height} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id={`sg-${color.replace(/[^a-z0-9]/gi, "")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, "")})`} />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── Delta badge ── */
+function Delta({ current, previous, suffix = "" }: { current: number; previous: number; suffix?: string }) {
+  if (previous === 0 && current === 0) {
+    return <span className="crm-delta flat"><Minus size={10} /> 0{suffix}</span>;
+  }
+  if (previous === 0) {
+    return <span className="crm-delta pos"><ArrowUpRight size={10} /> new{suffix}</span>;
+  }
+  const pct = ((current - previous) / previous) * 100;
+  const abs = Math.abs(pct).toFixed(1);
+  if (pct >= 0) {
+    return <span className="crm-delta pos"><ArrowUpRight size={10} /> +{abs}%{suffix}</span>;
+  }
+  return <span className="crm-delta neg"><ArrowDownRight size={10} /> -{abs}%{suffix}</span>;
+}
+
+/* ── KPI Card with sparkline ── */
 function KPICard({
-  label, icon: Icon, value,
+  label,
+  icon: Icon,
+  value,
+  sparkData,
+  current,
+  previous,
+  deltaSuffix,
+  accentColor,
 }: {
   label: string;
   icon: React.ElementType;
   value: string | number;
+  sparkData?: number[];
+  current?: number;
+  previous?: number;
+  deltaSuffix?: string;
+  accentColor?: string;
 }) {
+  const color = accentColor ?? "var(--crm-accent)";
   return (
-    <div className="crm-card crm-kpi">
+    <div className="crm-card crm-kpi" style={{
+      background: "var(--crm-surface)",
+      borderColor: "var(--crm-border-soft)",
+      overflow: "hidden",
+    }}>
       <div className="crm-kpi-label">
-        <span className="crm-kpi-icon"><Icon size={13} /></span>
+        <span className="crm-kpi-icon" style={{ background: "var(--crm-accent-soft)", color }}>
+          <Icon size={13} />
+        </span>
         {label}
       </div>
       <div className="crm-kpi-value">{value}</div>
+      <div className="crm-kpi-foot">
+        {current !== undefined && previous !== undefined ? (
+          <Delta current={current} previous={previous} suffix={deltaSuffix} />
+        ) : (
+          <span className="crm-delta flat" style={{ visibility: "hidden" }}>—</span>
+        )}
+        {sparkData && sparkData.length > 1 && (
+          <Sparkline data={sparkData} color={color} width={72} height={28} />
+        )}
+      </div>
     </div>
   );
 }
@@ -50,7 +134,7 @@ function KPICard({
 /* ── Phone Reach Card ── */
 const OUTCOME_DISPLAY: Record<string, { label: string; color: string }> = {
   ANSWERED:     { label: "Answered",     color: "var(--crm-accent)" },
-  HUNG_UP:      { label: "Hung up",      color: "oklch(64% 0.18 25)" },
+  HUNG_UP:      { label: "Hung up",      color: "oklch(64% 0.20 25)" },
   NO_ANSWER:    { label: "No answer",    color: "oklch(72% 0.06 80)" },
   AI_VOICEMAIL: { label: "AI voicemail", color: "oklch(72% 0.12 270)" },
 };
@@ -93,7 +177,6 @@ function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoadin
       return next;
     });
 
-  // Enrich each entry with its display key, label, and color
   let customIdx = 0;
   const enriched = data.map((d) => {
     const key = entryKey(d);
@@ -178,6 +261,86 @@ function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoadin
   );
 }
 
+/* ── Leads Over Time Chart ── */
+function LeadsOverTimeCard({ data, isLoading }: { data: { date: string; count: number }[]; isLoading: boolean }) {
+  const W = 560, H = 120, PAD_L = 32, PAD_B = 24, PAD_T = 10, PAD_R = 8;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+  const maxVal = Math.max(...data.map((d) => d.count), 1);
+
+  const pts = data.map((d, i) => {
+    const x = PAD_L + (i / (data.length - 1)) * chartW;
+    const y = PAD_T + chartH - (d.count / maxVal) * chartH;
+    return { x, y, ...d };
+  });
+
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const areaPath = `${linePath} L ${pts[pts.length - 1]!.x} ${PAD_T + chartH} L ${pts[0]!.x} ${PAD_T + chartH} Z`;
+
+  // Y-axis guide lines at 0%, 50%, 100%
+  const yGuides = [0, 0.5, 1].map((f) => ({
+    y: PAD_T + chartH * (1 - f),
+    label: Math.round(maxVal * f),
+  }));
+
+  return (
+    <div className="crm-card flush">
+      <div className="crm-card-head">
+        <h3>Leads Over Time</h3>
+        <span className="crm-sub">· 8-week trend</span>
+      </div>
+      <div style={{ padding: "16px 16px 8px" }}>
+        {isLoading ? (
+          <div style={{ height: H, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+            Loading…
+          </div>
+        ) : (
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+            <defs>
+              <linearGradient id="leads-area-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--crm-accent)" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="var(--crm-accent)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {/* Y-axis guide lines */}
+            {yGuides.map((g) => (
+              <g key={g.y}>
+                <line x1={PAD_L} y1={g.y} x2={W - PAD_R} y2={g.y}
+                  stroke="var(--crm-border-soft)" strokeWidth="1" strokeDasharray="3,3" />
+                <text x={PAD_L - 4} y={g.y + 4} textAnchor="end"
+                  fill="var(--crm-fg-faint)" fontSize="9" fontFamily="var(--crm-font-mono)">
+                  {g.label}
+                </text>
+              </g>
+            ))}
+            {/* Area fill */}
+            {pts.length > 1 && (
+              <path d={areaPath} fill="url(#leads-area-grad)" />
+            )}
+            {/* Line */}
+            {pts.length > 1 && (
+              <path d={linePath} fill="none" stroke="var(--crm-accent)" strokeWidth="2"
+                strokeLinejoin="round" strokeLinecap="round" />
+            )}
+            {/* Data points */}
+            {pts.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r="3"
+                fill="var(--crm-surface)" stroke="var(--crm-accent)" strokeWidth="1.5" />
+            ))}
+            {/* X-axis labels */}
+            {pts.map((p, i) => (
+              <text key={i} x={p.x} y={H - 4} textAnchor="middle"
+                fill="var(--crm-fg-faint)" fontSize="9" fontFamily="var(--crm-font-mono)">
+                {format(new Date(p.date + "T12:00:00"), "M/d")}
+              </text>
+            ))}
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Pipeline Card ── */
 const LEAD_STATUS_LABEL: Record<string, string> = {
   NOT_CONTACTED: "Not Contacted",
@@ -188,6 +351,14 @@ const LEAD_STATUS_LABEL: Record<string, string> = {
 };
 
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
+
+const PIPELINE_COLORS = [
+  "var(--crm-accent)",
+  "oklch(56% 0.18 200)",
+  "oklch(60% 0.16 160)",
+  "oklch(64% 0.20 25)",
+  "var(--crm-pos)",
+];
 
 function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: string; count: number }[]; isLoading: boolean }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);
@@ -205,8 +376,8 @@ function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: s
   }
 
   const orderedData = LEAD_STATUS_ORDER
-    .map((s) => leadsByStatus.find((l) => l.status === s))
-    .filter((l): l is { status: string; count: number } => !!l && l.count > 0);
+    .map((s, idx) => ({ item: leadsByStatus.find((l) => l.status === s), color: PIPELINE_COLORS[idx] ?? "var(--crm-accent)" }))
+    .filter((l): l is { item: { status: string; count: number }; color: string } => !!l.item && l.item.count > 0);
 
   return (
     <div className="crm-card flush">
@@ -215,11 +386,11 @@ function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: s
         <span className="crm-sub">· {total.toLocaleString()} leads</span>
       </div>
       <div className="crm-funnel">
-        {orderedData.map((s) => (
+        {orderedData.map(({ item: s, color }) => (
           <div key={s.status} className="crm-funnel-row">
             <div className="crm-lbl">{LEAD_STATUS_LABEL[s.status] ?? s.status}</div>
-            <div className="crm-bar">
-              <span style={{ width: (s.count / max * 100) + "%" }}>
+            <div className="crm-bar" style={{ background: "var(--crm-surface-hover)" }}>
+              <span style={{ width: (s.count / max * 100) + "%", background: color }}>
                 {s.count.toLocaleString()}
               </span>
             </div>
@@ -609,6 +780,8 @@ export default function DashboardPage() {
   const leadsByStatus = stats?.leadsByStatus ?? [];
   const recentCalls = stats?.recentCalls ?? [];
   const outcomeDist = stats?.charts.outcomeDistribution ?? [];
+  const callsPerDay = (stats?.charts.callsPerDay ?? []).map((d) => d.count);
+  const leadsPerWeek = stats?.charts.leadsPerWeek ?? [];
 
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -665,11 +838,39 @@ export default function DashboardPage() {
 
         {activeTab === "overview" && (
           <>
+            {/* KPI row */}
             <div className="crm-kpi-grid">
-              <KPICard label="Connected · 30d" icon={CheckCircle2} value={connected30d} />
-              <KPICard label="Total leads" icon={Users} value={totalLeads} />
-              <KPICard label="Calls today" icon={Phone} value={!stats && statsLoading ? "—" : callsToday} />
+              <KPICard
+                label="Connected · 30d"
+                icon={CheckCircle2}
+                value={connected30d}
+                sparkData={callsPerDay}
+                current={stats?.connectedLast30d}
+                previous={stats?.connectedPrev30d}
+                deltaSuffix=" vs prev 30d"
+                accentColor="var(--crm-accent)"
+              />
+              <KPICard
+                label="Total leads"
+                icon={Users}
+                value={totalLeads}
+                sparkData={(stats?.charts.leadsPerWeek ?? []).map((d) => d.count)}
+                current={stats?.leadsLast7d}
+                previous={stats?.leadsPrev7d}
+                deltaSuffix=" this week"
+                accentColor="oklch(68% 0.16 150)"
+              />
+              <KPICard
+                label="Calls today"
+                icon={Phone}
+                value={!stats && statsLoading ? "—" : callsToday}
+                sparkData={callsPerDay}
+                accentColor="oklch(72% 0.12 270)"
+              />
             </div>
+
+            {/* Leads Over Time full-width chart */}
+            <LeadsOverTimeCard data={leadsPerWeek} isLoading={statsLoading} />
 
             <div className="crm-grid-row">
               <CallsCard recentCalls={recentCalls} callsToday={callsToday} isLoading={statsLoading} />
