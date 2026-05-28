@@ -151,6 +151,11 @@ export function createMockPrisma() {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       count: vi.fn().mockResolvedValue(0),
     },
+    salesScript: {
+      findMany: vi.fn().mockResolvedValue([]),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     generatedWebsite: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
