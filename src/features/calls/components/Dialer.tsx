@@ -49,12 +49,10 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState(0);
 
-  // Twilio Voice SDK requires a secure context (HTTPS or localhost)
+  // window.isSecureContext is the authoritative browser check for WebRTC eligibility
+  // (true for HTTPS or localhost, false for plain HTTP on any other host)
   const isInsecureContext =
-    typeof window !== "undefined" &&
-    window.location.protocol !== "https:" &&
-    window.location.hostname !== "localhost" &&
-    window.location.hostname !== "127.0.0.1";
+    typeof window !== "undefined" && !window.isSecureContext;
 
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<TwilioCall | null>(null);
@@ -69,6 +67,9 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   // Initialize Twilio Device when token arrives
   useEffect(() => {
     if (!tokenData?.token) return;
+    // Twilio Voice SDK requires WebRTC (secure context). Skip init on HTTP non-localhost
+    // so we don't get a cryptic SDK error — the UI already shows the HTTPS banner.
+    if (isInsecureContext) return;
 
     let device: Device;
     (async () => {
@@ -81,7 +82,7 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
           setDeviceError(null);
         });
         device.on("error", (err: { message: string; code?: number }) => {
-          const msg = err.message ?? "Unknown dialer error";
+          const msg = err?.message ?? "Unknown dialer error";
           setDeviceError(msg);
           toast.error(`Dialer error: ${msg}`);
         });
@@ -89,7 +90,16 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
         await device.register();
         deviceRef.current = device;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to initialize dialer";
+        // The SDK may throw non-Error objects — extract the message robustly
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : (err as { message?: string })?.message
+                ?? JSON.stringify(err)
+                ?? "Failed to initialize dialer";
+        console.error("[Dialer] Device init failed:", err);
         setDeviceError(msg);
       }
     })();
@@ -100,7 +110,7 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
       setDeviceReady(false);
       setDeviceError(null);
     };
-  }, [tokenData?.token]);
+  }, [tokenData?.token, isInsecureContext]);
 
   // Duration timer while in call
   useEffect(() => {
