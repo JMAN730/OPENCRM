@@ -9,6 +9,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth", // /auth/signin, /auth/register, /auth/forgot-password, /auth/reset-password, /auth/accept-invite
   "/api/auth", // NextAuth's own session endpoints
   "/api/health", // health probe (when/if added)
+  "/api/twilio/voice", // Twilio Voice webhook for browser outbound calls
 ];
 
 // tRPC procedures we explicitly allow without an authenticated session.

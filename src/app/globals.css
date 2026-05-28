@@ -201,53 +201,53 @@
    ============================================================ */
 
 .dark .crm-app {
-  /* Surfaces */
-  --crm-bg:             oklch(13% 0.008 70);
-  --crm-surface:        oklch(18% 0.008 70);
-  --crm-surface-2:      oklch(15% 0.008 70);
-  --crm-surface-hover:  oklch(23% 0.008 70);
-  --crm-bg-card:        oklch(18% 0.008 70);
+  /* Surfaces — deep navy/indigo palette (ClientCore style) */
+  --crm-bg:             oklch(9.5% 0.042 265);
+  --crm-surface:        oklch(13.5% 0.050 265);
+  --crm-surface-2:      oklch(11.5% 0.046 265);
+  --crm-surface-hover:  oklch(18% 0.060 265);
+  --crm-bg-card:        oklch(13.5% 0.050 265);
 
   /* Borders */
-  --crm-border:         oklch(30% 0.008 70);
-  --crm-border-soft:    oklch(24% 0.008 70);
-  --crm-border-strong:  oklch(42% 0.008 70);
+  --crm-border:         oklch(26% 0.055 265);
+  --crm-border-soft:    oklch(21% 0.050 265);
+  --crm-border-strong:  oklch(38% 0.065 265);
 
   /* Foreground */
-  --crm-fg:             oklch(92% 0.006 70);
-  --crm-fg-muted:       oklch(68% 0.006 70);
-  --crm-fg-faint:       oklch(50% 0.006 70);
+  --crm-fg:             oklch(94% 0.010 265);
+  --crm-fg-muted:       oklch(66% 0.018 265);
+  --crm-fg-faint:       oklch(48% 0.016 265);
   --crm-fg-onaccent:    #ffffff;
 
-  /* Accent */
-  --crm-accent:         oklch(64% 0.18 280);
-  --crm-accent-hover:   oklch(68% 0.18 280);
-  --crm-accent-soft:    oklch(22% 0.09 280);
-  --crm-accent-fg:      oklch(76% 0.16 280);
+  /* Accent — vivid purple */
+  --crm-accent:         oklch(56% 0.26 280);
+  --crm-accent-hover:   oklch(62% 0.26 280);
+  --crm-accent-soft:    oklch(19% 0.10 280);
+  --crm-accent-fg:      oklch(78% 0.20 280);
 
   /* Semantic colours */
-  --crm-pos:            oklch(64% 0.14 155);
-  --crm-pos-soft:       oklch(18% 0.06 155);
-  --crm-neg:            oklch(66% 0.18 25);
-  --crm-neg-soft:       oklch(18% 0.07 25);
-  --crm-warn:           oklch(74% 0.13 70);
-  --crm-warn-soft:      oklch(18% 0.07 70);
-  --crm-hot:            oklch(70% 0.20 35);
-  --crm-hot-soft:       oklch(19% 0.08 40);
-  --crm-cool:           oklch(66% 0.13 220);
-  --crm-cool-soft:      oklch(18% 0.05 220);
+  --crm-pos:            oklch(68% 0.16 150);
+  --crm-pos-soft:       oklch(16% 0.07 150);
+  --crm-neg:            oklch(64% 0.20 25);
+  --crm-neg-soft:       oklch(16% 0.08 25);
+  --crm-warn:           oklch(76% 0.14 70);
+  --crm-warn-soft:      oklch(17% 0.07 70);
+  --crm-hot:            oklch(70% 0.22 35);
+  --crm-hot-soft:       oklch(17% 0.09 35);
+  --crm-cool:           oklch(68% 0.14 220);
+  --crm-cool-soft:      oklch(16% 0.06 220);
 
-  /* Shadows — heavier / darker in dark mode */
+  /* Shadows */
   --crm-shadow-modal:
-    0 32px 80px -20px oklch(0% 0 0 / 0.65),
-    0 8px 24px -8px oklch(0% 0 0 / 0.45);
-  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.30);
+    0 32px 80px -20px oklch(0% 0 0 / 0.72),
+    0 8px 24px -8px oklch(0% 0 0 / 0.52);
+  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.35);
   --crm-shadow-soft:
-    0 1px 2px oklch(0% 0 0 / 0.25),
-    0 4px 12px -4px oklch(0% 0 0 / 0.30);
+    0 1px 2px oklch(0% 0 0 / 0.28),
+    0 4px 12px -4px oklch(0% 0 0 / 0.34);
   --crm-shadow-pop:
-    0 12px 32px -10px oklch(0% 0 0 / 0.55),
-    0 2px 6px -2px oklch(0% 0 0 / 0.35);
+    0 12px 32px -10px oklch(0% 0 0 / 0.60),
+    0 2px 6px -2px oklch(0% 0 0 / 0.40);
 }
 
 /* Fix gradient backgrounds that mix with white (looks wrong on dark surfaces) */

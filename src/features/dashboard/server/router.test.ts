@@ -176,15 +176,14 @@ describe("dashboardRouter.getKpiStats", () => {
   it("issues exactly one query per data source (no fanout)", async () => {
     await caller.dashboard.getKpiStats();
 
-    // Previously this procedure ran ~16 queries; the collapsed version
-    // should run at most one of each kind.
     expect(prisma.callLog.count).toHaveBeenCalledTimes(1); // callsToday only
     expect(prisma.task.count).toHaveBeenCalledTimes(1); // followups due
-    expect(prisma.lead.count).toHaveBeenCalledTimes(1); // connected-last-30d
+    // 4 lead.count calls: connected-last-30d, connected-prev-30d, leads-last-7d, leads-prev-7d
+    expect(prisma.lead.count).toHaveBeenCalledTimes(4);
     expect(prisma.callLog.groupBy).toHaveBeenCalledTimes(0); // no longer used
     expect(prisma.lead.groupBy).toHaveBeenCalledTimes(2); // outcomeDistribution + leadsByStatus
     expect(prisma.callLog.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1); // 7-day rollup
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2); // 7-day call rollup + 8-week lead rollup
   });
 });
 
