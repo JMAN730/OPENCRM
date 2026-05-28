@@ -15,7 +15,7 @@ describe("dashboardRouter.getKpiStats", () => {
     prisma.callLog.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
     prisma.callLog.findMany.mockResolvedValue([]);
-    // 3 $queryRaw calls: calls-per-day, connected-calls-per-day, leads-per-week
+    // 2 $queryRaw calls: calls-per-day, connected-calls-per-day
     prisma.$queryRaw.mockResolvedValue([]);
   });
 
@@ -99,8 +99,7 @@ describe("dashboardRouter.getKpiStats", () => {
         { day: dayOf(3), count: BigInt(13) },
         { day: dayOf(0), count: BigInt(16) },
       ])
-      .mockResolvedValueOnce([]) // connected-calls-per-day
-      .mockResolvedValueOnce([]); // leads-per-week
+      .mockResolvedValueOnce([]); // connected-calls-per-day
 
     const result = await caller.dashboard.getKpiStats();
 
@@ -186,8 +185,8 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(prisma.callLog.groupBy).toHaveBeenCalledTimes(0); // no longer used
     expect(prisma.lead.groupBy).toHaveBeenCalledTimes(2); // outcomeDistribution + leadsByStatus
     expect(prisma.callLog.findMany).toHaveBeenCalledTimes(1);
-    // 3 $queryRaw calls: calls-per-day + connected-calls-per-day + leads-per-week
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3);
+    // 2 $queryRaw calls: calls-per-day + connected-calls-per-day
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
   });
 });
 

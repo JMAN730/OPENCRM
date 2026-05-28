@@ -260,92 +260,6 @@ function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoadin
   );
 }
 
-/* ── Leads Over Time Chart ── */
-function LeadsOverTimeCard({ data, isLoading }: { data: { date: string; count: number }[]; isLoading: boolean }) {
-  const W = 560, H = 120, PAD_L = 32, PAD_B = 24, PAD_T = 10, PAD_R = 8;
-  const chartW = W - PAD_L - PAD_R;
-  const chartH = H - PAD_T - PAD_B;
-
-  const hasData = data.length >= 2;
-  const maxVal = hasData ? Math.max(...data.map((d) => d.count), 1) : 1;
-
-  const pts = hasData ? data.map((d, i) => {
-    const x = PAD_L + (i / (data.length - 1)) * chartW;
-    const y = PAD_T + chartH - (d.count / maxVal) * chartH;
-    return { x, y, ...d };
-  }) : [];
-
-  const linePath = pts.length > 1
-    ? pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")
-    : "";
-  const areaPath = pts.length > 1
-    ? `${linePath} L ${pts[pts.length - 1]!.x} ${PAD_T + chartH} L ${pts[0]!.x} ${PAD_T + chartH} Z`
-    : "";
-
-  // Y-axis guide lines at 0%, 50%, 100%
-  const yGuides = [0, 0.5, 1].map((f) => ({
-    y: PAD_T + chartH * (1 - f),
-    label: Math.round(maxVal * f),
-  }));
-
-  return (
-    <div className="crm-card flush">
-      <div className="crm-card-head">
-        <h3>Leads Over Time</h3>
-        <span className="crm-sub">· 8-week trend</span>
-      </div>
-      <div style={{ padding: "16px 16px 8px" }}>
-        {isLoading ? (
-          <div style={{ height: H, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
-            Loading…
-          </div>
-        ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-            <defs>
-              <linearGradient id="leads-area-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--crm-accent)" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="var(--crm-accent)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {/* Y-axis guide lines */}
-            {yGuides.map((g) => (
-              <g key={g.y}>
-                <line x1={PAD_L} y1={g.y} x2={W - PAD_R} y2={g.y}
-                  stroke="var(--crm-border-soft)" strokeWidth="1" strokeDasharray="3,3" />
-                <text x={PAD_L - 4} y={g.y + 4} textAnchor="end"
-                  fill="var(--crm-fg-faint)" fontSize="9" fontFamily="var(--crm-font-mono)">
-                  {g.label}
-                </text>
-              </g>
-            ))}
-            {/* Area fill */}
-            {pts.length > 1 && (
-              <path d={areaPath} fill="url(#leads-area-grad)" />
-            )}
-            {/* Line */}
-            {pts.length > 1 && (
-              <path d={linePath} fill="none" stroke="var(--crm-accent)" strokeWidth="2"
-                strokeLinejoin="round" strokeLinecap="round" />
-            )}
-            {/* Data points */}
-            {pts.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="3"
-                fill="var(--crm-surface)" stroke="var(--crm-accent)" strokeWidth="1.5" />
-            ))}
-            {/* X-axis labels */}
-            {pts.map((p, i) => (
-              <text key={i} x={p.x} y={H - 4} textAnchor="middle"
-                fill="var(--crm-fg-faint)" fontSize="9" fontFamily="var(--crm-font-mono)">
-                {format(new Date(p.date + "T12:00:00"), "M/d")}
-              </text>
-            ))}
-          </svg>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ── Pipeline Card ── */
 const LEAD_STATUS_LABEL: Record<string, string> = {
   NOT_CONTACTED: "Not Contacted",
@@ -779,7 +693,6 @@ export default function DashboardPage() {
   const outcomeDist = stats?.charts.outcomeDistribution ?? [];
   const callsPerDay = (stats?.charts.callsPerDay ?? []).map((d) => d.count);
   const connectedCallsPerDay = (stats?.charts.connectedCallsPerDay ?? []).map((d) => d.count);
-  const leadsPerWeek = stats?.charts.leadsPerWeek ?? [];
 
   // Call-outcome KPI display values
   const connectedCallsLast7d = stats?.connectedCallsLast7d ?? 0;
@@ -901,9 +814,6 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-
-            {/* Leads Over Time full-width chart */}
-            <LeadsOverTimeCard data={leadsPerWeek} isLoading={statsLoading} />
 
             <div className="crm-grid-row">
               <CallsCard recentCalls={recentCalls} callsToday={callsToday} isLoading={statsLoading} />
