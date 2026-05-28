@@ -46,7 +46,15 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [deviceReady, setDeviceReady] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState(0);
+
+  // Twilio Voice SDK requires a secure context (HTTPS or localhost)
+  const isInsecureContext =
+    typeof window !== "undefined" &&
+    window.location.protocol !== "https:" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1";
 
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<TwilioCall | null>(null);
@@ -64,22 +72,33 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
 
     let device: Device;
     (async () => {
-      const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
-      device = new TwilioDevice(tokenData.token, { logLevel: "warn" });
+      try {
+        const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
+        device = new TwilioDevice(tokenData.token, { logLevel: "warn" });
 
-      device.on("registered", () => setDeviceReady(true));
-      device.on("error", (err: { message: string }) => {
-        toast.error(`Dialer error: ${err.message}`);
-      });
+        device.on("registered", () => {
+          setDeviceReady(true);
+          setDeviceError(null);
+        });
+        device.on("error", (err: { message: string; code?: number }) => {
+          const msg = err.message ?? "Unknown dialer error";
+          setDeviceError(msg);
+          toast.error(`Dialer error: ${msg}`);
+        });
 
-      await device.register();
-      deviceRef.current = device;
+        await device.register();
+        deviceRef.current = device;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to initialize dialer";
+        setDeviceError(msg);
+      }
     })();
 
     return () => {
       device?.destroy();
       deviceRef.current = null;
       setDeviceReady(false);
+      setDeviceError(null);
     };
   }, [tokenData?.token]);
 
@@ -166,6 +185,8 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   };
 
   const twilioUnconfigured = tokenError?.data?.code === "PRECONDITION_FAILED";
+  // Show HTTPS banner if on insecure context but Twilio IS configured
+  const showHttpsWarning = isInsecureContext && !twilioUnconfigured;
   const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
   return (
@@ -243,7 +264,7 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
                   ? "bg-destructive hover:bg-destructive/90"
                   : "bg-green-500 hover:bg-green-600"
               )}
-              disabled={isConnecting}
+              disabled={isConnecting || (!isInCall && !deviceReady)}
               onClick={isInCall ? endCall : startCall}
             >
               {isInCall ? <PhoneOff size={24} /> : <Phone size={24} />}
@@ -251,9 +272,19 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
           </div>
 
           {!deviceReady && !isInCall && !twilioUnconfigured && (
-            <p className="text-xs text-center text-muted-foreground">
-              {tokenData ? "Connecting to dialer…" : "Loading…"}
-            </p>
+            isInsecureContext ? (
+              <p className="text-xs text-center text-destructive font-medium">
+                HTTPS required — open the app over https:// to use the dialer
+              </p>
+            ) : deviceError ? (
+              <p className="text-xs text-center text-destructive" title={deviceError}>
+                Dialer error: {deviceError.length > 60 ? deviceError.slice(0, 60) + "…" : deviceError}
+              </p>
+            ) : (
+              <p className="text-xs text-center text-muted-foreground">
+                {tokenData ? "Connecting to dialer…" : "Loading…"}
+              </p>
+            )
           )}
         </CardContent>
       </Card>
@@ -273,6 +304,15 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
               <p className="text-xs text-muted-foreground">
                 Add TWILIO_ACCOUNT_SID, TWILIO_API_KEY, TWILIO_API_SECRET, and TWILIO_TWIML_APP_SID
                 to your environment variables.
+              </p>
+            </div>
+          ) : showHttpsWarning ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <Phone size={36} className="text-muted-foreground/20" />
+              <p className="text-sm font-medium text-muted-foreground">HTTPS required</p>
+              <p className="text-xs text-muted-foreground">
+                The browser dialer uses WebRTC and requires a secure connection.
+                Open the app over <strong>https://</strong> to place calls.
               </p>
             </div>
           ) : recentCalls && recentCalls.length > 0 ? (
