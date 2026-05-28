@@ -15,6 +15,7 @@ describe("dashboardRouter.getKpiStats", () => {
     prisma.callLog.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
     prisma.callLog.findMany.mockResolvedValue([]);
+    // 3 $queryRaw calls: calls-per-day, connected-calls-per-day, leads-per-week
     prisma.$queryRaw.mockResolvedValue([]);
   });
 
@@ -47,17 +48,16 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(result.conversionRate).toBe("25.0%");
   });
 
-  it("returns the connected-last-30d count from the lead.count call", async () => {
-    prisma.lead.count.mockResolvedValueOnce(7);
+  it("returns connected calls in last 7d from callLog.count", async () => {
+    // callLog.count order: callsToday (idx 0), connectedCallsPrev7d (idx 1), totalCallsPrev7d (idx 2)
+    prisma.callLog.count
+      .mockResolvedValueOnce(3)  // callsToday
+      .mockResolvedValueOnce(12) // connectedCallsPrev7d
+      .mockResolvedValueOnce(50); // totalCallsPrev7d
     const result = await caller.dashboard.getKpiStats();
-    expect(prisma.lead.count.mock.calls[0][0].where).toEqual(
-      expect.objectContaining({
-        organizationId: "org-1",
-        status: "CONNECTED",
-        callOutcome: { not: "CUSTOM" },
-      }),
-    );
-    expect(result.connectedLast30d).toBe(7);
+    expect(result.callsToday).toBe(3);
+    expect(result.connectedCallsPrev7d).toBe(12);
+    expect(result.totalCallsPrev7d).toBe(50);
   });
 
   it("excludes custom call outcomes from generic connected dashboard metrics", async () => {
@@ -90,7 +90,7 @@ describe("dashboardRouter.getKpiStats", () => {
       return d;
     };
 
-    // First $queryRaw = calls-per-day; second = leads-per-week (empty).
+    // $queryRaw order: calls-per-day, connected-calls-per-day, leads-per-week
     prisma.$queryRaw
       .mockResolvedValueOnce([
         { day: dayOf(6), count: BigInt(10) },
@@ -99,7 +99,8 @@ describe("dashboardRouter.getKpiStats", () => {
         { day: dayOf(3), count: BigInt(13) },
         { day: dayOf(0), count: BigInt(16) },
       ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([]) // connected-calls-per-day
+      .mockResolvedValueOnce([]); // leads-per-week
 
     const result = await caller.dashboard.getKpiStats();
 
@@ -155,8 +156,8 @@ describe("dashboardRouter.getKpiStats", () => {
 
     // callsTodayCount
     expect(prisma.callLog.count.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
-    // connected-last-30d count
-    expect(prisma.lead.count.mock.calls[0][0].where.organizationId).toBe("org-1");
+    // connectedCallsPrev7d (second callLog.count call)
+    expect(prisma.callLog.count.mock.calls[1][0].where.lead.organizationId).toBe("org-1");
     // outcome distribution groupBy (first lead.groupBy call)
     expect(prisma.lead.groupBy.mock.calls[0][0].where.organizationId).toBe("org-1");
     // lead status/pipeline groupBy (second lead.groupBy call)
@@ -178,14 +179,15 @@ describe("dashboardRouter.getKpiStats", () => {
   it("issues exactly one query per data source (no fanout)", async () => {
     await caller.dashboard.getKpiStats();
 
-    expect(prisma.callLog.count).toHaveBeenCalledTimes(1); // callsToday only
+    // 3 callLog.count: callsToday, connectedCallsPrev7d, totalCallsPrev7d
+    expect(prisma.callLog.count).toHaveBeenCalledTimes(3);
     expect(prisma.task.count).toHaveBeenCalledTimes(1); // followups due
-    // 4 lead.count calls: connected-last-30d, connected-prev-30d, leads-last-7d, leads-prev-7d
-    expect(prisma.lead.count).toHaveBeenCalledTimes(4);
+    expect(prisma.lead.count).toHaveBeenCalledTimes(0); // no longer used for KPIs
     expect(prisma.callLog.groupBy).toHaveBeenCalledTimes(0); // no longer used
     expect(prisma.lead.groupBy).toHaveBeenCalledTimes(2); // outcomeDistribution + leadsByStatus
     expect(prisma.callLog.findMany).toHaveBeenCalledTimes(1);
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2); // 7-day call rollup + 8-week lead rollup
+    // 3 $queryRaw calls: calls-per-day + connected-calls-per-day + leads-per-week
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3);
   });
 });
 
