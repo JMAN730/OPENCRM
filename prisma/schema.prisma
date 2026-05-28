@@ -98,6 +98,7 @@ model Organization {
   scheduledScrapes  ScheduledScrape[]
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
+  salesScripts      SalesScript[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -643,5 +644,19 @@ model EmailOptOut {
   createdAt      DateTime     @default(now())
 
   @@unique([email, organizationId])
+  @@index([organizationId])
+}
+
+model SalesScript {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       String
+  title          String
+  body           String       @db.Text
+  order          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
   @@index([organizationId])
 }
