@@ -5,7 +5,7 @@ import { Providers } from "@/components/Providers";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "https://clientcore.xyz";
 const appName = "ClientCore";
 const appDescription =
-  "A focused sales CRM for managing leads, pipeline, calls, outreach, tasks, and team follow-up.";
+  "The all-in-one CRM platform to automate outreach, manage clients, and scale faster with AI.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -22,20 +22,20 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: appName,
-    title: appName,
+    title: `${appName} — AI CRM & Lead Automation`,
     description: appDescription,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: `${appName} sales CRM dashboard preview`,
+        alt: `${appName} — AI CRM & Lead Automation`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: appName,
+    title: `${appName} — AI CRM & Lead Automation`,
     description: appDescription,
     images: ["/twitter-image"],
   },
