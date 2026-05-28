@@ -11,7 +11,6 @@ import {
   Flame,
   TrendingUp,
   Activity,
-  CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
@@ -43,7 +42,7 @@ function Sparkline({
   width?: number;
   height?: number;
 }) {
-  if (!data.length) return null;
+  if (data.length < 2) return null;
   const max = Math.max(...data, 1);
   const pts = data.map((v, i) => {
     const x = (i / (data.length - 1)) * width;
@@ -266,16 +265,22 @@ function LeadsOverTimeCard({ data, isLoading }: { data: { date: string; count: n
   const W = 560, H = 120, PAD_L = 32, PAD_B = 24, PAD_T = 10, PAD_R = 8;
   const chartW = W - PAD_L - PAD_R;
   const chartH = H - PAD_T - PAD_B;
-  const maxVal = Math.max(...data.map((d) => d.count), 1);
 
-  const pts = data.map((d, i) => {
+  const hasData = data.length >= 2;
+  const maxVal = hasData ? Math.max(...data.map((d) => d.count), 1) : 1;
+
+  const pts = hasData ? data.map((d, i) => {
     const x = PAD_L + (i / (data.length - 1)) * chartW;
     const y = PAD_T + chartH - (d.count / maxVal) * chartH;
     return { x, y, ...d };
-  });
+  }) : [];
 
-  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = `${linePath} L ${pts[pts.length - 1]!.x} ${PAD_T + chartH} L ${pts[0]!.x} ${PAD_T + chartH} Z`;
+  const linePath = pts.length > 1
+    ? pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")
+    : "";
+  const areaPath = pts.length > 1
+    ? `${linePath} L ${pts[pts.length - 1]!.x} ${PAD_T + chartH} L ${pts[0]!.x} ${PAD_T + chartH} Z`
+    : "";
 
   // Y-axis guide lines at 0%, 50%, 100%
   const yGuides = [0, 0.5, 1].map((f) => ({
@@ -767,21 +772,34 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const placeholder = statsLoading ? "—" : null;
-  const connected30d = stats?.connectedLast30d != null
-    ? stats.connectedLast30d.toLocaleString()
-    : (placeholder ?? "0");
-  const totalLeads = stats?.totalLeads != null
-    ? stats.totalLeads.toLocaleString()
-    : (placeholder ?? "0");
-
   const followupsDue = stats?.followupsDue ?? 0;
   const callsToday = stats?.callsToday ?? 0;
   const leadsByStatus = stats?.leadsByStatus ?? [];
   const recentCalls = stats?.recentCalls ?? [];
   const outcomeDist = stats?.charts.outcomeDistribution ?? [];
   const callsPerDay = (stats?.charts.callsPerDay ?? []).map((d) => d.count);
+  const connectedCallsPerDay = (stats?.charts.connectedCallsPerDay ?? []).map((d) => d.count);
   const leadsPerWeek = stats?.charts.leadsPerWeek ?? [];
+
+  // Call-outcome KPI display values
+  const connectedCallsLast7d = stats?.connectedCallsLast7d ?? 0;
+  const connectedCallsPrev7d = stats?.connectedCallsPrev7d ?? 0;
+  const answerRateLast7d = stats?.answerRateLast7d;
+  const answerRatePrev7d = stats?.answerRatePrev7d;
+  const callsYesterday = stats?.callsYesterday ?? 0;
+
+  // Answer rate delta: percentage-point change (e.g. "+3.2pp vs last week")
+  const answerRateDeltaInfo = (() => {
+    if (answerRateLast7d == null || answerRatePrev7d == null) return null;
+    const diff = parseFloat(answerRateLast7d) - parseFloat(answerRatePrev7d);
+    const label = diff === 0
+      ? `0.0pp vs last week`
+      : diff > 0
+        ? `+${diff.toFixed(1)}pp vs last week`
+        : `${diff.toFixed(1)}pp vs last week`;
+    const cls = diff > 0 ? "pos" : diff < 0 ? "neg" : "flat";
+    return { label, cls, diff };
+  })();
 
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -838,35 +856,50 @@ export default function DashboardPage() {
 
         {activeTab === "overview" && (
           <>
-            {/* KPI row */}
+            {/* KPI row — all metrics derived from call outcomes */}
             <div className="crm-kpi-grid">
-              <KPICard
-                label="Connected · 30d"
-                icon={CheckCircle2}
-                value={connected30d}
-                sparkData={callsPerDay}
-                current={stats?.connectedLast30d}
-                previous={stats?.connectedPrev30d}
-                deltaSuffix=" vs prev 30d"
-                accentColor="var(--crm-accent)"
-              />
-              <KPICard
-                label="Total leads"
-                icon={Users}
-                value={totalLeads}
-                sparkData={(stats?.charts.leadsPerWeek ?? []).map((d) => d.count)}
-                current={stats?.leadsLast7d}
-                previous={stats?.leadsPrev7d}
-                deltaSuffix=" this week"
-                accentColor="oklch(68% 0.16 150)"
-              />
               <KPICard
                 label="Calls today"
                 icon={Phone}
-                value={!stats && statsLoading ? "—" : callsToday}
+                value={statsLoading && !stats ? "—" : callsToday}
                 sparkData={callsPerDay}
-                accentColor="oklch(72% 0.12 270)"
+                current={callsToday}
+                previous={callsYesterday}
+                deltaSuffix=" vs yesterday"
+                accentColor="var(--crm-accent)"
               />
+              <KPICard
+                label="Connected calls · 7d"
+                icon={PhoneOutgoing}
+                value={statsLoading && !stats ? "—" : connectedCallsLast7d.toLocaleString()}
+                sparkData={connectedCallsPerDay}
+                current={connectedCallsLast7d}
+                previous={connectedCallsPrev7d}
+                deltaSuffix=" vs last week"
+                accentColor="oklch(68% 0.16 150)"
+              />
+              <div className="crm-card crm-kpi" style={{ background: "var(--crm-surface)", borderColor: "var(--crm-border-soft)", overflow: "hidden" }}>
+                <div className="crm-kpi-label">
+                  <span className="crm-kpi-icon" style={{ background: "var(--crm-accent-soft)", color: "oklch(72% 0.12 270)" }}>
+                    <TrendingUp size={13} />
+                  </span>
+                  Answer rate · 7d
+                </div>
+                <div className="crm-kpi-value">
+                  {statsLoading && !stats ? "—" : answerRateLast7d != null ? `${answerRateLast7d}%` : "—"}
+                </div>
+                <div className="crm-kpi-foot">
+                  {answerRateDeltaInfo != null ? (
+                    <span className={`crm-delta ${answerRateDeltaInfo.cls}`}>
+                      {answerRateDeltaInfo.diff > 0 ? <ArrowUpRight size={10} /> : answerRateDeltaInfo.diff < 0 ? <ArrowDownRight size={10} /> : <Minus size={10} />}
+                      {answerRateDeltaInfo.label}
+                    </span>
+                  ) : (
+                    <span className="crm-delta flat" style={{ visibility: "hidden" }}>—</span>
+                  )}
+                  <Sparkline data={callsPerDay} color="oklch(72% 0.12 270)" width={72} height={28} />
+                </div>
+              </div>
             </div>
 
             {/* Leads Over Time full-width chart */}

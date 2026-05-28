@@ -14,47 +14,27 @@ export const dashboardRouter = createTRPCRouter({
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-        const thirtyDaysAgo = subDays(new Date(), 30);
-        const sixtyDaysAgo = subDays(new Date(), 60);
         const sevenDaysAgo = subDays(today, 6); // 7-day window including today
-        const fourteenDaysAgo = subDays(today, 13);
+        const fourteenDaysAgo = subDays(today, 13); // start of prev 7-day window
         const eightWeeksAgo = subWeeks(today, 8);
 
         const [
           callsTodayCount,
           followupsDueCount,
-          connectedLast30dCount,
-          connectedPrev30dCount,
           outcomeDistribution,
           leadsByStatusResult,
           recentCalls,
           callsPerDayRows,
+          connectedCallsPerDayRows,
           leadsPerWeekRows,
-          leadsLast7dCount,
-          leadsPrev7dCount,
+          connectedCallsPrev7d,
+          totalCallsPrev7d,
         ] = await Promise.all([
           ctx.prisma.callLog.count({
             where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.task.count({
             where: { organizationId, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow }, deletedAt: null },
-          }),
-          ctx.prisma.lead.count({
-            where: {
-              organizationId,
-              status: "CONNECTED",
-              callOutcome: { not: "CUSTOM" },
-              updatedAt: { gte: thirtyDaysAgo },
-            },
-          }),
-          // Previous 30-day window for delta calculation
-          ctx.prisma.lead.count({
-            where: {
-              organizationId,
-              status: "CONNECTED",
-              callOutcome: { not: "CUSTOM" },
-              updatedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
-            },
           }),
           ctx.prisma.lead.groupBy({
             by: ["callOutcome"],
@@ -72,12 +52,25 @@ export const dashboardRouter = createTRPCRouter({
             take: 15,
             include: { lead: { select: { phone: true, callOutcome: true } } },
           }),
+          // All calls per day (last 7 days) — for total sparkline + callsToday delta
           ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
             SELECT date_trunc('day', cl."createdAt") AS day,
                    COUNT(*)::bigint AS count
             FROM "CallLog" cl
             JOIN "Lead" l ON cl."leadId" = l.id
             WHERE l."organizationId" = ${organizationId}
+              AND cl."createdAt" >= ${sevenDaysAgo}
+            GROUP BY 1
+            ORDER BY 1 ASC
+          `,
+          // CONNECTED calls per day (last 7 days) — for answer-rate sparkline
+          ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
+            SELECT date_trunc('day', cl."createdAt") AS day,
+                   COUNT(*)::bigint AS count
+            FROM "CallLog" cl
+            JOIN "Lead" l ON cl."leadId" = l.id
+            WHERE l."organizationId" = ${organizationId}
+              AND cl.status = 'CONNECTED'
               AND cl."createdAt" >= ${sevenDaysAgo}
             GROUP BY 1
             ORDER BY 1 ASC
@@ -92,18 +85,24 @@ export const dashboardRouter = createTRPCRouter({
             GROUP BY 1
             ORDER BY 1 ASC
           `,
-          // Last 7 days of new leads (for delta badge)
-          ctx.prisma.lead.count({
-            where: { organizationId, createdAt: { gte: sevenDaysAgo } },
+          // CONNECTED calls in prev 7-day window — for delta on connected KPI
+          ctx.prisma.callLog.count({
+            where: {
+              lead: { organizationId },
+              status: "CONNECTED",
+              createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
+            },
           }),
-          // Previous 7-day window
-          ctx.prisma.lead.count({
-            where: { organizationId, createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo } },
+          // Total calls in prev 7-day window — for answer-rate delta
+          ctx.prisma.callLog.count({
+            where: {
+              lead: { organizationId },
+              createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
+            },
           }),
         ]);
 
-        // Derive totals from the status groupBy result so we don't issue
-        // separate count() queries for total/qualified.
+        // Derive totals from the status groupBy result.
         const totalLeadsCount = leadsByStatusResult.reduce((acc, s) => acc + s._count.id, 0);
         const statusCounts = new Map<string, number>();
         for (const row of leadsByStatusResult) {
@@ -114,23 +113,40 @@ export const dashboardRouter = createTRPCRouter({
         const qualifiedLeadsCount =
           leadsByStatus.find((s) => s.status === "CONNECTED")?.count ?? 0;
 
-        // Fill in zero-count days so the chart always has 7 entries even on
-        // a quiet week.
-        const dayMap = new Map<string, number>();
-        for (const row of callsPerDayRows) {
-          const key = new Date(row.day).toISOString().split("T")[0];
-          dayMap.set(key, Number(row.count));
-        }
-        const callsPerDay = Array.from({ length: 7 }, (_, idx) => {
-          const date = subDays(today, 6 - idx);
-          const key = date.toISOString().split("T")[0];
-          return { date: key, count: dayMap.get(key) ?? 0 };
-        });
-
         const conversionRate =
           totalLeadsCount > 0
             ? ((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)
             : "0.0";
+
+        // Helper: zero-fill a day-bucketed raw query into a 7-entry array.
+        const fillDays = (rows: Array<{ day: Date; count: bigint }>) => {
+          const m = new Map<string, number>();
+          for (const row of rows) {
+            m.set(new Date(row.day).toISOString().split("T")[0], Number(row.count));
+          }
+          return Array.from({ length: 7 }, (_, idx) => {
+            const date = subDays(today, 6 - idx);
+            const key = date.toISOString().split("T")[0];
+            return { date: key, count: m.get(key) ?? 0 };
+          });
+        };
+
+        const callsPerDay = fillDays(callsPerDayRows);
+        const connectedCallsPerDay = fillDays(connectedCallsPerDayRows);
+
+        // Derived call-outcome KPI values
+        const totalCallsLast7d = callsPerDay.reduce((s, d) => s + d.count, 0);
+        const connectedCallsLast7d = connectedCallsPerDay.reduce((s, d) => s + d.count, 0);
+        // yesterday = index 5 (index 6 = today)
+        const callsYesterday = callsPerDay[5]?.count ?? 0;
+
+        // Answer rate as a percentage string (e.g. "27.4%")
+        const answerRateLast7d = totalCallsLast7d > 0
+          ? ((connectedCallsLast7d / totalCallsLast7d) * 100).toFixed(1)
+          : null;
+        const answerRatePrev7d = totalCallsPrev7d > 0
+          ? ((connectedCallsPrev7d / totalCallsPrev7d) * 100).toFixed(1)
+          : null;
 
         // Build 8-week lead creation trend (zero-fill missing weeks)
         const weekMap = new Map<string, number>();
@@ -147,13 +163,17 @@ export const dashboardRouter = createTRPCRouter({
         return {
           totalLeads: totalLeadsCount,
           callsToday: callsTodayCount,
+          callsYesterday,
           qualifiedLeads: qualifiedLeadsCount,
-          connectedLast30d: connectedLast30dCount,
-          connectedPrev30d: connectedPrev30dCount,
           followupsDue: followupsDueCount,
           conversionRate: `${conversionRate}%`,
-          leadsLast7d: leadsLast7dCount,
-          leadsPrev7d: leadsPrev7dCount,
+          // Call-outcome KPI values
+          connectedCallsLast7d,
+          connectedCallsPrev7d,
+          totalCallsLast7d,
+          totalCallsPrev7d,
+          answerRateLast7d,
+          answerRatePrev7d,
           leadsByStatus,
           recentCalls: recentCalls.map((c) => ({
             id: c.id,
@@ -165,6 +185,7 @@ export const dashboardRouter = createTRPCRouter({
           })),
           charts: {
             callsPerDay,
+            connectedCallsPerDay,
             leadsPerWeek,
             outcomeDistribution: outcomeDistribution.map((item) => ({
               outcome: item.callOutcome,
