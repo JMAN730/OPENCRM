@@ -1,5 +1,5 @@
 import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
-import { subDays, subWeeks } from "date-fns";
+import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
 
 const DASHBOARD_TTL_SECONDS = 60;
@@ -16,7 +16,6 @@ export const dashboardRouter = createTRPCRouter({
         const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
         const sevenDaysAgo = subDays(today, 6); // 7-day window including today
         const fourteenDaysAgo = subDays(today, 13); // start of prev 7-day window
-        const eightWeeksAgo = subWeeks(today, 8);
 
         const [
           callsTodayCount,
@@ -26,7 +25,6 @@ export const dashboardRouter = createTRPCRouter({
           recentCalls,
           callsPerDayRows,
           connectedCallsPerDayRows,
-          leadsPerWeekRows,
           connectedCallsPrev7d,
           totalCallsPrev7d,
         ] = await Promise.all([
@@ -72,16 +70,6 @@ export const dashboardRouter = createTRPCRouter({
             WHERE l."organizationId" = ${organizationId}
               AND cl.status = 'CONNECTED'
               AND cl."createdAt" >= ${sevenDaysAgo}
-            GROUP BY 1
-            ORDER BY 1 ASC
-          `,
-          // Weekly lead creation counts for the Leads Over Time chart
-          ctx.prisma.$queryRaw<Array<{ week: Date; count: bigint }>>`
-            SELECT date_trunc('week', "createdAt") AS week,
-                   COUNT(*)::bigint AS count
-            FROM "Lead"
-            WHERE "organizationId" = ${organizationId}
-              AND "createdAt" >= ${eightWeeksAgo}
             GROUP BY 1
             ORDER BY 1 ASC
           `,
@@ -133,7 +121,6 @@ export const dashboardRouter = createTRPCRouter({
 
         const callsPerDay = fillDays(callsPerDayRows);
         const connectedCallsPerDay = fillDays(connectedCallsPerDayRows);
-
         // Derived call-outcome KPI values
         const totalCallsLast7d = callsPerDay.reduce((s, d) => s + d.count, 0);
         const connectedCallsLast7d = connectedCallsPerDay.reduce((s, d) => s + d.count, 0);
@@ -147,18 +134,6 @@ export const dashboardRouter = createTRPCRouter({
         const answerRatePrev7d = totalCallsPrev7d > 0
           ? ((connectedCallsPrev7d / totalCallsPrev7d) * 100).toFixed(1)
           : null;
-
-        // Build 8-week lead creation trend (zero-fill missing weeks)
-        const weekMap = new Map<string, number>();
-        for (const row of leadsPerWeekRows) {
-          const key = new Date(row.week).toISOString().split("T")[0];
-          weekMap.set(key, Number(row.count));
-        }
-        const leadsPerWeek = Array.from({ length: 8 }, (_, idx) => {
-          const date = subWeeks(today, 7 - idx);
-          const key = date.toISOString().split("T")[0];
-          return { date: key, count: weekMap.get(key) ?? 0 };
-        });
 
         return {
           totalLeads: totalLeadsCount,
@@ -186,7 +161,6 @@ export const dashboardRouter = createTRPCRouter({
           charts: {
             callsPerDay,
             connectedCallsPerDay,
-            leadsPerWeek,
             outcomeDistribution: outcomeDistribution.map((item) => ({
               outcome: item.callOutcome,
               count: item._count.id,
