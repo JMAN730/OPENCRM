@@ -48,16 +48,11 @@ export default function Image() {
 
         {/* Headline + subtitle */}
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div
-            style={{
-              fontSize: "72px",
-              fontWeight: 900,
-              lineHeight: 1.0,
-              letterSpacing: "-2px",
-              color: "#FFFFFF",
-            }}
-          >
-            Automate Leads.{"\n"}Close More Deals.
+          <div style={{ fontSize: "72px", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-2px", color: "#FFFFFF" }}>
+            Automate Leads.
+          </div>
+          <div style={{ fontSize: "72px", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-2px", color: "#FFFFFF" }}>
+            Close More Deals.
           </div>
           <div style={{ fontSize: "26px", color: "#C4B5FD", lineHeight: 1.4, maxWidth: "780px" }}>
             The all-in-one CRM platform to automate outreach, manage clients, and scale faster with AI.
