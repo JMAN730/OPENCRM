@@ -90,14 +90,16 @@ describe("dashboardRouter.getKpiStats", () => {
       return d;
     };
 
-    // Raw query returns sparse buckets — the router fills in the rest.
-    prisma.$queryRaw.mockResolvedValue([
-      { day: dayOf(6), count: BigInt(10) },
-      { day: dayOf(5), count: BigInt(11) },
-      // -4 missing → expect 0
-      { day: dayOf(3), count: BigInt(13) },
-      { day: dayOf(0), count: BigInt(16) },
-    ]);
+    // First $queryRaw = calls-per-day; second = leads-per-week (empty).
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        { day: dayOf(6), count: BigInt(10) },
+        { day: dayOf(5), count: BigInt(11) },
+        // -4 missing → expect 0
+        { day: dayOf(3), count: BigInt(13) },
+        { day: dayOf(0), count: BigInt(16) },
+      ])
+      .mockResolvedValueOnce([]);
 
     const result = await caller.dashboard.getKpiStats();
 
