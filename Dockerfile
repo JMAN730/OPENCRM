@@ -65,7 +65,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 
 COPY --chown=nextjs:nodejs scraper/requirements.txt /app/scraper/requirements.txt
-RUN pip install --no-cache-dir -r /app/scraper/requirements.txt \
+RUN pip install --no-cache-dir --retries 5 --timeout 120 -r /app/scraper/requirements.txt \
  && python3 -m playwright install --with-deps chromium
 
 COPY --chown=nextjs:nodejs src/server/scraper/scraper.py /app/scraper/scraper.py
