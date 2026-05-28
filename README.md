@@ -83,7 +83,13 @@ Run the app and PostgreSQL together:
 docker compose up --build
 ```
 
-The application container runs `prisma db push` on startup so the schema stays aligned with the current Prisma model.
+The default Compose stack does not bind ports 80/443, which keeps it compatible with hosted platforms that provide their own reverse proxy. For a bare-server deployment that needs the bundled Traefik proxy and Let's Encrypt, set `APP_DOMAIN` and `ACME_EMAIL`, then run:
+
+```bash
+docker compose --profile proxy up --build -d
+```
+
+The migration container runs `prisma db push` before the app starts so the schema stays aligned with the current Prisma model.
 
 ## Project structure
 

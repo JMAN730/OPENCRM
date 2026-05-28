@@ -1,6 +1,8 @@
 services:
   traefik:
     image: traefik:v3.2
+    profiles:
+      - proxy
     restart: unless-stopped
     command:
       # Docker provider — only expose services that opt-in via labels
@@ -15,11 +17,11 @@ services:
       # Let's Encrypt via HTTP-01 challenge
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.invalid}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
     ports:
-      - "80:80"
-      - "443:443"
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "traefik_acme:/letsencrypt"
@@ -103,7 +105,7 @@ services:
       - scraper_output:/app/scraper-output
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN:-localhost}`)"
       - "traefik.http.routers.app.entrypoints=websecure"
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=3000"
