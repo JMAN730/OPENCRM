@@ -19,13 +19,19 @@ vi.mock("sonner", () => ({
 const mockDisconnect = vi.fn();
 const mockMute = vi.fn();
 const mockSendDigits = vi.fn();
-const mockRegister = vi.fn().mockResolvedValue(undefined);
+const mockDeviceHandlers: Record<string, (arg?: unknown) => void> = {};
+const mockRegister = vi.fn().mockImplementation(async () => {
+  // Mirror the real SDK: registration completes by emitting "registered".
+  mockDeviceHandlers.registered?.();
+});
 const mockDestroy = vi.fn();
 const mockConnect = vi.fn();
 
 vi.mock("@twilio/voice-sdk", () => {
   const Device = vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
+    on: (event: string, cb: (arg?: unknown) => void) => {
+      mockDeviceHandlers[event] = cb;
+    },
     register: mockRegister,
     destroy: mockDestroy,
     connect: mockConnect,
@@ -74,6 +80,13 @@ describe("Dialer", () => {
     mockConnect.mockClear();
     mockDisconnect.mockClear();
     mockMute.mockClear();
+    mockRegister.mockClear();
+    for (const key of Object.keys(mockDeviceHandlers)) delete mockDeviceHandlers[key];
+
+    // jsdom defaults window.isSecureContext to false, which the Dialer treats as
+    // an insecure context — hiding the dialer behind an HTTPS banner and skipping
+    // device init. Simulate a normal HTTPS browser so the dialer initializes.
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
 
     // Default: Twilio not configured (no token)
     mockGenerateToken.mockReturnValue({ data: undefined, error: undefined });
@@ -102,26 +115,28 @@ describe("Dialer", () => {
     expect(input.value).toHaveLength(15);
   });
 
-  it("shows an error toast when starting a call with no number", () => {
+  it("shows an error toast when starting a call with no number", async () => {
+    // A ready device requires a token (and the secure context set in beforeEach).
+    mockGenerateToken.mockReturnValue({ data: { token: "tok" }, error: undefined });
     render(<Dialer />);
 
+    // The call button is disabled until the Twilio device registers.
     const callButton = document.querySelector(".bg-green-500") as HTMLButtonElement;
+    await waitFor(() => expect(callButton).not.toBeDisabled());
     fireEvent.click(callButton);
 
     expect(toastError).toHaveBeenCalledWith("Please enter a phone number");
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("shows an error toast when device is not ready (no token)", () => {
+  it("disables the call button when the device is not ready (no token)", () => {
+    // No token (beforeEach default) → the Twilio device never registers, so the
+    // dialer guards against calling by disabling the button rather than toasting.
     render(<Dialer />);
     fireEvent.click(screen.getByRole("button", { name: "5" }));
 
     const callButton = document.querySelector(".bg-green-500") as HTMLButtonElement;
-    fireEvent.click(callButton);
-
-    expect(toastError).toHaveBeenCalledWith(
-      expect.stringContaining("not ready")
-    );
+    expect(callButton).toBeDisabled();
   });
 
   it("shows Twilio not configured notice when token query returns PRECONDITION_FAILED", () => {
