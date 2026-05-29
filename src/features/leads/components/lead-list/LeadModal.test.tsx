@@ -15,8 +15,10 @@ const createTaskMutate = vi.fn();
 const deleteNoteMutate = vi.fn();
 const toggleStarMutate = vi.fn();
 const deleteLeadMutate = vi.fn();
+const replaceScriptsMutate = vi.fn();
 let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => void } | undefined;
 let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
+let scriptsMock: Array<{ id: string; category: string; title: string; body: string }> = [];
 
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
@@ -50,6 +52,9 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       emails: {
         getDraftForLead: { invalidate: vi.fn() },
+      },
+      scripts: {
+        getAll: { invalidate: vi.fn() },
       },
     }),
     leads: {
@@ -164,6 +169,14 @@ vi.mock("@/app/_trpc/client", () => ({
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
     },
+    scripts: {
+      getAll: {
+        useQuery: vi.fn(() => ({ data: scriptsMock, isLoading: false })),
+      },
+      replaceAll: {
+        useMutation: vi.fn(() => ({ mutate: replaceScriptsMutate, isPending: false })),
+      },
+    },
   },
 }));
 
@@ -202,6 +215,7 @@ describe("LeadModal", () => {
     vi.clearAllMocks();
     createTaskOptions = undefined;
     leadTasksMock = [];
+    scriptsMock = [];
   });
 
   it("renders website as a clickable external link", () => {
@@ -252,6 +266,25 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("opens scripts from the shared scripts data source", () => {
+    scriptsMock = [
+      {
+        id: "script-1",
+        category: "Discovery",
+        title: "Modal-only mocked script",
+        body: "Ask about the customer's current workflow.",
+      },
+    ];
+
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /scripts/i }));
+
+    expect(screen.getByDisplayValue("Discovery")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Modal-only mocked script")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Ask about the customer's current workflow.")).toBeInTheDocument();
   });
 
   it("shows the earliest open task due date as a task page link", () => {
