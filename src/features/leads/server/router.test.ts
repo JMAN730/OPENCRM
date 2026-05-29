@@ -520,6 +520,37 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("update", () => {
+    it("updates editable lead fields when the lead is in scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.update({
+        id: "lead-1",
+        firstName: "Jane",
+        company: "Acme",
+        email: "jane@acme.com",
+        status: "CONNECTED",
+      });
+
+      const args = prisma.lead.update.mock.calls[0][0];
+      expect(args.where).toEqual({ id: "lead-1", organizationId: "org-1" });
+      expect(args.data.firstName).toBe("Jane");
+      expect(args.data.company).toBe("Acme");
+      expect(args.data.email).toBe("jane@acme.com");
+      expect(args.data.status).toBe("CONNECTED");
+    });
+
+    it("throws NOT_FOUND when the lead is out of scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.leads.update({ id: "missing", firstName: "X" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(prisma.lead.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe("updateCallOutcome", () => {
     it("maps the built-in ANSWERED outcome to a CONNECTED lead status", async () => {
       prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });

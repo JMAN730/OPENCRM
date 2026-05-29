@@ -577,6 +577,49 @@ export const leadsRouter = createTRPCRouter({
       return { count: createdIds.length + updatedIds.length };
     }),
 
+  update: organizationProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        firstName: optionalShortString(100),
+        lastName: optionalShortString(100),
+        email: optionalEmail,
+        phone: optionalShortString(40),
+        company: optionalShortString(200),
+        city: optionalShortString(100),
+        state: optionalShortString(40),
+        website: optionalUrl,
+        source: optionalShortString(100),
+        status: z
+          .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const role = ctx.session.user.role;
+      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.id, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+
+      const { id, city, state, ...rest } = input;
+      // Mirror create's city/state normalization (handles "City, ST" pasted into city).
+      const parsedLocation = parseCityState(city);
+      const normalizedState = normalizeState(state) ?? parsedLocation.state;
+
+      // Empty/omitted fields arrive as undefined, which Prisma treats as "leave unchanged".
+      return ctx.prisma.lead.update({
+        where: { id, organizationId: ctx.organizationId },
+        data: {
+          ...rest,
+          city: parsedLocation.state ? parsedLocation.city : city,
+          state: normalizedState,
+        },
+      });
+    }),
+
   updateTemperatureOverride: organizationProcedure
     .input(z.object({ id: z.string(), temperatureOverride: optionalTemperatureOverride }))
     .mutation(async ({ ctx, input }) => {
