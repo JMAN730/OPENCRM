@@ -8,6 +8,7 @@ import { dashboardRouter } from "@/features/dashboard/server/router";
 import { authRouter } from "@/features/auth/server/router";
 import { teamsRouter } from "@/features/teams/server/router";
 import { scoringRouter } from "@/features/scoring/server/router";
+import { scriptsRouter } from "@/features/scripts/server/router";
 import { websitesRouter } from "@/features/websites/server/router";
 import { emailsRouter } from "@/features/emails/server/router";
 import { pipelineRouter } from "@/features/pipeline/server/router";
@@ -25,6 +26,7 @@ export const appRouter = createTRPCRouter({
   auth: authRouter,
   teams: teamsRouter,
   scoring: scoringRouter,
+  scripts: scriptsRouter,
   websites: websitesRouter,
   emails: emailsRouter,
   pipeline: pipelineRouter,
