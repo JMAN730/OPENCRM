@@ -50,7 +50,17 @@ vi.mock("@/app/_trpc/client", () => ({
         useQuery: () => mockGetRecent(),
       },
     },
+    // ScriptsPanel (read-only) is rendered inside the Dialer
+    scripts: {
+      getAll: { useQuery: () => ({ data: [], isLoading: false }) },
+      replaceAll: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+    useUtils: () => ({ scripts: { getAll: { invalidate: vi.fn() } } }),
   },
+}));
+
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ data: null, status: "unauthenticated" }),
 }));
 
 // --- Tests ---

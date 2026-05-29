@@ -5,10 +5,11 @@ import type { Call as TwilioCall, Device } from "@twilio/voice-sdk";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Phone, PhoneOff, Delete, Mic, MicOff, Volume2, History } from "lucide-react";
+import { Phone, PhoneOff, Delete, Mic, MicOff, Volume2, History, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { trpc } from "@/app/_trpc/client";
+import { ScriptsPanel } from "@/features/scripts/components/ScriptsPanel";
 import { formatDistanceToNow } from "date-fns";
 
 const STATUS_BADGES: Record<string, string> = {
@@ -200,7 +201,7 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
       <Card className="lg:col-span-1 border-none shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
@@ -296,6 +297,18 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
               </p>
             )
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-1 border-none shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-xl flex items-center gap-2">
+            <ScrollText size={20} className="text-primary" />
+            Scripts
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="max-h-[560px] overflow-y-auto">
+          <ScriptsPanel readOnly />
         </CardContent>
       </Card>
 
