@@ -38,6 +38,42 @@ export const customOutcomesRouter = createTRPCRouter({
       });
     }),
 
+  update: organizationProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        label: z.string().min(1).max(80),
+        hint: z.string().max(200).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const record = await ctx.prisma.customOutcome.findFirst({
+        where: { id: input.id, organizationId: ctx.organizationId },
+        select: { id: true },
+      });
+      if (!record) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Custom outcome not found." });
+      }
+      const duplicate = await ctx.prisma.customOutcome.findFirst({
+        where: {
+          organizationId: ctx.organizationId,
+          label: input.label,
+          id: { not: input.id },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `An outcome named "${input.label}" already exists.`,
+        });
+      }
+      return ctx.prisma.customOutcome.update({
+        where: { id: input.id },
+        data: { label: input.label, hint: input.hint ?? null },
+      });
+    }),
+
   delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {

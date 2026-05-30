@@ -132,18 +132,14 @@ export function LeadsList() {
 
   const utils = trpc.useUtils();
 
-  // Only send built-in stage filters to the server when no custom outcomes are selected.
-  // Custom outcomes can't be filtered server-side, so fall back to client-side for those.
-  const hasCustomOutcomeFilter = Array.from(stageFilter).some((s) => s.startsWith("CUSTOM:"));
-  const serverStageFilter = hasCustomOutcomeFilter
-    ? []
-    : (Array.from(stageFilter).filter((s) => STAGE_ORDER.includes(s as (typeof STAGE_ORDER)[number])) as (
-        | "NOT_CONTACTED"
-        | "CONNECTED"
-        | "AI_VOICEMAIL"
-        | "NO_ANSWER"
-        | "HUNG_UP"
-      )[]);
+  // Built-in stage chips and custom-outcome chips are both filtered server-side so each
+  // paginated page is fully filtered (otherwise leads only surface after clicking Next Page).
+  const serverStageFilter = Array.from(stageFilter).filter((s) =>
+    STAGE_ORDER.includes(s as (typeof STAGE_ORDER)[number]),
+  ) as ("NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP")[];
+  const customOutcomeFilter = Array.from(stageFilter)
+    .filter((s) => s.startsWith("CUSTOM:"))
+    .map((s) => s.slice("CUSTOM:".length));
 
   const {
     data: leadsPage,
@@ -154,6 +150,7 @@ export function LeadsList() {
     limit: 100,
     cursor: pageCursor,
     ...(serverStageFilter.length > 0 ? { stages: serverStageFilter } : {}),
+    ...(customOutcomeFilter.length > 0 ? { customOutcomeIds: customOutcomeFilter } : {}),
     ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
     ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
   });
@@ -294,21 +291,8 @@ export function LeadsList() {
   }, [serverStageCounts, allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
+    // Stage / custom-outcome chips are filtered server-side (see getAll query above).
     const rows = allLeads
-      .filter((lead) => {
-        if (!stageFilter.size) return true;
-        if (stageFilter.has("NOT_CONTACTED") && (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED")) return true;
-        const matchesCustom =
-          lead.callOutcome === "CUSTOM" &&
-          lead.customOutcomeId != null &&
-          stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
-        const matchesStatus =
-          !!lead.callOutcome &&
-          lead.callOutcome !== "CUSTOM" &&
-          lead.callOutcome !== "NOT_CONTACTED" &&
-          stageFilter.has(lead.status);
-        return matchesStatus || matchesCustom;
-      })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
       .filter((lead) =>
         tagFilter.size
@@ -339,7 +323,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, stageFilter, tagFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
