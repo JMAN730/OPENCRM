@@ -170,7 +170,7 @@ export async function importRowsToLeads(opts: {
     const website = (row.Website ?? "").trim() || null;
     const mapsUrl = (row["Google Maps URL"] ?? "").trim() || null;
     const ratingRaw = (row.Rating ?? "").trim();
-    const reviewCountRaw = (row["Reviews"] ?? "").trim();
+    const reviewCountRaw = (row.Reviews ?? "").trim();
     const rating = ratingRaw ? Number(ratingRaw) : null;
     const reviewCount = reviewCountRaw ? Number(reviewCountRaw) : null;
     const location = parseCityState(row.Location);
