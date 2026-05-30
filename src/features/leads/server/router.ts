@@ -72,6 +72,7 @@ function searchWhere(search?: string): Record<string, unknown> {
     { lastName: { contains: search, mode: "insensitive" } },
     { email: { contains: search, mode: "insensitive" } },
     { phone: { contains: search, mode: "insensitive" } },
+    { city: { contains: search, mode: "insensitive" } },
   ];
 
   const location = parseLocationSearch(search);
@@ -87,7 +88,6 @@ function searchWhere(search?: string): Record<string, unknown> {
               : []),
           ],
         },
-        { city: { contains: search, mode: "insensitive" } },
       ],
     };
   }
