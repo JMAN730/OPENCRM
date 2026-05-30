@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowDown,
@@ -63,6 +63,19 @@ import { ScoreBar, StageTag, TempPill } from "./LeadUi";
 import { EditLeadDialog } from "./EditLeadDialog";
 
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+
+// Shared style for the inline add/edit custom-outcome inputs.
+const outcomeInputStyle: CSSProperties = {
+  width: "100%",
+  padding: "5px 8px",
+  border: "1px solid var(--crm-border)",
+  borderRadius: "var(--crm-radius-sm)",
+  background: "var(--crm-surface-2)",
+  fontSize: 12,
+  color: "var(--crm-fg)",
+  outline: "none",
+  boxSizing: "border-box",
+};
 
 function taskDueDateParts(task: { id: string; dueDate: Date | string }) {
   const { dueDate } = task;
@@ -501,6 +514,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [addingOutcome, setAddingOutcome] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newHint, setNewHint] = useState("");
+  const [editingOutcomeId, setEditingOutcomeId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editHint, setEditHint] = useState("");
   const [dispositionOpen, setDispositionOpen] = useState(false);
   const [dispositionId, setDispositionId] = useState<string | null>(
     lead.secondaryOutcome?.id ?? null,
@@ -593,6 +609,25 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       setOutcomeOpen(false);
       void utils.leads.customOutcomes.list.invalidate();
       updateOutcome.mutate({ id: lead.id, callOutcome: "CUSTOM" as never, customOutcomeId: created.id });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateCustomOutcome = trpc.leads.customOutcomes.update.useMutation({
+    onSuccess: () => {
+      toast.success("Outcome updated");
+      setEditingOutcomeId(null);
+      void utils.leads.customOutcomes.list.invalidate();
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteCustomOutcome = trpc.leads.customOutcomes.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Outcome deleted");
+      setEditingOutcomeId(null);
+      void utils.leads.customOutcomes.list.invalidate();
+      void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -893,22 +928,112 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                   {customOutcomes.length > 0 ? (
                     <div style={{ borderTop: "1px solid var(--crm-border)", margin: "4px 0" }} />
                   ) : null}
-                  {customOutcomes.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="menuitem"
-                      className={`crm-outcome-item ${outcome === "CUSTOM" && customOutcomeId === item.id ? "active" : ""}`}
-                      onClick={() => chooseOutcome("CUSTOM", item.id)}
-                    >
-                      <span className="crm-outcome-dot t-cool" />
-                      <span className="lab">
-                        <span className="t">{item.label}</span>
-                        {item.hint ? <span className="h">{item.hint}</span> : null}
-                      </span>
-                      {outcome === "CUSTOM" && customOutcomeId === item.id ? <Check size={11} /> : null}
-                    </button>
-                  ))}
+                  {customOutcomes.map((item) =>
+                    editingOutcomeId === item.id ? (
+                      <div
+                        key={item.id}
+                        style={{ padding: "8px 10px", borderTop: "1px solid var(--crm-border)" }}
+                      >
+                        <input
+                          autoFocus
+                          placeholder="Label"
+                          value={editLabel}
+                          onChange={(e) => setEditLabel(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editLabel.trim()) {
+                              updateCustomOutcome.mutate({
+                                id: item.id,
+                                label: editLabel.trim(),
+                                hint: editHint.trim() || undefined,
+                              });
+                            }
+                            if (e.key === "Escape") setEditingOutcomeId(null);
+                          }}
+                          style={outcomeInputStyle}
+                        />
+                        <input
+                          placeholder="Hint (optional)"
+                          value={editHint}
+                          onChange={(e) => setEditHint(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Escape") setEditingOutcomeId(null); }}
+                          style={{ ...outcomeInputStyle, marginTop: 5 }}
+                        />
+                        <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+                          <button
+                            type="button"
+                            className="crm-btn ghost"
+                            style={{ fontSize: 11, padding: "3px 8px" }}
+                            onClick={() => setEditingOutcomeId(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="crm-btn primary"
+                            style={{ fontSize: 11, padding: "3px 8px" }}
+                            disabled={!editLabel.trim() || updateCustomOutcome.isPending}
+                            onClick={() =>
+                              updateCustomOutcome.mutate({
+                                id: item.id,
+                                label: editLabel.trim(),
+                                hint: editHint.trim() || undefined,
+                              })
+                            }
+                          >
+                            {updateCustomOutcome.isPending ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={item.id} className="crm-outcome-row">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className={`crm-outcome-item ${outcome === "CUSTOM" && customOutcomeId === item.id ? "active" : ""}`}
+                          style={{ flex: 1, minWidth: 0 }}
+                          onClick={() => chooseOutcome("CUSTOM", item.id)}
+                        >
+                          <span className="crm-outcome-dot t-cool" />
+                          <span className="lab">
+                            <span className="t">{item.label}</span>
+                            {item.hint ? <span className="h">{item.hint}</span> : null}
+                          </span>
+                          {outcome === "CUSTOM" && customOutcomeId === item.id ? <Check size={11} /> : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="crm-outcome-rowbtn"
+                          title="Edit outcome"
+                          aria-label={`Edit ${item.label}`}
+                          onClick={() => {
+                            setEditingOutcomeId(item.id);
+                            setEditLabel(item.label);
+                            setEditHint(item.hint ?? "");
+                          }}
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          className="crm-outcome-rowbtn"
+                          title="Delete outcome"
+                          aria-label={`Delete ${item.label}`}
+                          disabled={deleteCustomOutcome.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
+                              )
+                            ) {
+                              deleteCustomOutcome.mutate({ id: item.id });
+                            }
+                          }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    ),
+                  )}
                   {outcome ? (
                     <button
                       type="button"
@@ -1021,22 +1146,112 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 {dispositionOpen ? (
                   <div className="crm-outcome-pop" role="menu">
                     <div className="crm-outcome-pop-head">Disposition</div>
-                    {customOutcomes.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        role="menuitem"
-                        className={`crm-outcome-item ${dispositionId === item.id ? "active" : ""}`}
-                        onClick={() => chooseDisposition(item.id)}
-                      >
-                        <span className="crm-outcome-dot t-cool" />
-                        <span className="lab">
-                          <span className="t">{item.label}</span>
-                          {item.hint ? <span className="h">{item.hint}</span> : null}
-                        </span>
-                        {dispositionId === item.id ? <Check size={11} /> : null}
-                      </button>
-                    ))}
+                    {customOutcomes.map((item) =>
+                      editingOutcomeId === item.id ? (
+                        <div
+                          key={item.id}
+                          style={{ padding: "8px 10px", borderTop: "1px solid var(--crm-border)" }}
+                        >
+                          <input
+                            autoFocus
+                            placeholder="Label"
+                            value={editLabel}
+                            onChange={(e) => setEditLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && editLabel.trim()) {
+                                updateCustomOutcome.mutate({
+                                  id: item.id,
+                                  label: editLabel.trim(),
+                                  hint: editHint.trim() || undefined,
+                                });
+                              }
+                              if (e.key === "Escape") setEditingOutcomeId(null);
+                            }}
+                            style={outcomeInputStyle}
+                          />
+                          <input
+                            placeholder="Hint (optional)"
+                            value={editHint}
+                            onChange={(e) => setEditHint(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Escape") setEditingOutcomeId(null); }}
+                            style={{ ...outcomeInputStyle, marginTop: 5 }}
+                          />
+                          <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+                            <button
+                              type="button"
+                              className="crm-btn ghost"
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              onClick={() => setEditingOutcomeId(null)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="crm-btn primary"
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              disabled={!editLabel.trim() || updateCustomOutcome.isPending}
+                              onClick={() =>
+                                updateCustomOutcome.mutate({
+                                  id: item.id,
+                                  label: editLabel.trim(),
+                                  hint: editHint.trim() || undefined,
+                                })
+                              }
+                            >
+                              {updateCustomOutcome.isPending ? "Saving…" : "Save"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div key={item.id} className="crm-outcome-row">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={`crm-outcome-item ${dispositionId === item.id ? "active" : ""}`}
+                            style={{ flex: 1, minWidth: 0 }}
+                            onClick={() => chooseDisposition(item.id)}
+                          >
+                            <span className="crm-outcome-dot t-cool" />
+                            <span className="lab">
+                              <span className="t">{item.label}</span>
+                              {item.hint ? <span className="h">{item.hint}</span> : null}
+                            </span>
+                            {dispositionId === item.id ? <Check size={11} /> : null}
+                          </button>
+                          <button
+                            type="button"
+                            className="crm-outcome-rowbtn"
+                            title="Edit outcome"
+                            aria-label={`Edit ${item.label}`}
+                            onClick={() => {
+                              setEditingOutcomeId(item.id);
+                              setEditLabel(item.label);
+                              setEditHint(item.hint ?? "");
+                            }}
+                          >
+                            <Pencil size={11} />
+                          </button>
+                          <button
+                            type="button"
+                            className="crm-outcome-rowbtn"
+                            title="Delete outcome"
+                            aria-label={`Delete ${item.label}`}
+                            disabled={deleteCustomOutcome.isPending}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
+                                )
+                              ) {
+                                deleteCustomOutcome.mutate({ id: item.id });
+                              }
+                            }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      ),
+                    )}
                     {dispositionId ? (
                       <button
                         type="button"

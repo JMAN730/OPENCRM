@@ -177,6 +177,7 @@ vi.mock("@/app/_trpc/client", () => ({
           limit: number;
           cursor?: string;
           stages?: string[];
+          customOutcomeIds?: string[];
           scope?: "mine";
           assignedToIds?: string[];
         }) => {
@@ -187,8 +188,20 @@ vi.mock("@/app/_trpc/client", () => ({
             ? page.items
             : page.items.filter((lead) => JSON.stringify(lead).toLowerCase().includes(search));
 
-          if (input.stages && input.stages.length > 0) {
-            items = items.filter((lead) => input.stages!.includes((lead as { status: string }).status));
+          // Mirror the server-side stage/custom-outcome filtering (combined as a union).
+          const hasStages = (input.stages?.length ?? 0) > 0;
+          const hasCustom = (input.customOutcomeIds?.length ?? 0) > 0;
+          if (hasStages || hasCustom) {
+            items = items.filter((lead) => {
+              const row = lead as { status: string; callOutcome?: string | null; customOutcomeId?: string | null };
+              const matchesStage =
+                hasStages && row.callOutcome !== "CUSTOM" && input.stages!.includes(row.status);
+              const matchesCustom =
+                hasCustom &&
+                row.callOutcome === "CUSTOM" &&
+                input.customOutcomeIds!.includes(row.customOutcomeId ?? "");
+              return matchesStage || matchesCustom;
+            });
           }
           if (input.scope === "mine") {
             items = items.filter((lead) => (lead as { assignedToId: string | null }).assignedToId === "user-1");
