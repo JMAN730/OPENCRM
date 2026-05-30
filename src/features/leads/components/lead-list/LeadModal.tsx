@@ -39,6 +39,7 @@ import {
   Trash2,
   X,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import {
   avatarClass,
@@ -1879,6 +1880,7 @@ function CreateLeadTaskDialog({
 function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; leadName: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
   const utils = trpc.useUtils();
   const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
+  const [isDownloading, setIsDownloading] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generateAi = (trpc.websites.generateAi as any).useMutation({
     onSuccess: (data: { id: string; slug?: string | null; needsPhotos?: boolean }) => {
@@ -1899,6 +1901,34 @@ function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; lea
   const siteSimple = site as { id: string; template: string; slug?: string | null } | undefined;
   const aiDemo = siteSimple?.template === "ai_demo" ? siteSimple : null;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  const downloadDemo = async () => {
+    if (!aiDemo?.id || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`/api/websites/${encodeURIComponent(aiDemo.id)}/download`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? "Failed to download demo website.");
+      }
+
+      const blob = await response.blob();
+      const filename = filenameFromContentDisposition(response.headers.get("content-disposition")) ?? `${aiDemo.slug ?? "demo-site"}.zip`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Demo website ZIP downloaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to download demo website.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div
@@ -1926,15 +1956,31 @@ function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; lea
         </button>
       </div>
       {aiDemo?.slug ? (
-        <a
-          href={`${appUrl}/demo/${aiDemo.slug}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--crm-accent-fg)" }}
-        >
-          <ExternalLink size={12} />
-          /demo/{aiDemo.slug}
-        </a>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          <a
+            href={`${appUrl}/demo/${aiDemo.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--crm-accent-fg)" }}
+          >
+            <ExternalLink size={12} />
+            /demo/{aiDemo.slug}
+          </a>
+          <button
+            type="button"
+            className="crm-btn ghost sm"
+            disabled={isDownloading}
+            onClick={downloadDemo}
+            style={{ gap: 5 }}
+          >
+            {isDownloading ? (
+              <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+            ) : (
+              <Download size={12} />
+            )}
+            {isDownloading ? "Downloading..." : "Download ZIP"}
+          </button>
+        </div>
       ) : (
         <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", fontStyle: "italic" }}>
           No AI demo yet — click &ldquo;Generate AI demo&rdquo; above.
@@ -1942,4 +1988,14 @@ function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; lea
       )}
     </div>
   );
+}
+
+function filenameFromContentDisposition(value: string | null): string | null {
+  if (!value) return null;
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1]);
+  const quotedMatch = value.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) return quotedMatch[1];
+  const plainMatch = value.match(/filename=([^;]+)/i);
+  return plainMatch?.[1]?.trim() ?? null;
 }

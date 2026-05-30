@@ -21,7 +21,7 @@ describe("leadsRouter", () => {
       expect(result).toEqual({ items: [], nextCursor: null });
     });
 
-    it("applies general search across company, name, email, phone", async () => {
+    it("applies general search across company, name, email, phone, city", async () => {
       prisma.lead.findMany.mockResolvedValue([]);
 
       await caller.leads.getAll({ search: "acme" });
@@ -33,7 +33,21 @@ describe("leadsRouter", () => {
         { lastName: { contains: "acme", mode: "insensitive" } },
         { email: { contains: "acme", mode: "insensitive" } },
         { phone: { contains: "acme", mode: "insensitive" } },
+        { city: { contains: "acme", mode: "insensitive" } },
       ]);
+    });
+
+    it("matches the city column for a bare city search (no state)", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+
+      await caller.leads.getAll({ search: "Austin" });
+
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toContainEqual({
+        city: { contains: "Austin", mode: "insensitive" },
+      });
+      // A bare city name resolves to no state, so there is no AND/state clause.
+      expect(args.where.OR.some((clause: Record<string, unknown>) => "AND" in clause)).toBe(false);
     });
 
     it("keeps general search active for state-only queries while matching normalized state", async () => {
@@ -48,8 +62,8 @@ describe("leadsRouter", () => {
         { lastName: { contains: "FL", mode: "insensitive" } },
         { email: { contains: "FL", mode: "insensitive" } },
         { phone: { contains: "FL", mode: "insensitive" } },
-        { AND: [{ state: "FL" }] },
         { city: { contains: "FL", mode: "insensitive" } },
+        { AND: [{ state: "FL" }] },
       ]);
     });
 
@@ -65,13 +79,13 @@ describe("leadsRouter", () => {
         { lastName: { contains: "Tampa FL", mode: "insensitive" } },
         { email: { contains: "Tampa FL", mode: "insensitive" } },
         { phone: { contains: "Tampa FL", mode: "insensitive" } },
+        { city: { contains: "Tampa FL", mode: "insensitive" } },
         {
           AND: [
             { state: "FL" },
             { city: { contains: "Tampa", mode: "insensitive" } },
           ],
         },
-        { city: { contains: "Tampa FL", mode: "insensitive" } },
       ]);
     });
 
@@ -87,13 +101,13 @@ describe("leadsRouter", () => {
         { lastName: { contains: "Tampa, Florida", mode: "insensitive" } },
         { email: { contains: "Tampa, Florida", mode: "insensitive" } },
         { phone: { contains: "Tampa, Florida", mode: "insensitive" } },
+        { city: { contains: "Tampa, Florida", mode: "insensitive" } },
         {
           AND: [
             { state: "FL" },
             { city: { contains: "Tampa", mode: "insensitive" } },
           ],
         },
-        { city: { contains: "Tampa, Florida", mode: "insensitive" } },
       ]);
     });
 
