@@ -365,7 +365,7 @@ describe("importRowsToLeads", () => {
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
-      rows: [{ Name: "Acme", Rating: "4.6", ReviewCount: "128" }],
+      rows: [{ Name: "Acme", Rating: "4.6", Reviews: "128" }],
       organizationId: "org-1",
       assignedToId: "user-1",
       jobId: "job-1",
@@ -382,7 +382,7 @@ describe("importRowsToLeads", () => {
     ]);
 
     const result = await importRowsToLeads({
-      rows: [{ Name: "Acme", Phone: "555", Rating: "4.7", ReviewCount: "18" }],
+      rows: [{ Name: "Acme", Phone: "555", Rating: "4.7", Reviews: "18" }],
       organizationId: "org-1",
       assignedToId: "user-1",
       jobId: "job-1",
