@@ -36,6 +36,11 @@ function formatDuration(seconds: number) {
   return `${m}:${s}`;
 }
 
+function formatDeviceError(err: { message?: string; code?: number } | null | undefined) {
+  const message = err?.message ?? "Unknown dialer error";
+  return err?.code ? `${message} (${err.code})` : message;
+}
+
 interface DialerProps {
   leadId?: string;
   initialPhone?: string;
@@ -76,14 +81,17 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
     (async () => {
       try {
         const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
-        device = new TwilioDevice(tokenData.token, { logLevel: "warn" });
+        device = new TwilioDevice(tokenData.token, {
+          logLevel: "warn",
+          enableImprovedSignalingErrorPrecision: true,
+        });
 
         device.on("registered", () => {
           setDeviceReady(true);
           setDeviceError(null);
         });
         device.on("error", (err: { message: string; code?: number }) => {
-          const msg = err?.message ?? "Unknown dialer error";
+          const msg = formatDeviceError(err);
           setDeviceError(msg);
           toast.error(`Dialer error: ${msg}`);
         });
