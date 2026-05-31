@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Dialer } from "./Dialer";
 
@@ -148,6 +148,22 @@ describe("Dialer", () => {
     render(<Dialer />);
 
     expect(screen.getByText("Twilio not configured")).toBeInTheDocument();
+  });
+
+  it("shows the Twilio error code when device registration fails", async () => {
+    mockGenerateToken.mockReturnValue({ data: { token: "tok" }, error: undefined });
+    render(<Dialer />);
+
+    await waitFor(() => expect(mockDeviceHandlers.error).toBeDefined());
+    act(() => {
+      mockDeviceHandlers.error({ message: "Access token signature validation failed", code: 31202 });
+    });
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        "Dialer error: Access token signature validation failed (31202)",
+      );
+    });
   });
 
   it("renders call history when recent calls are available", () => {
