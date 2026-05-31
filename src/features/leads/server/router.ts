@@ -165,6 +165,9 @@ export const leadsRouter = createTRPCRouter({
           stages: z
             .array(z.enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"]))
             .optional(),
+          // Custom-outcome ids to include. Filtered server-side (alongside `stages`)
+          // so paginated pages are fully filtered rather than whittled down client-side.
+          customOutcomeIds: z.array(z.string()).optional(),
           hasPhone: z.boolean().optional(),
           assignedToIds: z.array(z.string()).optional(),
           limit: z.number().int().min(1).max(100).default(100),
@@ -218,9 +221,19 @@ export const leadsRouter = createTRPCRouter({
         where.callOutcome = { not: "CUSTOM" };
       }
 
+      // Built-in stages and custom outcomes filter the same chip row in the UI and
+      // can be combined. Build an OR so each paginated page is fully filtered.
+      const stageClauses: Record<string, unknown>[] = [];
       if (input.stages?.length) {
-        where.status = { in: input.stages };
-        where.callOutcome = { not: "CUSTOM" };
+        stageClauses.push({ status: { in: input.stages }, callOutcome: { not: "CUSTOM" } });
+      }
+      if (input.customOutcomeIds?.length) {
+        stageClauses.push({ callOutcome: "CUSTOM", customOutcomeId: { in: input.customOutcomeIds } });
+      }
+      if (stageClauses.length === 1) {
+        Object.assign(where, stageClauses[0]);
+      } else if (stageClauses.length > 1) {
+        where.OR = stageClauses;
       }
 
       if (input.hasPhone) {
