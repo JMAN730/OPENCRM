@@ -955,6 +955,39 @@ describe("leadsRouter", () => {
       const result = await caller.leads.export({});
       expect(result.csv).toContain('"Smith, ""The Best"" LLC"');
     });
+
+    it("escapes leading formula characters to prevent CSV injection", async () => {
+      prisma.lead.findMany.mockResolvedValue([
+        {
+          id: "lead-1",
+          firstName: "=DANGEROUS()",
+          lastName: "+also-bad",
+          company: "-minus",
+          email: "@at-risk",
+          phone: "normal",
+          city: null,
+          state: null,
+          status: "NOT_CONTACTED",
+          callOutcome: "NOT_CONTACTED",
+          rating: null,
+          reviewCount: null,
+          source: null,
+          website: null,
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          assignedTo: null,
+        },
+      ]);
+
+      const result = await caller.leads.export({});
+      const dataRow = result.csv.split("\n")[1];
+
+      expect(dataRow).toContain('"\t=DANGEROUS()"');
+      expect(dataRow).toContain('"\t+also-bad"');
+      expect(dataRow).toContain('"\t-minus"');
+      expect(dataRow).toContain('"\t@at-risk"');
+      // Plain value should NOT be quoted
+      expect(dataRow).toContain(",normal,");
+    });
   });
 
   describe("bulkSetTemperature", () => {
