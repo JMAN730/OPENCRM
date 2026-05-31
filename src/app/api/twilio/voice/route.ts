@@ -15,11 +15,14 @@ export async function POST(request: NextRequest) {
 
   if (authToken) {
     const twilioSig = request.headers.get("x-twilio-signature") ?? "";
-    // NEXTAUTH_URL is the canonical base URL; fall back to reconstructing from the request.
+    // NEXTAUTH_URL must exactly match the scheme+host of the Twilio webhook URL
+    // (e.g. "https://yourapp.com" — no trailing slash). Falls back to the
+    // request's own protocol+host (works locally; may differ behind a proxy).
     const baseUrl =
       process.env.NEXTAUTH_URL ??
       `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    const url = `${baseUrl}/api/twilio/voice`;
+    // Include path + query string — Twilio signs the exact URL it called.
+    const url = `${baseUrl}${request.nextUrl.pathname}${request.nextUrl.search}`;
 
     const valid = twilio.validateRequest(authToken, twilioSig, url, params);
     if (!valid) {
