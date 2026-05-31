@@ -37,16 +37,17 @@ describe("authOptions.session strategy", () => {
 });
 
 describe("session callback", () => {
-  it("attaches id, role, organizationId from the token", async () => {
+  it("attaches id, role, organizationId, and loadingAnimationMode from the token", async () => {
     const result = await sessionCallback({
       session: { user: { name: "X", email: "x@y.com", image: null }, expires: "" },
-      token: { id: "u1", role: "ADMIN", organizationId: "org-1" },
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", loadingAnimationMode: "OFF" },
       // unused params, satisfy types
     } as never);
 
     expect((result.user as { id: string }).id).toBe("u1");
     expect((result.user as { role: string }).role).toBe("ADMIN");
     expect((result.user as { organizationId: string }).organizationId).toBe("org-1");
+    expect((result.user as { loadingAnimationMode: string }).loadingAnimationMode).toBe("OFF");
   });
 
   it("does not throw if session.user is missing", async () => {
@@ -67,6 +68,7 @@ describe("jwt callback", () => {
       role: "ADMIN",
       organizationId: "org-1",
       teamId: null,
+      loadingAnimationMode: "ONCE_DAILY",
     });
 
     const token = await jwtCallback({
@@ -76,13 +78,14 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
     });
     expect(token).toMatchObject({
       id: "u1",
       name: "Fresh User",
       role: "ADMIN",
       organizationId: "org-1",
+      loadingAnimationMode: "ONCE_DAILY",
     });
   });
 
@@ -94,6 +97,7 @@ describe("jwt callback", () => {
       role: "ADMIN",
       organizationId: "org-1",
       teamId: null,
+      loadingAnimationMode: "ALWAYS",
     });
 
     await jwtCallback({
@@ -114,6 +118,7 @@ describe("jwt callback", () => {
       role: "MANAGER",
       organizationId: "org-2",
       teamId: null,
+      loadingAnimationMode: "OFF",
     });
 
     const token = await jwtCallback({
@@ -122,12 +127,13 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: "u1" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
     });
     expect(token).toMatchObject({
       name: "Updated Name",
       role: "MANAGER",
       organizationId: "org-2",
+      loadingAnimationMode: "OFF",
     });
   });
 

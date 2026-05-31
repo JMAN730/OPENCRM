@@ -21,7 +21,10 @@ type CachedUser = {
   role: UserRole;
   organizationId: string | null;
   teamId: string | null;
+  loadingAnimationMode: LoadingAnimationMode;
 };
+
+type LoadingAnimationMode = "ALWAYS" | "ONCE_DAILY" | "OFF";
 
 const SESSION_USER_TTL_SECONDS = 60;
 
@@ -33,6 +36,10 @@ function normalizeRole(value: unknown): UserRole {
   return isUserRole(value) ? value : "USER";
 }
 
+function normalizeLoadingAnimationMode(value: unknown): LoadingAnimationMode {
+  return value === "ONCE_DAILY" || value === "OFF" ? value : "ALWAYS";
+}
+
 async function readCachedUser(userId: string): Promise<CachedUser | null> {
   const raw = await safeGet(cacheKey(userId));
   if (!raw) return null;
@@ -40,7 +47,10 @@ async function readCachedUser(userId: string): Promise<CachedUser | null> {
     const parsed = JSON.parse(raw) as CachedUser;
     if (!parsed?.id) return null;
     if (!("name" in parsed)) return null;
-    return parsed;
+    return {
+      ...parsed,
+      loadingAnimationMode: normalizeLoadingAnimationMode(parsed.loadingAnimationMode),
+    };
   } catch {
     return null;
   }
@@ -62,7 +72,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
+    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
   });
   if (!dbUser) return null;
 
@@ -73,6 +83,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
     role: normalizeRole(dbUser.role),
     organizationId: dbUser.organizationId,
     teamId: dbUser.teamId,
+    loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
   };
   await writeCachedUser(snapshot);
   return snapshot;
@@ -152,6 +163,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.organizationId = token.organizationId;
         session.user.teamId = token.teamId ?? null;
+        session.user.loadingAnimationMode = token.loadingAnimationMode ?? "ALWAYS";
       }
       return session;
     },
@@ -161,7 +173,7 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: (user.email ?? "").toLowerCase() || undefined },
-            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true },
+            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
           });
           if (dbUser) {
             token.id = dbUser.id;
@@ -170,6 +182,7 @@ export const authOptions: NextAuthOptions = {
             token.role = normalizeRole(dbUser.role);
             token.organizationId = dbUser.organizationId;
             token.teamId = dbUser.teamId;
+            token.loadingAnimationMode = normalizeLoadingAnimationMode(dbUser.loadingAnimationMode);
             await writeCachedUser({
               id: dbUser.id,
               name: dbUser.name,
@@ -177,6 +190,7 @@ export const authOptions: NextAuthOptions = {
               role: normalizeRole(dbUser.role),
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
+              loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
             });
           }
         } catch (err) {
@@ -203,6 +217,7 @@ export const authOptions: NextAuthOptions = {
           token.role = snapshot.role;
           token.organizationId = snapshot.organizationId;
           token.teamId = snapshot.teamId;
+          token.loadingAnimationMode = snapshot.loadingAnimationMode;
         } catch (err) {
           // Soft-fail: if the DB is down, keep the existing token rather
           // than locking everyone out. This is a tradeoff — a deleted

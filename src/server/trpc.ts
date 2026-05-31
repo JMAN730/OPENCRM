@@ -42,7 +42,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       if (token?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: String(token.id) },
-          select: { id: true, email: true, name: true, image: true, role: true, organizationId: true, teamId: true },
+          select: { id: true, email: true, name: true, image: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
         });
         if (dbUser) {
           const role: UserRole = isUserRole(dbUser.role) ? dbUser.role : "USER";
@@ -55,6 +55,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
               role,
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
+              loadingAnimationMode: dbUser.loadingAnimationMode,
             },
             expires: new Date(
               ((token.exp as number) ?? Math.floor(Date.now() / 1000) + 60 * 60) * 1000
