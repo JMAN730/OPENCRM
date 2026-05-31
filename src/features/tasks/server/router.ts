@@ -88,6 +88,28 @@ export const tasksRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
       }
 
+      // Validate leadId belongs to this org (same guard as tasks.create)
+      if (input.leadId != null) {
+        const lead = await ctx.prisma.lead.findUnique({
+          where: { id: input.leadId },
+          select: { organizationId: true },
+        });
+        if (!lead || lead.organizationId !== ctx.organizationId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+        }
+      }
+
+      // Validate assignedToId belongs to this org
+      if (input.assignedToId != null) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Assigned user not found." });
+        }
+      }
+
       // Derive status from the legacy completed boolean if status wasn't provided
       let status = input.status;
       if (status === undefined && input.completed !== undefined) {

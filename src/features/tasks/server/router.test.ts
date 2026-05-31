@@ -173,6 +173,38 @@ describe("tasksRouter", () => {
       const data = prisma.task.update.mock.calls[0][0].data;
       expect(data.status).toBe("PENDING");
     });
+
+    it("rejects when leadId points at a lead in another org", async () => {
+      prisma.task.findFirst.mockResolvedValue({
+        id: "t1",
+        userId: "user-1",
+        leadId: null,
+        title: "t",
+      });
+      prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", leadId: "lead-other-org" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects when assignedToId points at a user in another org", async () => {
+      prisma.task.findFirst.mockResolvedValue({
+        id: "t1",
+        userId: "user-1",
+        leadId: null,
+        title: "t",
+      });
+      prisma.user.findFirst.mockResolvedValue(null); // user not in org
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", assignedToId: "user-other-org" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("delete", () => {
