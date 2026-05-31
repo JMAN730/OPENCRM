@@ -152,15 +152,43 @@ export const authRouter = createTRPCRouter({
       z.object({
         name: z.string().min(1).max(255).optional(),
         email: z.string().email().max(255).optional(),
+        currentPassword: z.string().optional(),
         loadingAnimationMode: loadingAnimationModeSchema.optional(),
-      }).refine((d) => d.name !== undefined || d.email !== undefined || d.loadingAnimationMode !== undefined, {
-        message: "At least one field must be provided",
+      })
+      .refine(
+        (d) => d.name !== undefined || d.email !== undefined || d.loadingAnimationMode !== undefined,
+        { message: "At least one field must be provided" }
+      )
+      .superRefine((d, ctx) => {
+        if (d.email !== undefined && !d.currentPassword) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Current password is required to change your email.",
+            path: ["currentPassword"],
+          });
+        }
       })
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
       if (input.email) {
+        // Verify current password before allowing email change
+        const user = await ctx.prisma.user.findUnique({
+          where: { id: userId },
+          select: { password: true },
+        });
+        if (!user?.password || !input.currentPassword) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Cannot verify identity — password required.",
+          });
+        }
+        const passwordMatches = await bcrypt.compare(input.currentPassword, user.password);
+        if (!passwordMatches) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Current password is incorrect." });
+        }
+
         const email = input.email.toLowerCase().trim();
         const existing = await ctx.prisma.user.findFirst({
           where: { email, NOT: { id: userId } },
