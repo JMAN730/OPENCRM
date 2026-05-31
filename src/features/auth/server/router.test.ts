@@ -174,7 +174,7 @@ describe("authRouter.updateProfile", () => {
     const bcrypt = await import("bcryptjs");
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      password: await bcrypt.hash("correct-password", 10),
+      password: await bcrypt.hash("correct-password", 1),
     });
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.user.update.mockResolvedValue({ id: "user-1" });
@@ -192,7 +192,7 @@ describe("authRouter.updateProfile", () => {
     const bcrypt = await import("bcryptjs");
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      password: await bcrypt.hash("correct-password", 10),
+      password: await bcrypt.hash("correct-password", 1),
     });
     prisma.user.findFirst.mockResolvedValue({ id: "other-user", email: "taken@example.com" });
 
@@ -246,7 +246,7 @@ describe("authRouter.updateProfile", () => {
     const bcrypt = await import("bcryptjs");
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      password: await bcrypt.hash("correct-password", 10),
+      password: await bcrypt.hash("correct-password", 1),
     });
 
     await expect(
@@ -264,7 +264,7 @@ describe("authRouter.updateProfile", () => {
     const bcrypt = await import("bcryptjs");
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
-      password: await bcrypt.hash("correct-password", 10),
+      password: await bcrypt.hash("correct-password", 1),
     });
     prisma.user.findFirst.mockResolvedValue(null); // no email conflict
     prisma.user.update.mockResolvedValue({});
