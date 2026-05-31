@@ -2,9 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 
 // Public endpoint — Twilio posts here when a browser Device places an outbound call.
+// When TWILIO_AUTH_TOKEN is configured, every request must carry a valid X-Twilio-Signature
+// to prevent toll fraud from unauthenticated callers.
 export async function POST(request: NextRequest) {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+
   const body = await request.formData();
-  const to = body.get("To") as string | null;
+  const params: Record<string, string> = {};
+  body.forEach((value, key) => {
+    params[key] = String(value);
+  });
+
+  if (authToken) {
+    const twilioSig = request.headers.get("x-twilio-signature") ?? "";
+    // NEXTAUTH_URL is the canonical base URL; fall back to reconstructing from the request.
+    const baseUrl =
+      process.env.NEXTAUTH_URL ??
+      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const url = `${baseUrl}/api/twilio/voice`;
+
+    const valid = twilio.validateRequest(authToken, twilioSig, url, params);
+    if (!valid) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  const to = params["To"] ?? null;
   const callerIdNumber = process.env.TWILIO_PHONE_NUMBER;
 
   const twiml = new twilio.twiml.VoiceResponse();
