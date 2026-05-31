@@ -223,9 +223,19 @@ export const teamsRouter = createTRPCRouter({
       assertCanGrantRole(ctx.session.user.role, input.role);
       const target = await ctx.prisma.user.findFirst({
         where: { id: input.userId, organizationId: ctx.organizationId },
-        select: { id: true },
+        select: { id: true, role: true },
       });
       if (!target) throw new TRPCError({ code: "NOT_FOUND" });
+      // Caller must outrank (or equal) the target's current role.
+      // ROLE_VALUES: ADMIN=0 (highest), MANAGER=1, USER=2 (lowest).
+      const callerIdx = ROLE_VALUES.indexOf(ctx.session.user.role as typeof ROLE_VALUES[number]);
+      const targetIdx = ROLE_VALUES.indexOf(target.role as typeof ROLE_VALUES[number]);
+      if (callerIdx > targetIdx) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot modify a user of higher rank.",
+        });
+      }
       return ctx.prisma.user.update({
         where: { id: input.userId },
         data: { role: input.role },
