@@ -171,10 +171,15 @@ describe("authRouter.updateProfile", () => {
 
   it("normalizes email to lowercase and checks for conflicts", async () => {
     const { caller, prisma } = createTestCaller();
+    const bcrypt = await import("bcryptjs");
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      password: await bcrypt.hash("correct-password", 10),
+    });
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.user.update.mockResolvedValue({ id: "user-1" });
 
-    await caller.auth.updateProfile({ email: "NEW@Example.COM" });
+    await caller.auth.updateProfile({ email: "NEW@Example.COM", currentPassword: "correct-password" });
 
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
       where: { email: "new@example.com", NOT: { id: "user-1" } },
@@ -184,10 +189,15 @@ describe("authRouter.updateProfile", () => {
 
   it("throws CONFLICT when new email is already taken by another user", async () => {
     const { caller, prisma } = createTestCaller();
+    const bcrypt = await import("bcryptjs");
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      password: await bcrypt.hash("correct-password", 10),
+    });
     prisma.user.findFirst.mockResolvedValue({ id: "other-user", email: "taken@example.com" });
 
     await expect(
-      caller.auth.updateProfile({ email: "taken@example.com" })
+      caller.auth.updateProfile({ email: "taken@example.com", currentPassword: "correct-password" })
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -222,6 +232,49 @@ describe("authRouter.updateProfile", () => {
   it("rejects malformed email", async () => {
     const { caller } = createTestCaller();
     await expect(caller.auth.updateProfile({ email: "not-an-email" })).rejects.toThrow();
+  });
+
+  it("rejects email change when currentPassword is missing", async () => {
+    const { caller } = createTestCaller();
+    await expect(
+      caller.auth.updateProfile({ email: "new@example.com" })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects email change when currentPassword is wrong", async () => {
+    const { caller, prisma } = createTestCaller();
+    const bcrypt = await import("bcryptjs");
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      password: await bcrypt.hash("correct-password", 10),
+    });
+
+    await expect(
+      caller.auth.updateProfile({
+        email: "new@example.com",
+        currentPassword: "wrong-password",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("allows email change when currentPassword matches", async () => {
+    const { caller, prisma } = createTestCaller();
+    const bcrypt = await import("bcryptjs");
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      password: await bcrypt.hash("correct-password", 10),
+    });
+    prisma.user.findFirst.mockResolvedValue(null); // no email conflict
+    prisma.user.update.mockResolvedValue({});
+
+    await caller.auth.updateProfile({
+      email: "new@example.com",
+      currentPassword: "correct-password",
+    });
+
+    expect(prisma.user.update).toHaveBeenCalled();
   });
 });
 
