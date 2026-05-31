@@ -177,4 +177,61 @@ describe("customOutcomesRouter", () => {
       });
     });
   });
+
+  describe("update", () => {
+    beforeEach(() => {
+      prisma.customOutcome.update.mockResolvedValue({
+        id: "o1",
+        label: "Renamed",
+        hint: null,
+        organizationId: "org-1",
+        createdAt: new Date(),
+      });
+    });
+
+    it("renames an existing outcome", async () => {
+      // First findFirst = ownership check; second = duplicate-label check.
+      prisma.customOutcome.findFirst
+        .mockResolvedValueOnce({ id: "o1" })
+        .mockResolvedValueOnce(null);
+
+      const result = await caller.leads.customOutcomes.update({ id: "o1", label: "Renamed" });
+
+      expect(prisma.customOutcome.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "o1" },
+          data: expect.objectContaining({ label: "Renamed", hint: null }),
+        }),
+      );
+      expect(result).toMatchObject({ label: "Renamed" });
+    });
+
+    it("throws NOT_FOUND when the outcome belongs to another organization", async () => {
+      prisma.customOutcome.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        caller.leads.customOutcomes.update({ id: "o-other-org", label: "Renamed" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(prisma.customOutcome.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects renaming to a label already used by another outcome", async () => {
+      prisma.customOutcome.findFirst
+        .mockResolvedValueOnce({ id: "o1" })
+        .mockResolvedValueOnce({ id: "o2" });
+
+      await expect(
+        caller.leads.customOutcomes.update({ id: "o1", label: "Booked demo" }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(prisma.customOutcome.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects an empty label", async () => {
+      await expect(
+        caller.leads.customOutcomes.update({ id: "o1", label: "" }),
+      ).rejects.toThrow();
+    });
+  });
 });

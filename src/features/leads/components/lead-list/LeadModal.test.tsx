@@ -41,6 +41,7 @@ vi.mock("@/app/_trpc/client", () => ({
         getNotes: { invalidate: invalidateNotes },
         getActivities: { invalidate: invalidateActivities },
         listOrgTags: { invalidate: vi.fn() },
+        getStatusCounts: { invalidate: vi.fn() },
         customOutcomes: { list: { invalidate: vi.fn() } },
       },
       tasks: {
@@ -112,6 +113,8 @@ vi.mock("@/app/_trpc/client", () => ({
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },
         create: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+        update: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+        delete: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       },
     },
     tasks: {

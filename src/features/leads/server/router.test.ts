@@ -192,6 +192,31 @@ describe("leadsRouter", () => {
         }),
       );
     });
+
+    it("filters server-side by customOutcomeIds so each page is fully filtered", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ customOutcomeIds: ["co-1", "co-2"] });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where).toEqual(
+        expect.objectContaining({
+          callOutcome: "CUSTOM",
+          customOutcomeId: { in: ["co-1", "co-2"] },
+        }),
+      );
+      expect(args.where.OR).toBeUndefined();
+    });
+
+    it("returns the union of built-in stages and custom outcomes when both are selected", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({ stages: ["CONNECTED"], customOutcomeIds: ["co-1"] });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      expect(args.where.OR).toEqual([
+        { status: { in: ["CONNECTED"] }, callOutcome: { not: "CUSTOM" } },
+        { callOutcome: "CUSTOM", customOutcomeId: { in: ["co-1"] } },
+      ]);
+      // The simple-clause fields must not leak alongside the OR.
+      expect(args.where.status).toBeUndefined();
+    });
   });
 
   describe("getById", () => {
