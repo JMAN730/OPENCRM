@@ -7,6 +7,11 @@ import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
 import { Plus, Trash2, UserPlus } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
+import {
+  getBrowserStorage,
+  type LoadingAnimationMode,
+  writeLoadingAnimationMode,
+} from "@/lib/loading-animation";
 
 // Only surface tabs that have a working backend. Billing, API, Audit log,
 // Integrations, and Workspace settings are roadmap items — exposing empty
@@ -22,9 +27,13 @@ export default function SettingsPage() {
 
   const userName = session?.user?.name ?? "—";
   const userEmail = session?.user?.email ?? "—";
+  const loadingAnimationMode = session?.user?.loadingAnimationMode ?? "ALWAYS";
 
   const updateProfile = trpc.auth.updateProfile.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
+      if (variables.loadingAnimationMode) {
+        writeLoadingAnimationMode(getBrowserStorage(), variables.loadingAnimationMode);
+      }
       await updateSession();
       toast.success("Profile updated");
       setEditing(null);
@@ -195,6 +204,33 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 ))}
+
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-fg)", marginBottom: 4 }}>
+                    Personalization
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
+                    Choose how often the startup loading animation appears in this browser.
+                  </div>
+                  <label style={{ display: "grid", gridTemplateColumns: "180px minmax(0, 260px)", alignItems: "center", fontSize: 13 }}>
+                    <span style={{ color: "var(--crm-fg-muted)" }}>Loading animation</span>
+                    <select
+                      aria-label="Loading animation"
+                      value={loadingAnimationMode}
+                      disabled={updateProfile.isPending}
+                      onChange={(e) => updateProfile.mutate({ loadingAnimationMode: e.target.value as LoadingAnimationMode })}
+                      style={{
+                        height: 32, padding: "0 8px", fontSize: 13,
+                        border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+                        background: "var(--crm-surface)", color: "var(--crm-fg)",
+                      }}
+                    >
+                      <option value="ALWAYS">Always on</option>
+                      <option value="ONCE_DAILY">Once a day</option>
+                      <option value="OFF">Off</option>
+                    </select>
+                  </label>
+                </div>
 
                 <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>

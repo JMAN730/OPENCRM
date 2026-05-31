@@ -7,6 +7,8 @@ import { sendPasswordResetEmail } from "@/lib/email";
 import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
 import { invalidateAuthSnapshot } from "@/lib/auth";
 
+const loadingAnimationModeSchema = z.enum(["ALWAYS", "ONCE_DAILY", "OFF"]);
+
 function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
@@ -150,7 +152,8 @@ export const authRouter = createTRPCRouter({
       z.object({
         name: z.string().min(1).max(255).optional(),
         email: z.string().email().max(255).optional(),
-      }).refine((d) => d.name !== undefined || d.email !== undefined, {
+        loadingAnimationMode: loadingAnimationModeSchema.optional(),
+      }).refine((d) => d.name !== undefined || d.email !== undefined || d.loadingAnimationMode !== undefined, {
         message: "At least one field must be provided",
       })
     )
@@ -173,6 +176,7 @@ export const authRouter = createTRPCRouter({
         data: {
           ...(input.name !== undefined && { name: input.name.trim() }),
           ...(input.email !== undefined && { email: input.email }),
+          ...(input.loadingAnimationMode !== undefined && { loadingAnimationMode: input.loadingAnimationMode }),
         },
       });
 

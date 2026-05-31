@@ -43,6 +43,7 @@ model User {
   image         String?
   password      String?
   role          UserRole  @default(USER)
+  loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
   accounts      Account[]
   sessions      Session[]
 
@@ -75,6 +76,12 @@ enum UserRole {
   ADMIN
   MANAGER
   USER
+}
+
+enum LoadingAnimationMode {
+  ALWAYS
+  ONCE_DAILY
+  OFF
 }
 
 model Organization {

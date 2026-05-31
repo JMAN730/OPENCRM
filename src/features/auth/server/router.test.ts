@@ -202,6 +202,23 @@ describe("authRouter.updateProfile", () => {
     expect(prisma.user.update.mock.calls[0][0].data.name).toBe("Alice");
   });
 
+  it("updates the loading animation preference", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.user.update.mockResolvedValue({ id: "user-1" });
+
+    await expect(caller.auth.updateProfile({ loadingAnimationMode: "ONCE_DAILY" })).resolves.toEqual({ ok: true });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { loadingAnimationMode: "ONCE_DAILY" },
+    });
+  });
+
+  it("rejects invalid loading animation preferences", async () => {
+    const { caller } = createTestCaller();
+    await expect(caller.auth.updateProfile({ loadingAnimationMode: "SOMETIMES" } as never)).rejects.toThrow();
+  });
+
   it("rejects malformed email", async () => {
     const { caller } = createTestCaller();
     await expect(caller.auth.updateProfile({ email: "not-an-email" })).rejects.toThrow();

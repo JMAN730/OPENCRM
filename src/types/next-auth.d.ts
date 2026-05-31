@@ -1,6 +1,8 @@
 import { DefaultSession } from "next-auth";
 import type { UserRole } from "@/server/authz";
 
+type LoadingAnimationMode = "ALWAYS" | "ONCE_DAILY" | "OFF";
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -8,6 +10,7 @@ declare module "next-auth" {
       role: UserRole;
       organizationId: string | null;
       teamId: string | null;
+      loadingAnimationMode: LoadingAnimationMode;
     } & DefaultSession["user"];
   }
 
@@ -15,6 +18,7 @@ declare module "next-auth" {
     role?: UserRole;
     organizationId?: string | null;
     teamId?: string | null;
+    loadingAnimationMode?: LoadingAnimationMode;
   }
 }
 
@@ -25,5 +29,6 @@ declare module "next-auth/jwt" {
     role: UserRole;
     organizationId: string | null;
     teamId: string | null;
+    loadingAnimationMode: LoadingAnimationMode;
   }
 }
