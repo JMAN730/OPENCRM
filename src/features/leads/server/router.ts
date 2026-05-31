@@ -1149,11 +1149,17 @@ export const leadsRouter = createTRPCRouter({
         "Review Count", "Source", "Website", "Assigned To", "Created At",
       ];
 
+      const FORMULA_PREFIXES = new Set(["=", "+", "-", "@"]);
+
       const esc = (v: unknown) => {
         const s = v == null ? "" : String(v);
-        return s.includes(",") || s.includes('"') || s.includes("\n")
-          ? `"${s.replace(/"/g, '""')}"`
-          : s;
+        const isFormula = s.length > 0 && FORMULA_PREFIXES.has(s[0]);
+        const needsQuote =
+          isFormula || s.includes(",") || s.includes('"') || s.includes("\n");
+        if (!needsQuote) return s;
+        // Prefix formula-starting values with a tab so spreadsheet apps treat them as literals.
+        const safe = isFormula ? `\t${s}` : s;
+        return `"${safe.replace(/"/g, '""')}"`;
       };
 
       const rows = leads.map((l) =>
