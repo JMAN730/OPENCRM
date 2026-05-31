@@ -171,4 +171,50 @@ describe("scoringRouter", () => {
       expect(result).toHaveLength(1);
     });
   });
+
+  describe("role gating", () => {
+    it("blocks USER from calling upsertRule", async () => {
+      const { caller } = createTestCaller({ sessionOverrides: { role: "USER" } });
+
+      await expect(
+        caller.scoring.upsertRule({
+          factor: "star_rating",
+          label: "Star Rating",
+          maxPoints: 40,
+          weight: 1.0,
+        })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("blocks USER from calling deleteRule", async () => {
+      const { caller } = createTestCaller({ sessionOverrides: { role: "USER" } });
+
+      await expect(
+        caller.scoring.deleteRule({ id: "rule-1" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("blocks USER from calling resetToDefaults", async () => {
+      const { caller } = createTestCaller({ sessionOverrides: { role: "USER" } });
+
+      await expect(caller.scoring.resetToDefaults()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    });
+
+    it("allows MANAGER to call upsertRule", async () => {
+      const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "MANAGER" } });
+      prisma.scoringRule.findFirst.mockResolvedValue(null);
+      prisma.scoringRule.create.mockResolvedValue({ ...RULE_STUB });
+
+      await caller.scoring.upsertRule({
+        factor: "star_rating",
+        label: "Star Rating",
+        maxPoints: 40,
+        weight: 1.0,
+      });
+
+      expect(prisma.scoringRule.create).toHaveBeenCalled();
+    });
+  });
 });
