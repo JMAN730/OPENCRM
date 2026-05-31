@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("pipelineRouter.createDeal", () => {
@@ -278,6 +278,49 @@ describe("pipelineRouter.updateDealValue", () => {
     await expect(caller.pipeline.updateDealValue({ leadId: "other-lead", value: 100 })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.moveLead", () => {
+  it("allows ADMIN to move any lead", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-1",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+    await caller.pipeline.moveLead({ leadId: "lead-1", stageId: "stage-1" });
+    expect(prisma.lead.update).toHaveBeenCalled();
+  });
+
+  it("blocks USER from moving a lead not in their scope", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-1",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.lead.findFirst.mockResolvedValue(null); // not in scope
+
+    await expect(
+      caller.pipeline.moveLead({ leadId: "unowned-lead", stageId: "stage-1" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.updateDealValue (scope)", () => {
+  it("blocks USER from updating a lead not in their scope", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.lead.findFirst.mockResolvedValue(null);
+
+    await expect(
+      caller.pipeline.updateDealValue({ leadId: "unowned-lead", value: 5000 })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
     expect(prisma.lead.update).not.toHaveBeenCalled();
   });
 });

@@ -97,8 +97,16 @@ export const pipelineRouter = createTRPCRouter({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
       }
+
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: 'FORBIDDEN', message: 'Lead not found' });
+
       return ctx.prisma.lead.update({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
+        where: { id: lead.id },
         data: { pipelineStageId: input.stageId },
       });
     }),
@@ -171,8 +179,9 @@ export const pipelineRouter = createTRPCRouter({
   updateDealValue: organizationProcedure
     .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(99999).nullable() }))
     .mutation(async ({ ctx, input }) => {
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Lead not found' });
