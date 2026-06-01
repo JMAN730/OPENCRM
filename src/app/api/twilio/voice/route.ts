@@ -18,9 +18,10 @@ export async function POST(request: NextRequest) {
     // NEXTAUTH_URL must exactly match the scheme+host of the Twilio webhook URL
     // (e.g. "https://yourapp.com" — no trailing slash). Falls back to the
     // request's own protocol+host (works locally; may differ behind a proxy).
-    const baseUrl =
+    const baseUrl = (
       process.env.NEXTAUTH_URL ??
-      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+      `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    ).replace(/\/$/, "");
     // Include path + query string — Twilio signs the exact URL it called.
     const url = `${baseUrl}${request.nextUrl.pathname}${request.nextUrl.search}`;
 
