@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
@@ -29,12 +29,25 @@ const INPUT_STYLE: React.CSSProperties = {
 const TEXTAREA_STYLE: React.CSSProperties = {
   ...INPUT_STYLE,
   height: "auto",
-  minHeight: 64,
+  minHeight: 48,
   padding: "8px 10px",
-  resize: "vertical",
-  lineHeight: 1.5,
+  resize: "none",
+  overflow: "hidden",
+  fontSize: 14,
+  lineHeight: 1.6,
   fontFamily: "var(--crm-font-sans)",
 };
+
+function AutoGrowTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [props.value]);
+  return <textarea ref={ref} {...props} />;
+}
 
 function groupByCategory(scripts: Script[]): [string, Script[]][] {
   const groups = new Map<string, Script[]>();
@@ -131,9 +144,9 @@ export function ScriptsPanel({ readOnly = false }: { readOnly?: boolean }) {
                   <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, color: "var(--crm-fg)" }}>{s.title}</div>
                   <div
                     style={{
-                      fontSize: 12.5,
+                      fontSize: 14,
                       color: "var(--crm-fg-muted)",
-                      lineHeight: 1.55,
+                      lineHeight: 1.6,
                       whiteSpace: "pre-wrap",
                     }}
                   >
@@ -212,7 +225,7 @@ export function ScriptsPanel({ readOnly = false }: { readOnly?: boolean }) {
                 <Trash2 size={13} />
               </button>
             </div>
-            <textarea
+            <AutoGrowTextarea
               value={s.body}
               placeholder="Script body…"
               style={TEXTAREA_STYLE}
