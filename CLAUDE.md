@@ -90,15 +90,21 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 ```typescript
 // src/server/api/root.ts
 appRouter = {
-  leads:     leadsRouter,     // full CRUD + bulk import + cursor pagination + notes + custom outcomes
-  calls:     callsRouter,     // call logging + retrieval
-  scraper:   scraperRouter,   // Google Maps lead scraper
-  tasks:     tasksRouter,     // task CRUD + filtering + calendar
-  dashboard: dashboardRouter, // KPI aggregations (Redis-cached) + team stats + my stats
-  auth:      authRouter,      // register, password reset, profile, deleteAccount
-  teams:     teamsRouter,     // team CRUD + memberships + email-token invitations
-  scoring:   scoringRouter,   // lead-scoring rule CRUD
-  websites:  websitesRouter,  // template-based per-lead site generator
+  ai:               aiRouter,               // AI lead qualification + email copy generation
+  leads:            leadsRouter,            // full CRUD + bulk import + cursor pagination + notes + custom outcomes
+  calls:            callsRouter,            // call logging + retrieval + Twilio token
+  scraper:          scraperRouter,          // Google Maps lead scraper
+  scraperSchedules: scheduledScraperRouter, // recurring scraper schedules (cron-driven)
+  tasks:            tasksRouter,            // task CRUD + filtering + calendar
+  dashboard:        dashboardRouter,        // KPI aggregations (Redis-cached) + team stats + my stats
+  auth:             authRouter,             // register, password reset, profile, deleteAccount
+  teams:            teamsRouter,            // team CRUD + memberships + email-token invitations
+  scoring:          scoringRouter,          // lead-scoring rule CRUD
+  scripts:          scriptsRouter,          // sales-script CRUD
+  websites:         websitesRouter,         // template-based + AI per-lead site generator
+  emails:           emailsRouter,           // CAN-SPAM outreach email drafts + send (Resend) + tracking
+  pipeline:         pipelineRouter,         // deal pipeline board (stages + lead placement)
+  analytics:        analyticsRouter,        // analytics aggregations for /analytics
 }
 ```
 
@@ -196,8 +202,12 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Tasks | `/tasks` | `tasks` | `TasksList` | Implemented |
 | Scraper | `/scraper` | `scraper` | `ScraperPanel`, `StartJobForm`, `JobsTable`, `JobDetailDialog` | Implemented |
 | Teams | `/team`, `/team/[userId]` | `teams` | `TeamPage`, `TeamMemberDetail` | Implemented |
-| Analytics | `/analytics` | — | — | Stub |
-| Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail` | Profile + Members tabs only | Implemented |
+| Pipeline | `/pipeline` | `pipeline` | pipeline board (stages + drag) | Implemented |
+| Analytics | `/analytics` | `analytics` | analytics dashboards | Implemented |
+| Emails | (in lead modal) | `emails` | `EmailDraftPanel` (CAN-SPAM outreach + tracking) | Implemented |
+| Scripts | `/dialer`, lead modal | `scripts` | `ScriptsPanel` | Implemented |
+| AI | (in lead modal) | `ai` | lead qualification + email copy | Implemented |
+| Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail`, `leads.*Tag` | Profile + Members + Tags tabs | Implemented |
 
 ### Key tRPC procedures per namespace
 

@@ -1,7 +1,16 @@
+import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { runDueSchedules } from "@/server/scraper/scheduler";
 
 const CRON_SECRET = process.env.CRON_SECRET;
+
+// Constant-time comparison so the endpoint doesn't leak the secret via timing.
+function safeMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 export async function POST(request: Request): Promise<Response> {
   if (!CRON_SECRET) {
@@ -14,7 +23,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${CRON_SECRET}`) {
+  if (!auth || !safeMatch(auth, `Bearer ${CRON_SECRET}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

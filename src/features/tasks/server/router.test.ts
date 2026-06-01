@@ -39,12 +39,21 @@ describe("tasksRouter", () => {
     });
 
     it("uses provided assignedToId when specified", async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: "user-2" }); // assignee in org
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.create({ title: "Delegate task", assignedToId: "user-2" });
 
       const data = prisma.task.create.mock.calls[0][0].data;
       expect(data.assignedToId).toBe("user-2");
+    });
+
+    it("refuses when assignedToId points at a user in another org", async () => {
+      prisma.user.findFirst.mockResolvedValue(null); // assignee not in org
+
+      await expect(
+        caller.tasks.create({ title: "Delegate task", assignedToId: "user-other-org" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
     it("checks lead org ownership when leadId is supplied", async () => {
