@@ -303,14 +303,16 @@ export const leadsRouter = createTRPCRouter({
       const search = input.search?.trim();
       const finalWhere = { ...where, ...searchWhere(search) };
 
-      const [standardRows, customRows, notContactedCount] = await Promise.all([
+      // Bucket standard rows by `status` (excluding only CUSTOM outcomes) so the
+      // counts line up exactly with `getAll`, which filters on `status` plus
+      // `callOutcome != CUSTOM`. Bucketing on `callOutcome` instead caused
+      // CONNECTED-status leads that still carry the default NOT_CONTACTED outcome
+      // to be miscounted under NOT_CONTACTED — disagreeing with the list length.
+      const [standardRows, customRows] = await Promise.all([
         ctx.prisma.lead.groupBy({
           by: ["status"],
           where: {
-            AND: [
-              finalWhere,
-              { callOutcome: { notIn: ["NOT_CONTACTED", "CUSTOM"] } },
-            ],
+            AND: [finalWhere, { callOutcome: { not: "CUSTOM" } }],
           } as Record<string, unknown>,
           _count: { id: true },
         }),
@@ -321,17 +323,9 @@ export const leadsRouter = createTRPCRouter({
           } as Record<string, unknown>,
           _count: { id: true },
         }),
-        ctx.prisma.lead.count({
-          where: {
-            AND: [
-              finalWhere,
-              { callOutcome: "NOT_CONTACTED" },
-            ],
-          } as Record<string, unknown>,
-        }),
       ]);
 
-      const counts: Record<string, number> = { NOT_CONTACTED: notContactedCount };
+      const counts: Record<string, number> = {};
       for (const row of standardRows) counts[row.status] = row._count.id;
       for (const row of customRows) {
         if (row.customOutcomeId) counts[`CUSTOM:${row.customOutcomeId}`] = row._count.id;
@@ -1277,7 +1271,7 @@ export const leadsRouter = createTRPCRouter({
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: process.env.AI_MODEL ?? "deepseek-v4-flash",
+            model: process.env.AI_MODEL ?? "deepseek-chat",
             messages: [{ role: "user", content: prompt }],
             max_tokens: 150,
             temperature: 0.4,

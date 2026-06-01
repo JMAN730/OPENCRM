@@ -1,15 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
+// moveLead/createDeal resolve the org's active pipeline (getOrCreateDefaultPipeline)
+// to assert the target stage belongs to it. Stages must therefore carry the
+// active pipeline's id, and pipeline.findFirst must return a fully-seeded pipeline
+// so the helper doesn't fall into its create/migrate branches.
+const ACTIVE_PIPELINE = {
+  id: "pipeline-1",
+  stages: ["Potential", "Qualified", "Proposal", "Negotiation", "Won", "Lost"].map(
+    (name, order) => ({ id: `s-${order}`, name, order, pipelineId: "pipeline-1" }),
+  ),
+};
+
 describe("pipelineRouter.createDeal", () => {
   let caller: ReturnType<typeof createTestCaller>["caller"];
   let prisma: ReturnType<typeof createTestCaller>["prisma"];
 
   beforeEach(() => {
     ({ caller, prisma } = createTestCaller());
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
     prisma.pipelineStage.findFirst.mockResolvedValue({
       id: "stage-1",
       name: "Proposal",
+      pipelineId: "pipeline-1",
       pipeline: { organizationId: "org-1" },
     });
   });
@@ -285,8 +298,10 @@ describe("pipelineRouter.updateDealValue", () => {
 describe("pipelineRouter.moveLead", () => {
   it("allows ADMIN to move any lead", async () => {
     const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
     prisma.pipelineStage.findFirst.mockResolvedValue({
       id: "stage-1",
+      pipelineId: "pipeline-1",
       pipeline: { organizationId: "org-1" },
     });
     prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
@@ -298,14 +313,33 @@ describe("pipelineRouter.moveLead", () => {
 
   it("blocks USER from moving a lead not in their scope", async () => {
     const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
     prisma.pipelineStage.findFirst.mockResolvedValue({
       id: "stage-1",
+      pipelineId: "pipeline-1",
       pipeline: { organizationId: "org-1" },
     });
     prisma.lead.findFirst.mockResolvedValue(null); // not in scope
 
     await expect(
       caller.pipeline.moveLead({ leadId: "unowned-lead", stageId: "stage-1" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stage that belongs to a different pipeline in the same org", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    // Org-owned stage, but on a different pipeline than the active one.
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-other-pipeline",
+      pipelineId: "pipeline-2",
+      pipeline: { organizationId: "org-1" },
+    });
+
+    await expect(
+      caller.pipeline.moveLead({ leadId: "lead-1", stageId: "stage-other-pipeline" })
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(prisma.lead.update).not.toHaveBeenCalled();

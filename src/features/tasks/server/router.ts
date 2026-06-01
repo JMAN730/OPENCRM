@@ -29,6 +29,17 @@ export const tasksRouter = createTRPCRouter({
         }
       }
 
+      // Validate assignedToId belongs to this org (same guard as tasks.update)
+      if (input.assignedToId != null) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Assigned user not found." });
+        }
+      }
+
       const task = await ctx.prisma.task.create({
         data: {
           title: input.title,

@@ -89,11 +89,14 @@ export const pipelineRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string(), stageId: z.string().nullable() }))
     .mutation(async ({ ctx, input }) => {
       if (input.stageId) {
+        const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
         const stage = await ctx.prisma.pipelineStage.findFirst({
           where: { id: input.stageId },
           include: { pipeline: true },
         });
-        if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        // Stage must be org-owned AND belong to the active pipeline — otherwise a
+        // stage from another of the org's pipelines could corrupt the board.
+        if (!stage || stage.pipeline.organizationId !== ctx.organizationId || stage.pipelineId !== pipeline.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
       }
@@ -211,11 +214,13 @@ export const pipelineRouter = createTRPCRouter({
       let stageId: string | null = null;
       let stageName: string | null = null;
       if (input.stageId) {
+        const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
         const stage = await ctx.prisma.pipelineStage.findFirst({
           where: { id: input.stageId },
           include: { pipeline: true },
         });
-        if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        // Stage must be org-owned AND belong to the active pipeline.
+        if (!stage || stage.pipeline.organizationId !== ctx.organizationId || stage.pipelineId !== pipeline.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
         stageId = stage.id;
