@@ -3,6 +3,7 @@
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import { ScriptsPanel } from "@/features/scripts/components/ScriptsPanel";
+import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
 import { formatLocation, getMapsUrl } from "@/features/leads/location";
 import { formatPhone } from "@/lib/phone";
 import {
@@ -1892,6 +1893,16 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
             </div>
 
             <DemoSiteSection leadId={lead.id} leadName={lead.company ?? fullNameOf(lead)} sectionRef={demoSectionRef} />
+
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 18,
+                borderTop: "1px solid var(--crm-border)",
+              }}
+            >
+              <EmailDraftPanel leadId={lead.id} />
+            </div>
 
             <div>
               <h4>Recent activity</h4>

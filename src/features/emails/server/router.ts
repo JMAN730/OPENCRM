@@ -95,7 +95,6 @@ export const emailsRouter = createTRPCRouter({
         });
       }
 
-      const draftId = existing?.id ?? undefined;
       const unsubToken = existing?.unsubscribeToken ?? nanoid(32);
       const unsub = unsubscribeUrl(unsubToken);
       const ownerName = lead.firstName ? `${lead.firstName}` : "there";
@@ -105,7 +104,7 @@ export const emailsRouter = createTRPCRouter({
       const senderName = process.env.SENDER_NAME ?? "OpenCRM";
 
       const demoLine = website?.slug
-        ? `Here's the demo:\n${trackedDemoUrl(draftId ?? "preview")}\n\nNo pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?`
+        ? `Here's the demo:\n${trackedDemoUrl(unsubToken)}\n\nNo pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?`
         : "No pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?";
 
       const body = `Hey ${ownerName},
