@@ -298,14 +298,21 @@ describe("leadsRouter", () => {
   });
 
   describe("getStatusCounts", () => {
-    it("uses Prisma 7-compatible call outcome filters", async () => {
+    it("buckets standard rows by status to match getAll (excludes only CUSTOM)", async () => {
+      // A CONNECTED-status lead carrying the default NOT_CONTACTED outcome must
+      // be counted under CONNECTED — the same lead getAll(status=CONNECTED)
+      // returns — not double-bucketed under NOT_CONTACTED.
       prisma.lead.groupBy
-        .mockResolvedValueOnce([{ status: "CONNECTED", _count: { id: 3 } }])
+        .mockResolvedValueOnce([
+          { status: "NOT_CONTACTED", _count: { id: 5 } },
+          { status: "CONNECTED", _count: { id: 3 } },
+        ])
         .mockResolvedValueOnce([{ customOutcomeId: "co-1", _count: { id: 2 } }]);
-      prisma.lead.count.mockResolvedValue(5);
 
       const result = await caller.leads.getStatusCounts();
 
+      // Standard buckets group by status, filtering out only CUSTOM outcomes —
+      // matching getAll's `callOutcome: { not: "CUSTOM" }`.
       expect(prisma.lead.groupBy).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
@@ -313,21 +320,13 @@ describe("leadsRouter", () => {
           where: {
             AND: [
               { organizationId: "org-1" },
-              { callOutcome: { notIn: ["NOT_CONTACTED", "CUSTOM"] } },
+              { callOutcome: { not: "CUSTOM" } },
             ],
           },
         }),
       );
-      expect(prisma.lead.count).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            AND: [
-              { organizationId: "org-1" },
-              { callOutcome: "NOT_CONTACTED" },
-            ],
-          },
-        }),
-      );
+      // No separate count() round-trip — NOT_CONTACTED comes from the status bucket.
+      expect(prisma.lead.count).not.toHaveBeenCalled();
       expect(result).toEqual({ NOT_CONTACTED: 5, CONNECTED: 3, "CUSTOM:co-1": 2 });
     });
   });

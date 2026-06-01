@@ -191,4 +191,55 @@ describe("Dialer", () => {
     const input = screen.getByPlaceholderText("000-000-0000") as HTMLInputElement;
     expect(input.value).toBe("+15551234567");
   });
+
+  it("logs the elapsed call duration instead of a stale 0 on disconnect", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGenerateToken.mockReturnValue({ data: { token: "tok" }, error: undefined });
+
+      const callHandlers: Record<string, (arg?: unknown) => void> = {};
+      const fakeCall = {
+        on: (event: string, cb: (arg?: unknown) => void) => { callHandlers[event] = cb; },
+        status: () => "open",
+        parameters: { CallSid: "CA-test" },
+        disconnect: mockDisconnect,
+        mute: mockMute,
+        sendDigits: mockSendDigits,
+      };
+      mockConnect.mockResolvedValue(fakeCall);
+
+      render(<Dialer leadId="lead-1" />);
+
+      // Flush the async device init (dynamic import + register → "registered").
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+      fireEvent.change(screen.getByPlaceholderText("000-000-0000"), {
+        target: { value: "5551234567" },
+      });
+
+      const callButton = document.querySelector(".bg-green-500") as HTMLButtonElement;
+      expect(callButton).not.toBeDisabled();
+      await act(async () => {
+        fireEvent.click(callButton);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Three seconds of call time elapse while connected.
+      act(() => { vi.advanceTimersByTime(3000); });
+
+      // Twilio fires disconnect; the logged duration must reflect elapsed time,
+      // not the 0 captured by the stale closure (the original regression).
+      act(() => { callHandlers.disconnect?.(); });
+
+      expect(mockLogCall).toHaveBeenCalledTimes(1);
+      expect(mockLogCall.mock.calls[0][0]).toMatchObject({
+        leadId: "lead-1",
+        status: "CONNECTED",
+        duration: 3,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

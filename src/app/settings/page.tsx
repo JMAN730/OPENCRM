@@ -24,6 +24,8 @@ export default function SettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  // Current password required to change email (auth.updateProfile gates this).
+  const [editPassword, setEditPassword] = useState("");
 
   const userName = session?.user?.name ?? "—";
   const userEmail = session?.user?.email ?? "—";
@@ -37,6 +39,7 @@ export default function SettingsPage() {
       await updateSession();
       toast.success("Profile updated");
       setEditing(null);
+      setEditPassword("");
     },
     onError: (err) => {
       toast.error(err.message || "Failed to update profile");
@@ -89,12 +92,19 @@ export default function SettingsPage() {
   const handleEdit = (key: string, current: string) => {
     setEditing(key);
     setEditValue(current === "—" ? "" : current);
+    setEditPassword("");
   };
 
   const handleSave = (key: string) => {
     if (!editValue.trim()) return;
     if (key === "Name") updateProfile.mutate({ name: editValue.trim() });
-    else if (key === "Email") updateProfile.mutate({ email: editValue.trim() });
+    else if (key === "Email") {
+      if (!editPassword) {
+        toast.error("Enter your current password to change your email.");
+        return;
+      }
+      updateProfile.mutate({ email: editValue.trim(), currentPassword: editPassword });
+    }
   };
 
   const profileRows: [string, string][] = [
@@ -171,10 +181,30 @@ export default function SettingsPage() {
                               outline: "none",
                             }}
                           />
+                          {k === "Email" && (
+                            <input
+                              type="password"
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSave(k);
+                                if (e.key === "Escape") setEditing(null);
+                              }}
+                              placeholder="Current password"
+                              aria-label="Current password"
+                              autoComplete="current-password"
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: 13,
+                                border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+                                background: "var(--crm-surface)", color: "var(--crm-fg)",
+                                outline: "none",
+                              }}
+                            />
+                          )}
                           <button
                             className="crm-btn primary"
                             style={{ height: 24, padding: "0 10px", fontSize: 12 }}
-                            disabled={updateProfile.isPending || !editValue.trim()}
+                            disabled={updateProfile.isPending || !editValue.trim() || (k === "Email" && !editPassword)}
                             onClick={() => handleSave(k)}
                           >
                             {updateProfile.isPending ? "Saving…" : "Save"}

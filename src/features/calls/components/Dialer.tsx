@@ -63,6 +63,9 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<TwilioCall | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mirrors callDuration so the `disconnect` handler (created in startCall and
+  // closing over a stale callDuration=0) can read the live value via the ref.
+  const callDurationRef = useRef(0);
 
   const { data: tokenData, error: tokenError } = trpc.calls.generateToken.useQuery(undefined, {
     retry: false,
@@ -124,10 +127,19 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
   // Duration timer while in call
   useEffect(() => {
     if (!isInCall) return;
-    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+    timerRef.current = setInterval(
+      () =>
+        setCallDuration((d) => {
+          const next = d + 1;
+          callDurationRef.current = next;
+          return next;
+        }),
+      1000,
+    );
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       setCallDuration(0);
+      callDurationRef.current = 0;
     };
   }, [isInCall]);
 
@@ -161,7 +173,7 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
         activeCallRef.current = null;
         setIsInCall(false);
         setIsMuted(false);
-        const duration = callDuration > 0 ? callDuration : undefined;
+        const duration = callDurationRef.current > 0 ? callDurationRef.current : undefined;
         logCallMutation.mutate(
           {
             leadId,
