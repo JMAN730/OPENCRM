@@ -29,6 +29,20 @@ describe("tasksRouter", () => {
       });
     });
 
+    it("rejects an over-length title or description (#188-N1)", async () => {
+      prisma.task.create.mockResolvedValue({ id: "t1" });
+
+      await expect(
+        caller.tasks.create({ title: "a".repeat(256) }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      await expect(
+        caller.tasks.create({ title: "ok", description: "d".repeat(5001) }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(prisma.task.create).not.toHaveBeenCalled();
+    });
+
     it("defaults assignedToId to the creator when not provided", async () => {
       prisma.task.create.mockResolvedValue({ id: "t1" });
 

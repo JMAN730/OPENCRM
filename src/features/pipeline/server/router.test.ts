@@ -295,6 +295,34 @@ describe("pipelineRouter.updateDealValue", () => {
   });
 });
 
+describe("pipelineRouter.getBoard (scope)", () => {
+  it("scopes the nested stage leads to the caller (no org-wide leak for USER) (#187-1)", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER", id: "user-1" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.team.findMany.mockResolvedValue([]); // no led teams → own leads only
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({
+      organizationId: "org-1",
+      assignedToId: { in: ["user-1"] },
+    });
+  });
+
+  it("returns all org leads for an ADMIN", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({ organizationId: "org-1" });
+  });
+});
+
 describe("pipelineRouter.moveLead", () => {
   it("allows ADMIN to move any lead", async () => {
     const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });

@@ -217,6 +217,28 @@ describe("leadsRouter", () => {
       // The simple-clause fields must not leak alongside the OR.
       expect(args.where.status).toBeUndefined();
     });
+
+    it("keeps the chip-filter OR when a search is also active (does not clobber it) (#185-3)", async () => {
+      prisma.lead.findMany.mockResolvedValue([]);
+      await caller.leads.getAll({
+        stages: ["CONNECTED"],
+        customOutcomeIds: ["co-1"],
+        search: "acme",
+      });
+      const args = prisma.lead.findMany.mock.calls[0][0];
+      // Both the chip-filter OR and the search OR must survive, combined via AND.
+      expect(args.where.OR).toBeUndefined();
+      expect(Array.isArray(args.where.AND)).toBe(true);
+      expect(args.where.AND[0]).toEqual({
+        OR: [
+          { status: { in: ["CONNECTED"] }, callOutcome: { not: "CUSTOM" } },
+          { callOutcome: "CUSTOM", customOutcomeId: { in: ["co-1"] } },
+        ],
+      });
+      expect(args.where.AND[1].OR).toContainEqual({
+        company: { contains: "acme", mode: "insensitive" },
+      });
+    });
   });
 
   describe("getById", () => {
@@ -986,6 +1008,20 @@ describe("leadsRouter", () => {
       expect(dataRow).toContain('"\t@at-risk"');
       // Plain value should NOT be quoted
       expect(dataRow).toContain(",normal,");
+    });
+
+    it("rejects an out-of-scope assignedToId for a non-admin (intra-org IDOR #185-1)", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { role: "USER", id: "user-1" },
+      });
+      // No led teams → scope is just the caller's own leads.
+      userPrisma.team.findMany.mockResolvedValue([]);
+
+      await expect(
+        userCaller.leads.export({ assignedToId: "colleague-2" }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(userPrisma.lead.findMany).not.toHaveBeenCalled();
     });
   });
 

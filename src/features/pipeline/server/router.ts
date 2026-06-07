@@ -71,12 +71,17 @@ const LEAD_SELECT = {
 export const pipelineRouter = createTRPCRouter({
   getBoard: organizationProcedure.query(async ({ ctx }) => {
     const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
+    // Scope the nested leads to what the caller is allowed to see (mirrors
+    // moveLead and the rest of the pipeline mutations). leadWhereFromScope
+    // already constrains by organizationId, so a USER/team-leader no longer
+    // sees every org lead's names, companies, deal values, and assignees.
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const stages = await ctx.prisma.pipelineStage.findMany({
       where: { pipelineId: pipeline.id },
       orderBy: { order: 'asc' },
       include: {
         leads: {
-          where: { organizationId: ctx.organizationId },
+          where: leadWhereFromScope(scope),
           select: LEAD_SELECT,
           orderBy: { updatedAt: 'desc' },
         },
