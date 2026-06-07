@@ -240,10 +240,21 @@ export const leadsRouter = createTRPCRouter({
         where.phone = { not: null };
       }
 
-      const finalWhere: Record<string, unknown> = {
-        ...where,
-        ...searchWhere(search),
-      };
+      // When both the chip filters (stages + custom outcomes) and a search are
+      // active they each produce an `OR`; spreading both would let the search
+      // `OR` silently clobber the filter `OR` and drop the chip filters
+      // (#185-3). In that case combine via `AND` so both apply. Otherwise keep
+      // the original spread (no behaviour change for search-only queries).
+      const search_ = searchWhere(search);
+      let finalWhere: Record<string, unknown>;
+      if (where.OR && search_.OR) {
+        const filterOr = where.OR;
+        const { OR: _omit, ...rest } = where;
+        void _omit;
+        finalWhere = { ...rest, AND: [{ OR: filterOr }, search_] };
+      } else {
+        finalWhere = { ...where, ...search_ };
+      }
 
       // take = limit + 1 so we can detect whether another page exists
       // without a second count() round-trip.
@@ -1128,7 +1139,15 @@ export const leadsRouter = createTRPCRouter({
         where.status = input.status;
         where.callOutcome = { not: "CUSTOM" };
       }
-      if (input.assignedToId) where.assignedToId = input.assignedToId;
+      if (input.assignedToId) {
+        // Reject out-of-scope ids so a USER/team-leader can't overwrite their
+        // scope constraint and export a colleague's leads (mirrors getAll).
+        const visibleUsers = baseScope.kind === "all" ? null : baseScope.userIds;
+        if (visibleUsers && !visibleUsers.includes(input.assignedToId)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        where.assignedToId = input.assignedToId;
+      }
 
       const leads = await ctx.prisma.lead.findMany({
         where,

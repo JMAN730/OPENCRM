@@ -155,5 +155,18 @@ describe("teamsRouter", () => {
       await caller.teams.promoteRole({ userId: "some-user", role: "USER" });
       expect(prisma.user.update).toHaveBeenCalled();
     });
+
+    it("blocks a MANAGER from demoting a peer MANAGER (#187-3)", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "MANAGER" },
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: "peer-manager", role: "MANAGER" });
+
+      await expect(
+        caller.teams.promoteRole({ userId: "peer-manager", role: "USER" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
   });
 });

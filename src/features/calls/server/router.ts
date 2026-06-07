@@ -94,8 +94,15 @@ export const callsRouter = createTRPCRouter({
     }),
 
   getRecent: organizationProcedure.query(({ ctx }) => {
+    // Scope to the caller's own calls — the Dialer's "recent calls" is a
+    // personal list, not the org-wide call history. The OR also keeps
+    // lead-less calls (dialing a raw number passes no leadId) which an inner
+    // join on `lead` would silently drop (#185-2).
     return ctx.prisma.callLog.findMany({
-      where: { lead: { organizationId: ctx.organizationId } },
+      where: {
+        userId: ctx.session.user.id,
+        OR: [{ leadId: null }, { lead: { organizationId: ctx.organizationId } }],
+      },
       take: 10,
       orderBy: { createdAt: "desc" },
       include: {

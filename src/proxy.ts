@@ -10,6 +10,11 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/auth", // NextAuth's own session endpoints
   "/api/health", // health probe (when/if added)
   "/api/twilio/voice", // Twilio Voice webhook for browser outbound calls
+  "/api/webhooks", // Resend webhook (verified by Svix signature, fail-closed)
+  "/api/cron", // scheduled jobs (CRON_SECRET, timing-safe compare, fail-closed)
+  "/t", // email open/click tracking (token-keyed + IP rate-limited + idempotent)
+  "/demo", // prospect-facing demo sites (read-only slug lookup)
+  "/unsubscribe", // CAN-SPAM opt-out (unsubscribe token) — recipients have no session
 ];
 
 // tRPC procedures we explicitly allow without an authenticated session.

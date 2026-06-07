@@ -33,7 +33,11 @@ export function validateCanSpam(params: {
 }): string[] {
   const errors: string[] = [];
   if (!params.subject.trim()) errors.push("Subject is required.");
-  if (!params.body.includes(params.physicalAddress)) {
+  // Fail closed when no address is configured: `body.includes("")` is always
+  // true, which would let a non-compliant email through (#185-4).
+  if (!params.physicalAddress.trim()) {
+    errors.push("A physical mailing address must be configured (SENDER_PHYSICAL_ADDRESS).");
+  } else if (!params.body.includes(params.physicalAddress)) {
     errors.push("Email must include your physical mailing address.");
   }
   if (!params.body.includes(params.unsubscribeUrl)) {

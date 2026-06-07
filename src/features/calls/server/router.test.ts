@@ -155,13 +155,18 @@ describe("callsRouter", () => {
   });
 
   describe("getRecent", () => {
-    it("filters by org and limits to 10", async () => {
+    it("scopes to the caller's own calls, keeps lead-less calls, and limits to 10", async () => {
       prisma.callLog.findMany.mockResolvedValue([]);
 
       await caller.calls.getRecent();
 
       const args = prisma.callLog.findMany.mock.calls[0][0];
-      expect(args.where).toEqual({ lead: { organizationId: "org-1" } });
+      // Personal list: scoped by the caller's userId, not org-wide. The OR
+      // keeps lead-less (raw-number) calls that an inner join would drop.
+      expect(args.where).toEqual({
+        userId: "user-1",
+        OR: [{ leadId: null }, { lead: { organizationId: "org-1" } }],
+      });
       expect(args.take).toBe(10);
       expect(args.orderBy).toEqual({ createdAt: "desc" });
     });
