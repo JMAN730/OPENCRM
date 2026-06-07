@@ -101,9 +101,11 @@ export async function POST(req: NextRequest): Promise<Response> {
           if (delta) controller.enqueue(sse({ content: delta }));
         }
       } catch (err) {
-        controller.enqueue(
-          sse({ error: err instanceof Error ? err.message : "AI request failed." }),
-        );
+        // Log the real error server-side; never stream raw provider/error
+        // details (which may include keys, model internals, or upstream
+        // payloads) back to the client.
+        console.error("AI chat stream error:", err);
+        controller.enqueue(sse({ error: "AI request failed. Please try again." }));
       } finally {
         controller.enqueue(DONE);
         controller.close();
