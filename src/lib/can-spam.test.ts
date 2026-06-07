@@ -46,4 +46,17 @@ describe("validateCanSpam", () => {
     });
     expect(errors).toEqual([]);
   });
+
+  it("fails closed when the physical address is empty (body.includes('') is always true)", () => {
+    const unsub = "https://app.example.com/unsubscribe/x";
+    const errors = validateCanSpam({
+      subject: "Quick question",
+      body: `Hello\nUnsubscribe: ${unsub}`,
+      physicalAddress: "   ",
+      unsubscribeUrl: unsub,
+    });
+    expect(errors).toContain(
+      "A physical mailing address must be configured (SENDER_PHYSICAL_ADDRESS).",
+    );
+  });
 });

@@ -10,8 +10,8 @@ const statusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]);
 export const tasksRouter = createTRPCRouter({
   create: organizationProcedure
     .input(z.object({
-      title: z.string().min(1),
-      description: z.string().optional(),
+      title: z.string().min(1).max(255),
+      description: z.string().max(5000).optional(),
       leadId: z.string().optional(),
       assignedToId: z.string().optional(),
       dueDate: z.coerce.date().optional(),
@@ -69,8 +69,8 @@ export const tasksRouter = createTRPCRouter({
   update: organizationProcedure
     .input(z.object({
       taskId: z.string(),
-      title: z.string().min(1).optional(),
-      description: z.string().optional(),
+      title: z.string().min(1).max(255).optional(),
+      description: z.string().max(5000).optional(),
       assignedToId: z.string().nullable().optional(),
       leadId: z.string().nullable().optional(),
       dueDate: z.coerce.date().nullable().optional(),
