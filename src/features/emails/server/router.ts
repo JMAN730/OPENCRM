@@ -158,7 +158,7 @@ Unsubscribe: ${unsub}`;
     .input(z.object({
       id: z.string(),
       subject: z.string().min(1).max(255),
-      body: z.string().min(1),
+      body: z.string().min(1).max(50000),
     }))
     .mutation(async ({ ctx, input }) => {
       const draft = await ctx.prisma.emailDraft.findFirst({
