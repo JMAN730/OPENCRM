@@ -226,14 +226,15 @@ export const teamsRouter = createTRPCRouter({
         select: { id: true, role: true },
       });
       if (!target) throw new TRPCError({ code: "NOT_FOUND" });
-      // Caller must outrank (or equal) the target's current role.
+      // Non-admins must strictly outrank the target's current role — they cannot
+      // modify a peer or superior. ADMINs are exempt (they may manage other admins).
       // ROLE_VALUES: ADMIN=0 (highest), MANAGER=1, USER=2 (lowest).
       const callerIdx = ROLE_VALUES.indexOf(ctx.session.user.role as typeof ROLE_VALUES[number]);
       const targetIdx = ROLE_VALUES.indexOf(target.role as typeof ROLE_VALUES[number]);
-      if (callerIdx > targetIdx) {
+      if (!isAdmin(ctx.session.user.role) && callerIdx >= targetIdx) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "Cannot modify a user of higher rank.",
+          message: "Cannot modify a user of equal or higher rank.",
         });
       }
       return ctx.prisma.user.update({

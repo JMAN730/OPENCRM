@@ -987,6 +987,19 @@ describe("leadsRouter", () => {
       // Plain value should NOT be quoted
       expect(dataRow).toContain(",normal,");
     });
+
+    it("rejects exporting a colleague's leads outside the caller's scope", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      userPrisma.team.findMany.mockResolvedValue([]); // not a team leader → scope = self only
+
+      await expect(
+        userCaller.leads.export({ assignedToId: "colleague-1" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(userPrisma.lead.findMany).not.toHaveBeenCalled();
+    });
   });
 
   describe("bulkSetTemperature", () => {

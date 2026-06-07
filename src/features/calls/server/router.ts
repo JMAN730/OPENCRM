@@ -95,7 +95,10 @@ export const callsRouter = createTRPCRouter({
 
   getRecent: organizationProcedure.query(({ ctx }) => {
     return ctx.prisma.callLog.findMany({
-      where: { lead: { organizationId: ctx.organizationId } },
+      where: {
+        userId: ctx.session.user.id,
+        OR: [{ leadId: null }, { lead: { organizationId: ctx.organizationId } }],
+      },
       take: 10,
       orderBy: { createdAt: "desc" },
       include: {

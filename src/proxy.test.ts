@@ -41,6 +41,20 @@ describe("proxy", () => {
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
+  it.each([
+    "/api/webhooks/resend",
+    "/api/cron/scraper",
+    "/t/abc123",
+    "/demo/some-slug",
+    "/unsubscribe/sometoken",
+  ])("bypasses the public endpoint %s without checking a token", async (path) => {
+    const response = await proxy(new NextRequest(`http://localhost${path}`));
+
+    expect(mockGetToken).not.toHaveBeenCalled();
+    expect(getRedirectUrl(response)).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("redirects unauthenticated protected pages to sign-in", async () => {
     mockGetToken.mockResolvedValue(null);
 

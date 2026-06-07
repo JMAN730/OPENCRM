@@ -155,13 +155,16 @@ describe("callsRouter", () => {
   });
 
   describe("getRecent", () => {
-    it("filters by org and limits to 10", async () => {
+    it("filters by the calling user and includes lead-less calls, limited to 10", async () => {
       prisma.callLog.findMany.mockResolvedValue([]);
 
       await caller.calls.getRecent();
 
       const args = prisma.callLog.findMany.mock.calls[0][0];
-      expect(args.where).toEqual({ lead: { organizationId: "org-1" } });
+      expect(args.where).toEqual({
+        userId: "user-1",
+        OR: [{ leadId: null }, { lead: { organizationId: "org-1" } }],
+      });
       expect(args.take).toBe(10);
       expect(args.orderBy).toEqual({ createdAt: "desc" });
     });

@@ -1128,7 +1128,13 @@ export const leadsRouter = createTRPCRouter({
         where.status = input.status;
         where.callOutcome = { not: "CUSTOM" };
       }
-      if (input.assignedToId) where.assignedToId = input.assignedToId;
+      if (input.assignedToId) {
+        const visibleUsers = baseScope.kind === "all" ? null : baseScope.userIds;
+        if (visibleUsers && !visibleUsers.includes(input.assignedToId)) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        where.assignedToId = input.assignedToId;
+      }
 
       const leads = await ctx.prisma.lead.findMany({
         where,

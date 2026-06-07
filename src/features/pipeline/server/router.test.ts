@@ -358,3 +358,35 @@ describe("pipelineRouter.updateDealValue (scope)", () => {
     expect(prisma.lead.update).not.toHaveBeenCalled();
   });
 });
+
+describe("pipelineRouter.getBoard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("scopes the board's nested leads to the caller's visible users for a USER", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.team.findMany.mockResolvedValue([]); // not a team leader → scope = self only
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({
+      organizationId: "org-1",
+      assignedToId: { in: ["user-1"] },
+    });
+  });
+
+  it("does not scope by assignee for an ADMIN", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({ organizationId: "org-1" });
+  });
+});
