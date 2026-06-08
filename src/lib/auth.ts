@@ -22,6 +22,7 @@ type CachedUser = {
   organizationId: string | null;
   teamId: string | null;
   loadingAnimationMode: LoadingAnimationMode;
+  sessionVersion: number;
 };
 
 type LoadingAnimationMode = "ALWAYS" | "ONCE_DAILY" | "OFF";
@@ -47,6 +48,9 @@ async function readCachedUser(userId: string): Promise<CachedUser | null> {
     const parsed = JSON.parse(raw) as CachedUser;
     if (!parsed?.id) return null;
     if (!("name" in parsed)) return null;
+    // Reject pre-feature cache entries that lack sessionVersion so we fall
+    // back to a DB read and never compare a token against an undefined value.
+    if (typeof parsed.sessionVersion !== "number") return null;
     return {
       ...parsed,
       loadingAnimationMode: normalizeLoadingAnimationMode(parsed.loadingAnimationMode),
@@ -72,7 +76,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
   });
   if (!dbUser) return null;
 
@@ -84,6 +88,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
     organizationId: dbUser.organizationId,
     teamId: dbUser.teamId,
     loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
+    sessionVersion: dbUser.sessionVersion ?? 0,
   };
   await writeCachedUser(snapshot);
   return snapshot;
@@ -173,7 +178,7 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: (user.email ?? "").toLowerCase() || undefined },
-            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
           });
           if (dbUser) {
             token.id = dbUser.id;
@@ -183,6 +188,7 @@ export const authOptions: NextAuthOptions = {
             token.organizationId = dbUser.organizationId;
             token.teamId = dbUser.teamId;
             token.loadingAnimationMode = normalizeLoadingAnimationMode(dbUser.loadingAnimationMode);
+            token.sessionVersion = dbUser.sessionVersion ?? 0;
             await writeCachedUser({
               id: dbUser.id,
               name: dbUser.name,
@@ -191,6 +197,7 @@ export const authOptions: NextAuthOptions = {
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
               loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
+              sessionVersion: dbUser.sessionVersion ?? 0,
             });
           }
         } catch (err) {
@@ -212,12 +219,22 @@ export const authOptions: NextAuthOptions = {
             // client gets bounced to /auth/signin on the next request.
             return {} as typeof token;
           }
+          // Revoke sessions whose credentials changed after the token was
+          // minted (CWE-613). Legacy tokens lacking sessionVersion adopt the
+          // current version rather than being force-logged-out on deploy.
+          if (
+            typeof token.sessionVersion === "number" &&
+            token.sessionVersion !== snapshot.sessionVersion
+          ) {
+            return {} as typeof token;
+          }
           token.name = snapshot.name ?? undefined;
           token.email = snapshot.email ?? undefined;
           token.role = snapshot.role;
           token.organizationId = snapshot.organizationId;
           token.teamId = snapshot.teamId;
           token.loadingAnimationMode = snapshot.loadingAnimationMode;
+          token.sessionVersion = snapshot.sessionVersion;
         } catch (err) {
           // Soft-fail: if the DB is down, keep the existing token rather
           // than locking everyone out. This is a tradeoff — a deleted
