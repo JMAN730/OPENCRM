@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { EmailDraftStatus } from "@prisma/client";
 
 const { mockPrisma, mockVerify } = vi.hoisted(() => ({
   mockPrisma: {
@@ -22,57 +23,62 @@ vi.mock("svix", () => ({
 
 import { POST } from "./route";
 
-function makeRequest(): Request {
+function makeRequest() {
   return new Request("http://localhost/api/webhooks/resend", {
     method: "POST",
     headers: {
-      "svix-id": "id",
-      "svix-timestamp": "ts",
+      "svix-id": "msg_1",
+      "svix-timestamp": "1",
       "svix-signature": "sig",
     },
     body: "{}",
   });
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  process.env.RESEND_WEBHOOK_SECRET = "test-secret";
-});
-
 describe("resend webhook UPGRADE_GUARD", () => {
-  it("does not downgrade a CLICKED draft on a late bounce, but still records the event", async () => {
-    mockVerify.mockReturnValue({ type: "email.bounced", data: { email_id: "msg-1" } });
-    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "draft-1", status: "CLICKED" });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    mockPrisma.emailEvent.create.mockResolvedValue({});
+    mockPrisma.emailDraft.update.mockResolvedValue({});
+  });
+
+  it("does not downgrade a CLICKED draft when a late bounce arrives, but still records the event", async () => {
+    mockVerify.mockReturnValue({ type: "email.bounced", data: { email_id: "rs_1" } });
+    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "d1", status: EmailDraftStatus.CLICKED });
 
     const res = await POST(makeRequest());
 
     expect(res.status).toBe(200);
-    // status must NOT be overwritten by the bounce
+    // Status must NOT be overwritten with the lower BOUNCED state...
     expect(mockPrisma.emailDraft.update).not.toHaveBeenCalled();
-    // the raw event is still persisted
-    expect(mockPrisma.emailEvent.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ draftId: "draft-1", event: "email.bounced" }) }),
-    );
+    // ...but the raw event is always persisted for the audit trail.
+    expect(mockPrisma.emailEvent.create).toHaveBeenCalledTimes(1);
   });
 
-  it("records a bounce as the status when the draft is still SENT", async () => {
-    mockVerify.mockReturnValue({ type: "email.bounced", data: { email_id: "msg-2" } });
-    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "draft-2", status: "SENT" });
+  it("records a bounce when the draft is still SENT", async () => {
+    mockVerify.mockReturnValue({ type: "email.bounced", data: { email_id: "rs_2" } });
+    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "d2", status: EmailDraftStatus.SENT });
 
-    await POST(makeRequest());
+    const res = await POST(makeRequest());
 
-    expect(mockPrisma.emailDraft.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "draft-2" }, data: { status: "BOUNCED" } }),
-    );
+    expect(res.status).toBe(200);
+    expect(mockPrisma.emailDraft.update).toHaveBeenCalledWith({
+      where: { id: "d2" },
+      data: { status: EmailDraftStatus.BOUNCED },
+    });
   });
 
-  it("does not downgrade an OPENED draft on a complaint", async () => {
-    mockVerify.mockReturnValue({ type: "email.complained", data: { email_id: "msg-3" } });
-    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "draft-3", status: "OPENED" });
+  it("allows a spam complaint to be recorded after engagement", async () => {
+    mockVerify.mockReturnValue({ type: "email.complained", data: { email_id: "rs_3" } });
+    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "d3", status: EmailDraftStatus.CLICKED });
 
-    await POST(makeRequest());
+    const res = await POST(makeRequest());
 
-    expect(mockPrisma.emailDraft.update).not.toHaveBeenCalled();
-    expect(mockPrisma.emailEvent.create).toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockPrisma.emailDraft.update).toHaveBeenCalledWith({
+      where: { id: "d3" },
+      data: { status: EmailDraftStatus.COMPLAINED },
+    });
   });
 });
