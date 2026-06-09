@@ -91,6 +91,35 @@ docker compose --profile proxy up --build -d
 
 The migration container runs `prisma db push` before the app starts so the schema stays aligned with the current Prisma model.
 
+## Supabase (managed Postgres)
+
+Supabase is just managed PostgreSQL, so the app runs against it with no code
+changes — only connection config. Use two connection strings (both require TLS,
+hence `?sslmode=require`):
+
+```dotenv
+# Runtime — session pooler (IPv4, supports prepared statements):
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+# Migrations / db push — direct connection (DDL needs a real session, not a pooler):
+DIRECT_URL="postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=require"
+```
+
+`prisma db push` uses `DIRECT_URL`; the running app uses `DATABASE_URL`. If your
+environment lacks IPv6, point `DIRECT_URL` at the session pooler too. Redis (rate
+limiting + caching) is unaffected — Supabase has no Redis, so keep `REDIS_URL`
+pointing at your existing/external Redis, or leave it unset (it fails open).
+
+Migrate existing data from a self-hosted Postgres into Supabase (run against the
+direct connection — COPY/DDL won't work over a transaction pooler):
+
+```bash
+pg_dump "$OLD_DATABASE_URL" --schema=public --no-owner --no-acl -f opencrm-dump.sql
+psql "$DIRECT_URL" -f opencrm-dump.sql
+DIRECT_URL="$DIRECT_URL" npx prisma db push   # confirms schema is in sync
+```
+
+A fresh database instead just needs `npx prisma db push` then `npm run seed`.
+
 ## Project structure
 
 ```text
