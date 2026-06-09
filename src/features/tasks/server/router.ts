@@ -29,6 +29,16 @@ export const tasksRouter = createTRPCRouter({
         }
       }
 
+      if (input.assignedToId) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
+        }
+      }
+
       const task = await ctx.prisma.task.create({
         data: {
           title: input.title,
@@ -86,6 +96,26 @@ export const tasksRouter = createTRPCRouter({
       const callerRole = ctx.session.user.role;
       if (task.userId !== callerId && !isManagerOrAdmin(callerRole)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
+      }
+
+      if (input.leadId) {
+        const lead = await ctx.prisma.lead.findUnique({
+          where: { id: input.leadId },
+          select: { organizationId: true },
+        });
+        if (!lead || lead.organizationId !== ctx.organizationId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+        }
+      }
+
+      if (input.assignedToId) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Assignee not in this organization." });
+        }
       }
 
       // Derive status from the legacy completed boolean if status wasn't provided

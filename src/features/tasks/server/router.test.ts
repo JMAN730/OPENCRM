@@ -39,12 +39,26 @@ describe("tasksRouter", () => {
     });
 
     it("uses provided assignedToId when specified", async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: "user-2" });
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.create({ title: "Delegate task", assignedToId: "user-2" });
 
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { id: "user-2", organizationId: "org-1" },
+        select: { id: true },
+      });
       const data = prisma.task.create.mock.calls[0][0].data;
       expect(data.assignedToId).toBe("user-2");
+    });
+
+    it("refuses an assignee outside the organization", async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.tasks.create({ title: "x", assignedToId: "foreign-user" })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(prisma.task.create).not.toHaveBeenCalled();
     });
 
     it("checks lead org ownership when leadId is supplied", async () => {
@@ -162,6 +176,40 @@ describe("tasksRouter", () => {
       await expect(
         caller.tasks.update({ taskId: "t1", dueDate: "not-a-date" })
       ).rejects.toThrow();
+    });
+
+    it("verifies a new leadId belongs to the caller's org", async () => {
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1", leadId: null, title: "t" });
+      prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1" });
+      prisma.task.update.mockResolvedValue({ id: "t1", title: "t" });
+
+      await caller.tasks.update({ taskId: "t1", leadId: "lead-1" });
+
+      expect(prisma.lead.findUnique).toHaveBeenCalledWith({
+        where: { id: "lead-1" },
+        select: { organizationId: true },
+      });
+      expect(prisma.task.update).toHaveBeenCalled();
+    });
+
+    it("refuses re-linking the task to another org's lead", async () => {
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1", leadId: null, title: "t" });
+      prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", leadId: "foreign-lead" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses reassigning to a user outside the organization", async () => {
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "user-1", leadId: null, title: "t" });
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", assignedToId: "foreign-user" })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(prisma.task.update).not.toHaveBeenCalled();
     });
 
     it("passes status=PENDING through to Prisma on status update", async () => {

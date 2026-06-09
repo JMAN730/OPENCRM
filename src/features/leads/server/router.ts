@@ -226,20 +226,12 @@ export const leadsRouter = createTRPCRouter({
         });
       }
 
+      // No LEAD_DELETED activity is recorded: Activity.leadId is a required
+      // FK that cascades with the lead, so such a row can never outlive the
+      // deletion it would describe.
       const result = await ctx.prisma.lead.deleteMany({
         where: { id: { in: input.leadIds } },
       });
-
-      await Promise.all(
-        input.leadIds.map((leadId) =>
-          logActivity(ctx.prisma, {
-            leadId,
-            userId,
-            type: "LEAD_DELETED",
-            description: "Deleted lead",
-          }),
-        ),
-      );
 
       return { count: result.count };
     }),
