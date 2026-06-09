@@ -25,7 +25,6 @@ import {
   chunk,
   LEAD_VISIBLE_COLUMNS,
   scoreOf,
-  SessionUser,
   STAGE_ORDER,
   type AssignableUser,
   type Lead,
@@ -122,7 +121,7 @@ export function LeadsList() {
   }, [leadIdFromQuery, replaceLeadsRoute]);
 
   const { data: session } = useSession();
-  const sessionUser = session?.user as SessionUser | undefined;
+  const sessionUser = session?.user;
   const currentUserId = sessionUser?.id ?? null;
   const userRole = sessionUser?.role;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";

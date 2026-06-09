@@ -482,7 +482,7 @@ export function PipelineBoard() {
   if (!data) return null;
 
   const { stages } = data;
-  const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
+  const userId = session?.user?.id ?? "";
 
   function filterLeads(leads: Lead[]): Lead[] {
     if (activeFilter === "mine")    return leads.filter((l) => l.assignedTo?.id === userId);

@@ -7,7 +7,7 @@ import { TeamOverview } from "./team-page/TeamOverview";
 
 export function TeamPage() {
   const { data: session } = useSession();
-  const role = (session?.user as { role?: string } | undefined)?.role;
+  const role = session?.user?.role;
   const isAdmin = role === "ADMIN";
   const callerId = session?.user?.id;
 

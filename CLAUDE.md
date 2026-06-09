@@ -20,6 +20,7 @@ npm test             # Run all tests once (vitest run)
 npm run test:watch   # Run tests in watch mode
 npm run test:coverage  # Run tests with coverage
 npx vitest src/features/leads/components/LeadsList.test.tsx  # Run a single test file
+npm run test:e2e     # Playwright e2e (run npm run build first; serves the standalone build on http://127.0.0.1:3100)
 
 npm run tauri:dev    # Tauri desktop wrapper (WIP — see convention #9)
 npm run tauri:build  # Build Tauri desktop app
@@ -79,7 +80,7 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 - **Procedures**:
   - `publicProcedure` — unauthenticated (auth endpoints only)
   - `protectedProcedure` — throws `UNAUTHORIZED` if no valid session
-  - `organizationProcedure` — extends `protectedProcedure`; additionally throws `UNAUTHORIZED` if `organizationId` is missing from the session
+  - `organizationProcedure` — extends `protectedProcedure`; additionally throws `INTERNAL_SERVER_ERROR` ("User has no organization.") if `organizationId` is missing from the session, and exposes it as `ctx.organizationId`
 - **Root router** (`src/server/api/root.ts`): merges all feature routers.
 - **Client** (`src/app/_trpc/client.ts`): typed `trpc` hook object, imported in any client component.
 - **Provider** (`src/app/_trpc/Provider.tsx` + `src/components/Providers.tsx`): wraps the app in `SessionProvider` → `TRPCProvider` → `QueryClientProvider`.
@@ -99,6 +100,8 @@ appRouter = {
   teams:     teamsRouter,     // team CRUD + memberships + email-token invitations
   scoring:   scoringRouter,   // lead-scoring rule CRUD
   websites:  websitesRouter,  // template-based per-lead site generator
+  pipeline:  pipelineRouter,  // kanban deal board (auto-creates default "Sales" pipeline + stages)
+  analytics: analyticsRouter, // org-wide analytics overview (per-day buckets + breakdowns)
 }
 ```
 
@@ -119,7 +122,7 @@ appRouter = {
 - **Google OAuth**: enabled when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set.
 - **Auth snapshot caching**: session data is cached in Redis (60s TTL) to reduce DB round-trips on every request. Cache is bypassed gracefully when Redis is unavailable.
 - **Rate limiting on auth**: `register` and `resetPassword` are rate-limited by IP via `lib/rateLimit.ts`.
-- All `protectedProcedure` / `organizationProcedure` handlers read `ctx.session.user` (cast to `any` for extended fields where TypeScript doesn't infer them from context).
+- All `protectedProcedure` / `organizationProcedure` handlers read `ctx.session.user`, which is fully typed (`id`, `role`, `organizationId`, `teamId`) via the module augmentation in `src/types/next-auth.d.ts` — no casts needed.
 
 ### Role-based authorization
 
@@ -141,8 +144,8 @@ Every organization-scoped model (`Lead`, `ScraperJob`, `LeadTag`, `Team`, `Pipel
 ```typescript
 // Pattern used in every organizationProcedure query
 where: { organizationId: ctx.organizationId }
-// or using the cast pattern in protectedProcedure:
-where: { organizationId: (ctx.session.user as any).organizationId }
+// or in protectedProcedure (organizationId is string | null there — guard it):
+where: { organizationId: ctx.session.user.organizationId }
 ```
 
 ### Team-based lead scoping
@@ -191,12 +194,15 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Feature | Page route | tRPC namespace | Components | Status |
 |---------|-----------|---------------|-----------|--------|
 | Dashboard | `/dashboard` | `dashboard` | KPI cards, recent calls, upcoming tasks | Implemented |
-| Leads | `/leads` | `leads` | `LeadsList`, `LeadDetailsModal`, `ImportLeadsDialog` | Implemented |
+| Leads | `/leads` | `leads` | `LeadsList`, `lead-list/LeadModal`, `ImportLeadsDialog` | Implemented |
 | Dialer | `/dialer` | `calls` | `Dialer` (keypad + call sim) | Implemented |
 | Tasks | `/tasks` | `tasks` | `TasksList` | Implemented |
+| Calendar | `/calendar` | `tasks.getCalendar` | calendar page (`src/app/calendar/page.tsx`; no dedicated router) | Implemented |
+| Pipeline | `/pipeline` | `pipeline` | `PipelineBoard` (kanban) | Implemented |
 | Scraper | `/scraper` | `scraper` | `ScraperPanel`, `StartJobForm`, `JobsTable`, `JobDetailDialog` | Implemented |
 | Teams | `/team`, `/team/[userId]` | `teams` | `TeamPage`, `TeamMemberDetail` | Implemented |
-| Analytics | `/analytics` | — | — | Stub |
+| Analytics | `/analytics` | `analytics` | analytics page (leads/calls per day, touch depth, sources, temperature) | Implemented |
+| Websites | — (opens from `LeadModal`) | `websites` | `WebsiteGeneratorDialog` | Implemented |
 | Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail` | Profile + Members tabs only | Implemented |
 
 ### Key tRPC procedures per namespace
@@ -212,12 +218,14 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | `teams` | `list`, `organizationMembers`, `myTeam`, `activityFeed`, `memberDetail`, `create`, `update`, `delete`, `setMembership`, `inviteByEmail`, `listInvitations`, `revokeInvitation`, `getInvitation`, `acceptInvitation` |
 | `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
 | `websites` | `getForLead`, `generate`, `update`, `delete` |
+| `pipeline` | `getBoard`, `moveLead`, `createDeal` |
+| `analytics` | `overview` |
 
 ---
 
 ## Database
 
-Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Uses `prisma db push` (no migration history). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. The `docker-entrypoint.sh` runs `prisma db push --skip-generate` on container start so the schema is always synced.
+Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Day-to-day schema sync uses `prisma db push` — there is no `prisma migrate` history, but `prisma/migrations/` holds a few hand-written reconciliation SQL files. Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. In Docker, schema sync happens in the `migrate` sidecar service in `docker-compose.yml` (runs the reconciliation SQL via `prisma db execute || true`, then `prisma db push`; the app service waits for it to complete). `docker-entrypoint.sh` itself only runs `node server.js`.
 
 FK relations use `onDelete: Cascade` for owned rows (e.g. deleting a `Lead` removes its `CallLog`/`Note`/`Activity`/`Task`) and `onDelete: SetNull` where the parent is optional context (e.g. `assignedTo` on `Lead`).
 
@@ -248,7 +256,7 @@ NextAuth tables (`Account`, `Session`, `VerificationToken`) also live in the sch
 | `CallOutcome` | `NOT_CONTACTED`, `ANSWERED`, `HUNG_UP`, `NO_ANSWER`, `AI_VOICEMAIL` (denormalized onto `Lead`) |
 | `ScraperJobStatus` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` |
 
-`Pipeline` / `PipelineStage` exist in the schema but are not yet surfaced in the UI.
+`Pipeline` / `PipelineStage` are surfaced at `/pipeline` via `pipelineRouter`; a default "Sales" pipeline with its stages is auto-created/repaired on first `getBoard`.
 
 ### Key indexes
 
@@ -314,16 +322,27 @@ Test files live in two patterns:
 | `src/features/scraper/server/router.test.ts` | Scraper job procedures |
 | `src/features/dashboard/server/router.test.ts` | KPI stats + caching |
 | `src/features/teams/server/router.test.ts` | Team CRUD + membership |
+| `src/features/pipeline/server/router.test.ts` | Pipeline board procedures |
+| `src/server/scraper/runner.test.ts` | Scraper job runner + reconciliation |
 | `src/features/leads/components/LeadsList.test.tsx` | LeadsList component |
-| `src/features/leads/components/LeadDetailsModal.test.tsx` | LeadDetailsModal component |
+| `src/features/leads/components/lead-list/LeadModal.test.tsx` | LeadModal component |
+| `src/features/leads/components/lead-list/shared.test.ts` | Lead-list shared helpers |
+| `src/features/leads/components/lead-list/focus-view-model.test.ts` | Focus view model |
+| `src/features/leads/location.test.ts` | Lead location helpers |
 | `src/features/calls/components/Dialer.test.tsx` | Dialer component |
 | `src/features/tasks/components/TasksList.test.tsx` | TasksList component |
+| `src/app/tasks/page.test.tsx` | Tasks page |
+| `src/app/tasks/task-summary.test.ts` | Task summary helpers |
 | `src/app/auth/signin/__tests__/page.test.tsx` | Sign-in page |
 | `src/proxy.test.ts` | Auth proxy boundary |
 
 Coverage thresholds (vitest.config.ts): 60% lines/functions, 50% branches for routers and scraper utilities.
 
 Test mocks include: ioredis (graceful failure), IntersectionObserver, PointerEvent (jsdom gaps).
+
+### Playwright e2e
+
+`playwright.config.ts` (chromium only, 1 worker) serves the standalone production build on `http://127.0.0.1:3100` — run `npm run build` first, or set `PLAYWRIGHT_SKIP_WEBSERVER=1` to reuse an already-running server. The spec (`e2e/crm.spec.ts`, outside `src/` so vitest ignores it) forges a `next-auth.session-token` JWT and route-mocks tRPC responses, so no database is needed.
 
 ---
 
@@ -397,10 +416,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 2. **Use `organizationProcedure`** for org-scoped operations; `protectedProcedure` only when org context is not needed; `publicProcedure` only for auth endpoints.
 3. **Validate all inputs with Zod** before business logic in every procedure.
 4. **Register new routers** in `src/server/api/root.ts` — the root router is the single source of truth.
-5. **Use `prisma db push`**, not `prisma migrate` — there is no migration history.
+5. **Use `prisma db push`** for day-to-day schema sync — do not run `prisma migrate dev`. `prisma/migrations/` holds hand-written reconciliation SQL applied by the docker `migrate` sidecar, not a `prisma migrate` history.
 6. **Add pages** under `src/app/<section>/page.tsx` and mark them `"use client"` if they use tRPC hooks or browser APIs.
 7. **Use the existing `src/components/ui/` primitives** (`@base-ui/react` wrappers) before writing new ones — the convention is shared even if the underlying library isn't shadcn.
-8. **Session user fields** (`id`, `role`, `organizationId`, `teamId`) require a cast: `(ctx.session.user as any).organizationId`. Use `ctx.organizationId` in `organizationProcedure` context directly.
+8. **Session user fields** (`id`, `role`, `organizationId`, `teamId`) are fully typed via the module augmentation in `src/types/next-auth.d.ts` — never cast `session.user`, on the server or in client components. Prefer `ctx.organizationId` inside `organizationProcedure`.
 9. **Desktop app**: `src-tauri/` contains a WIP Tauri wrapper — do not modify it unless explicitly asked.
 10. **Scraper jobs** are tracked in-memory; do not rely on job status surviving a server restart without querying the DB.
 11. **Role checks**: use helpers from `src/server/authz.ts` (`assertAdmin`, `isManagerOrAdmin`, etc.) rather than inline role string comparisons.

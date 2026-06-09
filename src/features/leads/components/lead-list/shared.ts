@@ -41,11 +41,6 @@ export type Lead = {
   } | null;
 };
 
-export type SessionUser = {
-  id?: string;
-  role?: string;
-};
-
 export type LeadNote = {
   id: string;
   content: string;

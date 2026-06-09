@@ -34,7 +34,7 @@ export default function SettingsPage() {
     },
   });
 
-  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const userRole = session?.user?.role;
   const isAdmin = userRole === "ADMIN";
 
   const { data: members = [], isLoading: membersLoading } = trpc.teams.organizationMembers.useQuery(

@@ -66,7 +66,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
   const pathname = usePathname();
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
-  const userRole = (session?.user as { role?: string })?.role ?? "";
+  const userRole = session?.user?.role ?? "";
 
   const { data: counts } = trpc.dashboard.sidebarCounts.useQuery(
     undefined,

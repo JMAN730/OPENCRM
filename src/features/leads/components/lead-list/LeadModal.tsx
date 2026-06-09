@@ -43,7 +43,6 @@ import {
   relativeTime,
   reviewSummary,
   scoreOf,
-  SessionUser,
   tempLabel,
   type AssignableUser,
   type Lead,
@@ -205,7 +204,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const activityRef = useRef<HTMLDivElement | null>(null);
 
   const { data: session } = useSession();
-  const userRole = (session?.user as SessionUser | undefined)?.role;
+  const userRole = session?.user?.role;
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   const { data: notesRaw } = trpc.leads.getNotes.useQuery({ leadId: lead.id });
@@ -315,7 +314,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     },
     onError: (error) => toast.error(error.message),
   });
-  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
+  const currentUserId = session?.user?.id;
 
   useEffect(() => {
     if (!outcomeOpen) return;
