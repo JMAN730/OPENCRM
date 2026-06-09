@@ -12,11 +12,16 @@ const STATUS_MAP: Record<string, EmailDraftStatus> = {
 const UPGRADE_GUARD: Partial<Record<EmailDraftStatus, EmailDraftStatus[]>> = {
   [EmailDraftStatus.OPENED]: [EmailDraftStatus.SENT],
   [EmailDraftStatus.CLICKED]: [EmailDraftStatus.SENT, EmailDraftStatus.OPENED],
-  // A late bounce/complaint must not downgrade a more-engaged status
-  // (OPENED/CLICKED). Only promote from SENT; the emailEvent row below is
-  // recorded unconditionally either way so the raw signal isn't lost.
+  // A hard bounce only makes sense at delivery time; a late "bounce" arriving
+  // after the recipient already engaged must not downgrade OPENED/CLICKED.
   [EmailDraftStatus.BOUNCED]: [EmailDraftStatus.SENT],
-  [EmailDraftStatus.COMPLAINED]: [EmailDraftStatus.SENT],
+  // A spam complaint can legitimately follow engagement, so allow it from any
+  // pre-terminal status — but still never overwrite a prior BOUNCED/COMPLAINED.
+  [EmailDraftStatus.COMPLAINED]: [
+    EmailDraftStatus.SENT,
+    EmailDraftStatus.OPENED,
+    EmailDraftStatus.CLICKED,
+  ],
 };
 
 export async function POST(req: Request) {
