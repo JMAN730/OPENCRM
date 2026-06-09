@@ -177,22 +177,29 @@ export async function importRowsToLeads(opts: {
     const key = dedupKey(company, phone);
     const existing = existingKeys.get(key);
     if (existing) {
-      const data: { rating?: number | null; reviewCount?: number | null } = {};
-      const nextRating = Number.isFinite(rating) ? rating : null;
-      const nextReviewCount = Number.isFinite(reviewCount) ? reviewCount : null;
-      if (nextRating !== null && existing.rating !== nextRating) {
-        data.rating = nextRating;
-      }
-      if (nextReviewCount !== null && existing.reviewCount !== nextReviewCount) {
-        data.reviewCount = nextReviewCount;
-      }
-      if (Object.keys(data).length > 0) {
-        toUpdate.push({ id: existing.id, data });
-        existingKeys.set(key, {
-          ...existing,
-          rating: data.rating ?? existing.rating,
-          reviewCount: data.reviewCount ?? existing.reviewCount,
-        });
+      // existing.id === "" marks a placeholder for a row seen earlier in THIS
+      // same batch — it isn't a persisted lead, so there's nothing to update
+      // (and issuing prisma.lead.update with id "" would throw). Just count it
+      // as a duplicate; the first occurrence already carried its review data
+      // into the insert.
+      if (existing.id) {
+        const data: { rating?: number | null; reviewCount?: number | null } = {};
+        const nextRating = Number.isFinite(rating) ? rating : null;
+        const nextReviewCount = Number.isFinite(reviewCount) ? reviewCount : null;
+        if (nextRating !== null && existing.rating !== nextRating) {
+          data.rating = nextRating;
+        }
+        if (nextReviewCount !== null && existing.reviewCount !== nextReviewCount) {
+          data.reviewCount = nextReviewCount;
+        }
+        if (Object.keys(data).length > 0) {
+          toUpdate.push({ id: existing.id, data });
+          existingKeys.set(key, {
+            ...existing,
+            rating: data.rating ?? existing.rating,
+            reviewCount: data.reviewCount ?? existing.reviewCount,
+          });
+        }
       }
       skipped++;
       continue;

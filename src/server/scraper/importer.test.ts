@@ -181,6 +181,32 @@ describe("importRowsToLeads", () => {
     expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
   });
 
+  it("does not crash on same-company+phone batch rows that differ only by fingerprint", async () => {
+    // Two rows share company+phone (so the same dedupKey) but have different
+    // Google Maps URLs (so different fingerprints) and fresher review data on
+    // the second. The second must not be turned into an update against the
+    // first row's empty placeholder id.
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
+
+    const result = await importRowsToLeads({
+      rows: [
+        { Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme-1", Rating: "4.1", ReviewCount: "10" },
+        { Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme-2", Rating: "4.8", ReviewCount: "99" },
+      ],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    expect(result).toEqual({ inserted: 1, skipped: 1 });
+    expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
+    // The in-batch duplicate must never produce an update with an empty id.
+    for (const call of mockPrisma.lead.update.mock.calls) {
+      expect(call[0].where.id).not.toBe("");
+    }
+  });
+
   it("builds source string from category and location when present", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
