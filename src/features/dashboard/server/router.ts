@@ -315,7 +315,7 @@ export const dashboardRouter = createTRPCRouter({
 
     const customLabels = customIds.length > 0
       ? await ctx.prisma.customOutcome.findMany({
-          where: { id: { in: customIds } },
+          where: { id: { in: customIds }, organizationId },
           select: { id: true, label: true },
         })
       : [];
