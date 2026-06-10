@@ -62,14 +62,28 @@ export const scoringRouter = createTRPCRouter({
 
     if (existing.length > 0) return existing;
 
-    // Seed defaults on first access
-    await ctx.prisma.scoringRule.createMany({
-      data: DEFAULT_RULES.map((r) => buildCreateData(r, ctx.organizationId)),
-    });
+    // First access for this org: seed the default rule set. Wrap the
+    // check-then-insert in a transaction guarded by a Postgres advisory lock
+    // keyed on the org, so two concurrent first-accesses can't both insert the
+    // defaults — which would double every rule and silently inflate lead
+    // scores. The lock auto-releases when the transaction commits.
+    return ctx.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`scoring:${ctx.organizationId}`}))`;
 
-    return ctx.prisma.scoringRule.findMany({
-      where: { organizationId: ctx.organizationId },
-      orderBy: { sortOrder: "asc" },
+      const seeded = await tx.scoringRule.findMany({
+        where: { organizationId: ctx.organizationId },
+        orderBy: { sortOrder: "asc" },
+      });
+      if (seeded.length > 0) return seeded;
+
+      await tx.scoringRule.createMany({
+        data: DEFAULT_RULES.map((r) => buildCreateData(r, ctx.organizationId)),
+      });
+
+      return tx.scoringRule.findMany({
+        where: { organizationId: ctx.organizationId },
+        orderBy: { sortOrder: "asc" },
+      });
     });
   }),
 

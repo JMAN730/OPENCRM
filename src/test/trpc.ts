@@ -124,7 +124,18 @@ export function createMockPrisma() {
       findMany: vi.fn().mockResolvedValue([]),
       createMany: vi.fn(),
     },
+    scoringRule: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      createMany: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
+    },
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(0),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
       // Support both the array form (used by the auth router's reset
       // confirmation) and the function form (callback-style transactions).
