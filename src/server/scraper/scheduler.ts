@@ -48,6 +48,7 @@ export async function runDueSchedules(): Promise<{ triggered: number; skipped: n
           limit: schedule.limit,
           concurrency: schedule.concurrency,
           autoImport: schedule.autoImport,
+          autoOutreach: schedule.autoImport && schedule.autoOutreach,
           status: "PENDING",
         },
       });
