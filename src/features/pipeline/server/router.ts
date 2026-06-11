@@ -185,7 +185,7 @@ export const pipelineRouter = createTRPCRouter({
     }),
 
   updateDealValue: organizationProcedure
-    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(99999).nullable() }))
+    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(1_000_000_000).nullable() }))
     .mutation(async ({ ctx, input }) => {
       const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       const lead = await ctx.prisma.lead.findFirst({

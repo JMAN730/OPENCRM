@@ -70,5 +70,19 @@ describe("scriptsRouter", () => {
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
+
+    it("rejects oversized script arrays with BAD_REQUEST", async () => {
+      const tooMany = Array.from({ length: 501 }, (_, i) => ({
+        category: "Opening",
+        title: `T${i}`,
+        body: "B",
+        order: i,
+      }));
+
+      await expect(
+        caller.scripts.replaceAll({ scripts: tooMany }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
   });
 });

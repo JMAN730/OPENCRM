@@ -171,6 +171,18 @@ describe("websitesRouter", () => {
       prisma.generatedWebsite.findFirst.mockResolvedValue(null);
       await expect(caller.websites.update(updateInput)).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
+
+    it("rejects an oversized services array with BAD_REQUEST", async () => {
+      const oversized = {
+        ...updateInput,
+        content: {
+          ...updateInput.content,
+          services: Array.from({ length: 51 }, (_, i) => ({ title: `S${i}`, description: "Desc" })),
+        },
+      };
+      await expect(caller.websites.update(oversized)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(prisma.generatedWebsite.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("delete", () => {

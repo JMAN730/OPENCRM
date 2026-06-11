@@ -293,6 +293,24 @@ describe("pipelineRouter.updateDealValue", () => {
     });
     expect(prisma.lead.update).not.toHaveBeenCalled();
   });
+
+  it("accepts deal values of $100k and above (aligned with leads.update)", async () => {
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1", value: 250000 });
+
+    await caller.pipeline.updateDealValue({ leadId: "lead-1", value: 250000 });
+
+    expect(prisma.lead.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { value: 250000 } }),
+    );
+  });
+
+  it("rejects deal values above 1,000,000,000 with BAD_REQUEST", async () => {
+    await expect(
+      caller.pipeline.updateDealValue({ leadId: "lead-1", value: 1_000_000_001 }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("pipelineRouter.getBoard (scope)", () => {

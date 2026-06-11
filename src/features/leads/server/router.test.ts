@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("leadsRouter", () => {
@@ -916,6 +916,50 @@ describe("leadsRouter", () => {
           organizationId: "org-1",
         },
       });
+    });
+
+    it("does not leak the upstream provider error body when the AI request fails", async () => {
+      const originalKey = process.env.DEEPSEEK_API_KEY;
+      process.env.DEEPSEEK_API_KEY = "test-key";
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response("SECRET upstream internals: org-9999 rate-limit-bucket", { status: 429 }),
+        );
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        prisma.lead.findFirst.mockResolvedValue({
+          id: "lead-1",
+          firstName: null,
+          lastName: null,
+          company: "Acme",
+          city: "Tampa",
+          state: "FL",
+          source: "Mobile Mechanics",
+          phone: "1234567890",
+          email: null,
+          website: null,
+          rating: 4.3,
+          reviewCount: 6,
+          status: "NOT_CONTACTED",
+          callOutcome: "NOT_CONTACTED",
+          temperatureOverride: "COOL",
+        });
+
+        await expect(caller.leads.generateQualification({ id: "lead-1" })).rejects.toMatchObject({
+          code: "INTERNAL_SERVER_ERROR",
+          message: expect.not.stringContaining("SECRET"),
+        });
+        // Upstream detail is logged server-side only, never returned to the client.
+        expect(errorSpy).toHaveBeenCalled();
+        expect(prisma.lead.update).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+        errorSpy.mockRestore();
+        if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+        else process.env.DEEPSEEK_API_KEY = originalKey;
+      }
     });
   });
 

@@ -1298,7 +1298,8 @@ export const leadsRouter = createTRPCRouter({
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `DeepSeek error: ${text.slice(0, 200)}` });
+          console.error(`DeepSeek qualification request failed (${res.status}): ${text.slice(0, 500)}`);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to generate qualification. Please try again." });
         }
         const json = await res.json() as { choices: Array<{ message: { content: string } }> };
         summary = json.choices[0]?.message?.content?.trim() ?? "No qualification generated.";

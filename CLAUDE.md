@@ -65,6 +65,25 @@ SCRAPER_SCRIPT_PATH="scraper/scraper.py"
 
 # Optional – Trusted proxy (for X-Forwarded-For IP extraction)
 TRUSTED_PROXY="true"
+
+# Optional – Public app URL (used for tracking/unsubscribe/demo links)
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Optional – Outbound email (Resend) + CAN-SPAM + webhook verification
+RESEND_API_KEY="..."
+RESEND_WEBHOOK_SECRET="..."
+SENDER_PHYSICAL_ADDRESS="123 Main St, City, ST 00000"
+
+# Optional – Cron auth (scraper schedule endpoint)
+CRON_SECRET="..."
+
+# Optional – Twilio (dialer / voice)
+TWILIO_ACCOUNT_SID="..."
+TWILIO_AUTH_TOKEN="..."
+TWILIO_API_KEY="..."
+TWILIO_API_SECRET="..."
+TWILIO_PHONE_NUMBER="..."
+TWILIO_TWIML_APP_SID="..."
 ```
 
 ## Architecture
@@ -227,7 +246,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 
 ## Database
 
-Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Uses `prisma db push` (no migration history). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. The `docker-entrypoint.sh` runs `prisma db push --skip-generate` on container start so the schema is always synced.
+Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). The repo now keeps a migration history under `prisma/migrations/`. Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. Schema sync runs in the dedicated `migrate` sidecar service in `docker-compose.yml` (it applies the release-compat SQL then runs `prisma db push`); the app container's `docker-entrypoint.sh` only starts the server. For quick local iteration you can still run `npx prisma db push` directly.
 
 FK relations use `onDelete: Cascade` for owned rows (e.g. deleting a `Lead` removes its `CallLog`/`Note`/`Activity`/`Task`) and `onDelete: SetNull` where the parent is optional context (e.g. `assignedTo` on `Lead`).
 
@@ -407,7 +426,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 2. **Use `organizationProcedure`** for org-scoped operations; `protectedProcedure` only when org context is not needed; `publicProcedure` only for auth endpoints.
 3. **Validate all inputs with Zod** before business logic in every procedure.
 4. **Register new routers** in `src/server/api/root.ts` — the root router is the single source of truth.
-5. **Use `prisma db push`**, not `prisma migrate` — there is no migration history.
+5. **Schema changes** live in `prisma/migrations/` and are applied by the `migrate` compose sidecar; `npx prisma db push` is fine for quick local iteration.
 6. **Add pages** under `src/app/<section>/page.tsx` and mark them `"use client"` if they use tRPC hooks or browser APIs.
 7. **Use the existing `src/components/ui/` primitives** (`@base-ui/react` wrappers) before writing new ones — the convention is shared even if the underlying library isn't shadcn.
 8. **Session user fields** (`id`, `role`, `organizationId`, `teamId`) require a cast: `(ctx.session.user as any).organizationId`. Use `ctx.organizationId` in `organizationProcedure` context directly.
