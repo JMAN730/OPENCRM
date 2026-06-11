@@ -8,6 +8,7 @@ import { parseCityState } from "@/features/leads/location";
 export type ScrapedRow = {
   Name?: string;
   Phone?: string;
+  Email?: string;
   Website?: string;
   "Google Maps URL"?: string;
   Rating?: string;
@@ -57,6 +58,22 @@ export function applyFilter(rows: ScrapedRow[], filter?: ImportFilter): ScrapedR
 
 function normalizePhone(phone: string | null | undefined): string {
   return (phone ?? "").replace(/\D/g, "");
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+// Regex hits over page text often catch retina image filenames (logo@2x.png).
+const EMAIL_JUNK_SUFFIXES = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+
+/**
+ * The scraper sanitizes CSV cells against formula injection by prefixing a
+ * leading `'`; strip it back off, then validate so junk regex hits from the
+ * Maps panel (image filenames etc.) never land on a Lead.
+ */
+function sanitizeEmail(raw: string | undefined): string | null {
+  const email = (raw ?? "").trim().replace(/^'+/, "").toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) return null;
+  if (EMAIL_JUNK_SUFFIXES.some((suffix) => email.endsWith(suffix))) return null;
+  return email;
 }
 
 function dedupKey(company: string, phone: string | null): string {
@@ -113,9 +130,13 @@ export async function importRowsToLeads(opts: {
   organizationId: string;
   assignedToId: string;
   jobId: string;
-}): Promise<{ inserted: number; skipped: number }> {
+}): Promise<{
+  inserted: number;
+  skipped: number;
+  createdLeads: Array<{ id: string; email: string | null }>;
+}> {
   const { rows, organizationId, assignedToId, jobId } = opts;
-  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  if (rows.length === 0) return { inserted: 0, skipped: 0, createdLeads: [] };
 
   const rowFingerprints = Array.from(new Set(rows.map(rowFingerprint)));
   const alreadyImported = await prisma.scraperImportedRow.findMany({
@@ -142,6 +163,7 @@ export async function importRowsToLeads(opts: {
     fingerprint: string;
     company: string;
     phone: string | null;
+    email: string | null;
     website: string | null;
     mapsUrl: string | null;
     city: string | null;
@@ -167,6 +189,7 @@ export async function importRowsToLeads(opts: {
       continue;
     }
     const phone = (row.Phone ?? "").trim() || null;
+    const email = sanitizeEmail(row.Email);
     const website = (row.Website ?? "").trim() || null;
     const mapsUrl = (row["Google Maps URL"] ?? "").trim() || null;
     const ratingRaw = (row.Rating ?? "").trim();
@@ -215,6 +238,7 @@ export async function importRowsToLeads(opts: {
       fingerprint,
       company,
       phone,
+      email,
       website,
       mapsUrl,
       city: location.city ?? null,
@@ -227,11 +251,12 @@ export async function importRowsToLeads(opts: {
     });
   }
 
-  const result = toInsert.length
-    ? await prisma.lead.createMany({
+  const createdLeads = toInsert.length
+    ? await prisma.lead.createManyAndReturn({
         data: toInsert.map((row) => ({
           company: row.company,
           phone: row.phone,
+          email: row.email,
           website: row.website,
           mapsUrl: row.mapsUrl,
           city: row.city,
@@ -242,8 +267,9 @@ export async function importRowsToLeads(opts: {
           organizationId: row.organizationId,
           assignedToId: row.assignedToId,
         })),
+        select: { id: true, email: true },
       })
-    : { count: 0 };
+    : [];
 
   await Promise.all(
     toUpdate.map((update) =>
@@ -254,7 +280,7 @@ export async function importRowsToLeads(opts: {
     ),
   );
 
-  if (result.count > 0) {
+  if (createdLeads.length > 0) {
     await prisma.scraperImportedRow.createMany({
       data: toInsert.map((row) => ({
         jobId,
@@ -267,9 +293,9 @@ export async function importRowsToLeads(opts: {
     });
     await prisma.scraperJob.update({
       where: { id: jobId },
-      data: { importedCount: { increment: result.count } },
+      data: { importedCount: { increment: createdLeads.length } },
     });
   }
 
-  return { inserted: result.count, skipped };
+  return { inserted: createdLeads.length, skipped, createdLeads };
 }

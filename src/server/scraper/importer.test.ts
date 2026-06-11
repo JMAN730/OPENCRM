@@ -8,7 +8,7 @@ const { mockPrisma } = vi.hoisted(() => ({
     lead: {
       findMany: vi.fn(),
       update: vi.fn(),
-      createMany: vi.fn(),
+      createManyAndReturn: vi.fn(),
     },
     scraperJob: {
       update: vi.fn(),
@@ -107,7 +107,11 @@ describe("importRowsToLeads", () => {
     vi.clearAllMocks();
     mockPrisma.lead.findMany.mockResolvedValue([]);
     mockPrisma.lead.update.mockResolvedValue({});
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });
+    // Echo the inserted rows back the way Postgres would.
+    mockPrisma.lead.createManyAndReturn.mockImplementation(
+      async ({ data }: { data: Array<{ email?: string | null }> }) =>
+        data.map((d, i) => ({ id: `lead-${i + 1}`, email: d.email ?? null })),
+    );
     mockPrisma.scraperJob.update.mockResolvedValue({});
     mockPrisma.scraperImportedRow.findMany.mockResolvedValue([]);
     mockPrisma.scraperImportedRow.createMany.mockResolvedValue({ count: 0 });
@@ -121,13 +125,12 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    expect(result).toEqual({ inserted: 0, skipped: 0 });
+    expect(result).toEqual({ inserted: 0, skipped: 0, createdLeads: [] });
     expect(mockPrisma.lead.findMany).not.toHaveBeenCalled();
-    expect(mockPrisma.lead.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.lead.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it("skips rows with no Name", async () => {
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });
 
     const result = await importRowsToLeads({
       rows: [{ Name: "" }, { Name: "  " }, { Phone: "555" }],
@@ -137,14 +140,13 @@ describe("importRowsToLeads", () => {
     });
 
     expect(result.skipped).toBe(3);
-    expect(mockPrisma.lead.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.lead.createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it("dedupes against existing leads in the org by company+phone (digits only)", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([
       { company: "Acme", phone: "555-1234" },
     ]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     const result = await importRowsToLeads({
       rows: [
@@ -157,15 +159,14 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    expect(result).toEqual({ inserted: 1, skipped: 2 });
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data;
+    expect(result).toMatchObject({ inserted: 1, skipped: 2 });
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data;
     expect(inserted).toHaveLength(1);
     expect(inserted[0].company).toBe("Beta");
   });
 
   it("dedupes within the incoming batch as well", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     const result = await importRowsToLeads({
       rows: [
@@ -178,12 +179,11 @@ describe("importRowsToLeads", () => {
     });
 
     expect(result.skipped).toBe(1);
-    expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
+    expect(mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data).toHaveLength(1);
   });
 
   it("does not enqueue a placeholder-id update when the same business appears under two categories (#187-2)", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]); // brand new business
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     const result = await importRowsToLeads({
       rows: [
@@ -200,18 +200,17 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    expect(result).toEqual({ inserted: 1, skipped: 1 });
+    expect(result).toMatchObject({ inserted: 1, skipped: 1 });
     // Crucially: never call update with the placeholder id (would throw
     // RecordNotFound against a real DB and reject the whole import).
     expect(mockPrisma.lead.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "" } }),
     );
-    expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
+    expect(mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data).toHaveLength(1);
   });
 
   it("builds source string from category and location when present", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme", Phone: "555", Category: "Cleaning", Location: "Toledo" }],
@@ -220,13 +219,12 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.source).toBe("GoogleMaps / Cleaning / Toledo");
   });
 
   it("parses city and state from scraped locations", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme", Phone: "555", Location: "Tampa, Florida" }],
@@ -235,14 +233,13 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.city).toBe("Tampa");
     expect(inserted.state).toBe("FL");
   });
 
   it("falls back to just 'GoogleMaps' when category and location are missing", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme" }],
@@ -251,13 +248,12 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.source).toBe("GoogleMaps");
   });
 
   it("increments importedCount on the parent job by the number of inserted rows", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 3 });
 
     await importRowsToLeads({
       rows: [
@@ -296,15 +292,14 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    expect(result).toEqual({ inserted: 0, skipped: 1 });
-    expect(mockPrisma.lead.createMany).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ inserted: 0, skipped: 1 });
+    expect(mockPrisma.lead.createManyAndReturn).not.toHaveBeenCalled();
     expect(mockPrisma.scraperJob.update).not.toHaveBeenCalled();
   });
 
   it("re-imports a row that was previously imported under a different job", async () => {
     // fingerprint lookup is scoped to the current jobId — no match for job-2
     mockPrisma.scraperImportedRow.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     const result = await importRowsToLeads({
       rows: [{ Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme" }],
@@ -322,7 +317,6 @@ describe("importRowsToLeads", () => {
 
   it("never queries leads from another organization", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 0 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme" }],
@@ -342,7 +336,6 @@ describe("importRowsToLeads", () => {
 
   it("scopes the existing-key lookup to the incoming batch (no full-table scan)", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 2 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme" }, { Name: "Beta" }, { Name: "Acme" }],
@@ -360,7 +353,6 @@ describe("importRowsToLeads", () => {
 
   it("imports Google Maps URL when present in scraped rows", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme", Phone: "555", "Google Maps URL": "https://www.google.com/maps/place/acme" }],
@@ -369,13 +361,12 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.mapsUrl).toBe("https://www.google.com/maps/place/acme");
   });
 
   it("sets mapsUrl to null when Google Maps URL is absent", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme", Phone: "555" }],
@@ -384,13 +375,12 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.mapsUrl).toBeNull();
   });
 
   it("imports rating and review count when present in scraped rows", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
-    mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
       rows: [{ Name: "Acme", Rating: "4.6", Reviews: "128" }],
@@ -399,9 +389,51 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    const inserted = mockPrisma.lead.createMany.mock.calls[0][0].data[0];
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
     expect(inserted.rating).toBe(4.6);
     expect(inserted.reviewCount).toBe(128);
+  });
+
+  it("imports the scraped Email column, normalized to lowercase", async () => {
+    const result = await importRowsToLeads({
+      rows: [{ Name: "Acme", Phone: "555", Email: "Info@Acme.COM" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
+    expect(inserted.email).toBe("info@acme.com");
+    expect(result.createdLeads).toEqual([{ id: "lead-1", email: "info@acme.com" }]);
+  });
+
+  it("strips the CSV formula-sanitization apostrophe from emails", async () => {
+    await importRowsToLeads({
+      rows: [{ Name: "Acme", Email: "'info@acme.com" }],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data[0];
+    expect(inserted.email).toBe("info@acme.com");
+  });
+
+  it("nulls out invalid or junk email values", async () => {
+    await importRowsToLeads({
+      rows: [
+        { Name: "A", Email: "not-an-email" },
+        { Name: "B", Email: "logo@2x.png" },
+        { Name: "C", Email: "" },
+        { Name: "D" },
+      ],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data;
+    expect(inserted.map((r: { email: string | null }) => r.email)).toEqual([null, null, null, null]);
   });
 
   it("updates existing matching leads with fresher review data", async () => {
@@ -416,7 +448,7 @@ describe("importRowsToLeads", () => {
       jobId: "job-1",
     });
 
-    expect(result).toEqual({ inserted: 0, skipped: 1 });
+    expect(result).toMatchObject({ inserted: 0, skipped: 1 });
     expect(mockPrisma.lead.update).toHaveBeenCalledWith({
       where: { id: "lead-1" },
       data: { rating: 4.7, reviewCount: 18 },
