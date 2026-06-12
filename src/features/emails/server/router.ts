@@ -9,24 +9,6 @@ import { trackedDemoUrl, unsubscribeUrl, validateCanSpam } from "@/lib/can-spam"
 import { logActivity, ActivityType } from "@/server/activity";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 
-type EmailDraftListPage = {
-  items: Array<{
-    id: string;
-    subject: string;
-    status: EmailDraftStatus;
-    sentAt: Date | null;
-    lead: {
-      id: string;
-      company: string | null;
-      email: string | null;
-      city: string | null;
-      state: string | null;
-    };
-    events: Array<{ event: string }>;
-  }>;
-  nextCursor: string | undefined;
-};
-
 function resendClient() {
   return new Resend(process.env.RESEND_API_KEY);
 }
@@ -74,7 +56,7 @@ export const emailsRouter = createTRPCRouter({
       }
 
       const website = await ctx.prisma.generatedWebsite.findFirst({
-        where: { leadId: input.leadId, slug: { not: null } },
+        where: { leadId: input.leadId, lead: { organizationId: ctx.organizationId }, slug: { not: null } },
         orderBy: { createdAt: "desc" },
         select: { id: true, slug: true },
       });
@@ -268,41 +250,5 @@ Unsubscribe: ${unsub}`;
         throw new TRPCError({ code: "BAD_REQUEST", message: "Only draft emails can be deleted." });
       }
       return ctx.prisma.emailDraft.delete({ where: { id: input.id } });
-    }),
-
-  listForOrg: organizationProcedure
-    .input(z.object({
-      status: z.nativeEnum(EmailDraftStatus).optional(),
-      cursor: z.string().optional(),
-      limit: z.number().int().min(1).max(100).default(50),
-    }))
-    .query(async ({ ctx, input }): Promise<EmailDraftListPage> => {
-      const items = await ctx.prisma.emailDraft.findMany({
-        where: {
-          organizationId: ctx.organizationId,
-          ...(input.status ? { status: input.status } : {}),
-        },
-        orderBy: { createdAt: "desc" },
-        take: input.limit + 1,
-        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-        include: {
-          lead: { select: { id: true, company: true, email: true, city: true, state: true } },
-          events: { orderBy: { createdAt: "desc" }, take: 5 },
-        },
-      });
-
-      const hasMore = items.length > input.limit;
-      const page = hasMore ? items.slice(0, input.limit) : items;
-      return {
-        items: page.map((item) => ({
-          id: item.id,
-          subject: item.subject,
-          status: item.status,
-          sentAt: item.sentAt,
-          lead: item.lead,
-          events: item.events.map((event) => ({ event: event.event })),
-        })),
-        nextCursor: hasMore ? page[page.length - 1]?.id : undefined,
-      };
     }),
 });

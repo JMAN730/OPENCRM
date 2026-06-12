@@ -87,14 +87,16 @@ export const scriptsRouter = createTRPCRouter({
   replaceAll: organizationProcedure
     .input(
       z.object({
-        scripts: z.array(
-          z.object({
-            category: z.string().min(1).max(100),
-            title: z.string().min(1).max(200),
-            body: z.string().min(1).max(5000),
-            order: z.number().int().min(0),
-          }),
-        ),
+        scripts: z
+          .array(
+            z.object({
+              category: z.string().min(1).max(100),
+              title: z.string().min(1).max(200),
+              body: z.string().min(1).max(5000),
+              order: z.number().int().min(0),
+            }),
+          )
+          .max(500),
       }),
     )
     .mutation(async ({ ctx, input }) => {
