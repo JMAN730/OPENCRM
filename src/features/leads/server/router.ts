@@ -1298,7 +1298,10 @@ export const leadsRouter = createTRPCRouter({
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `DeepSeek error: ${text.slice(0, 200)}` });
+          // Log the upstream body server-side only; never surface raw provider
+          // internals (rate-limit details, request echoes) to the client.
+          console.error(`[ai] DeepSeek qualification failed (${res.status}): ${text.slice(0, 500)}`);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI qualification is temporarily unavailable. Please try again later." });
         }
         const json = await res.json() as { choices: Array<{ message: { content: string } }> };
         summary = json.choices[0]?.message?.content?.trim() ?? "No qualification generated.";
