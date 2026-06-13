@@ -8,6 +8,7 @@ const { mockPrisma, mockVerify } = vi.hoisted(() => ({
       update: vi.fn(),
     },
     emailEvent: {
+      findFirst: vi.fn(),
       create: vi.fn(),
     },
   },
@@ -39,6 +40,7 @@ describe("resend webhook UPGRADE_GUARD", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RESEND_WEBHOOK_SECRET = "whsec_test";
+    mockPrisma.emailEvent.findFirst.mockResolvedValue(null);
     mockPrisma.emailEvent.create.mockResolvedValue({});
     mockPrisma.emailDraft.update.mockResolvedValue({});
   });
@@ -80,5 +82,36 @@ describe("resend webhook UPGRADE_GUARD", () => {
       where: { id: "d3" },
       data: { status: EmailDraftStatus.COMPLAINED },
     });
+  });
+
+  it("is idempotent: a redelivered event (same svix-id) is not recorded twice", async () => {
+    mockVerify.mockReturnValue({ type: "email.opened", data: { email_id: "rs_4" } });
+    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "d4", status: EmailDraftStatus.SENT });
+    // The svix-id was already persisted on the first delivery.
+    mockPrisma.emailEvent.findFirst.mockResolvedValue({ id: "ev_existing" });
+
+    const res = await POST(makeRequest());
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.emailEvent.findFirst).toHaveBeenCalledWith({
+      where: { svixId: "msg_1" },
+      select: { id: true },
+    });
+    expect(mockPrisma.emailEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("records the svix-id on first delivery so later retries can dedup", async () => {
+    mockVerify.mockReturnValue({ type: "email.opened", data: { email_id: "rs_5" } });
+    mockPrisma.emailDraft.findFirst.mockResolvedValue({ id: "d5", status: EmailDraftStatus.SENT });
+
+    const res = await POST(makeRequest());
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.emailEvent.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.emailEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ svixId: "msg_1", draftId: "d5" }),
+      }),
+    );
   });
 });

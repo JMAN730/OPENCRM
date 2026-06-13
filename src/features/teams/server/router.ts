@@ -196,7 +196,7 @@ export const teamsRouter = createTRPCRouter({
           include: { lead: { select: { id: true, firstName: true, lastName: true, company: true } } },
         }),
         ctx.prisma.task.findMany({
-          where: { userId: target.id, status: { not: "COMPLETED" } },
+          where: { organizationId: ctx.organizationId, userId: target.id, status: { not: "COMPLETED" } },
           orderBy: { dueDate: "asc" },
           take: 20,
         }),
