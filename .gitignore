@@ -64,9 +64,6 @@ next-env.d.ts
 .superpowers/**/state/
 .superpowers/**/content/
 
-# Superpowers-generated planning/spec docs
-/docs/superpowers/
-
 # Visual Studio local state
 /.vs/
 
