@@ -94,7 +94,7 @@ export const scriptsRouter = createTRPCRouter({
             body: z.string().min(1).max(5000),
             order: z.number().int().min(0),
           }),
-        ),
+        ).max(500),
       }),
     )
     .mutation(async ({ ctx, input }) => {

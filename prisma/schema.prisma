@@ -44,6 +44,9 @@ model User {
   password      String?
   role          UserRole  @default(USER)
   loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
+  // Bumped whenever credentials change (password reset / email change) so
+  // JWTs minted before the change are rejected on their next refresh (CWE-613).
+  sessionVersion Int      @default(0)
   accounts      Account[]
   sessions      Session[]
 
@@ -642,6 +645,10 @@ model EmailEvent {
   draftId   String
   draft     EmailDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   event     String
+  // Svix message id from the delivering webhook. Used to deduplicate
+  // at-least-once retries so a redelivered event doesn't append a duplicate
+  // audit row. Nullable for events recorded outside the webhook path.
+  svixId    String?    @unique
   data      Json?
   createdAt DateTime   @default(now())
 

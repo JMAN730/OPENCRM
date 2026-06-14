@@ -11,7 +11,6 @@ import {
   Settings,
   BarChart3,
   Bot,
-  Grid3X3,
   ChevronDown,
   LogOut,
   User,
@@ -49,12 +48,6 @@ const NAV_GROUPS = [
     title: "Insights",
     items: [
       { id: "analytics", label: "Analytics", href: "/analytics", icon: BarChart3 },
-    ],
-  },
-  {
-    title: "Games",
-    items: [
-      { id: "tic-tac-toe", label: "Tic-tac-toe", href: "/games/tic-tac-toe", icon: Grid3X3 },
     ],
   },
   {
