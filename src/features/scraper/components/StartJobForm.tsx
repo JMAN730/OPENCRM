@@ -31,6 +31,7 @@ export function StartJobForm({ config, onStarted }: Props) {
   const [limit, setLimit] = useState(20);
   const [concurrency, setConcurrency] = useState(1);
   const [autoImport, setAutoImport] = useState(true);
+  const [autoOutreach, setAutoOutreach] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [newCatName, setNewCatName] = useState("");
 
@@ -82,6 +83,7 @@ export function StartJobForm({ config, onStarted }: Props) {
       limit,
       concurrency,
       autoImport,
+      autoOutreach: autoImport && autoOutreach,
       categories: selectedCategories.length > 0 ? selectedCategories : undefined,
     });
   };
@@ -235,6 +237,17 @@ export function StartJobForm({ config, onStarted }: Props) {
               onCheckedChange={(v) => setAutoImport(v === true)}
             />
             <span>Auto-import results into Leads when scraping completes</span>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={autoImport && autoOutreach}
+              disabled={!autoImport}
+              onCheckedChange={(v) => setAutoOutreach(v === true)}
+            />
+            <span className={autoImport ? "" : "text-muted-foreground"}>
+              Auto-generate a demo site + outreach email draft for each imported lead
+            </span>
           </label>
 
           <Button type="submit" disabled={start.isPending} className="gap-2">

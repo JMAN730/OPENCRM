@@ -70,6 +70,7 @@ model User {
   scraperJobs    ScraperJob[]
   scraperRows    ScraperImportedRow[]
   invitationsSent Invitation[] @relation("InvitationInviter")
+  outreachJobs   OutreachJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -109,6 +110,7 @@ model Organization {
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
   salesScripts      SalesScript[]
+  outreachJobs      OutreachJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,6 +181,7 @@ model Lead {
   tags         LeadTag[]
   websites     GeneratedWebsite[]
   emailDrafts  EmailDraft[]
+  outreachJob  OutreachJob?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -471,6 +474,7 @@ model ScraperJob {
   totalScraped  Int     @default(0)
   importedCount Int     @default(0)
   autoImport    Boolean @default(true)
+  autoOutreach  Boolean @default(false)
   totalQueries     Int @default(0)
   completedQueries Int @default(0)
   failedQueries    Int @default(0)
@@ -590,6 +594,7 @@ model ScheduledScrape {
   lastRunAt      DateTime?
   nextRunAt      DateTime?
   autoImport     Boolean      @default(true)
+  autoOutreach   Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -659,6 +664,42 @@ model EmailOptOut {
 
   @@unique([email, organizationId])
   @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Automated outreach pipeline
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum OutreachJobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+model OutreachJob {
+  id             String            @id @default(cuid())
+  // One job per lead, ever — makes enqueueing idempotent across re-imports.
+  leadId         String            @unique
+  lead           Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Generated drafts/activities are attributed to this user.
+  createdById    String
+  createdBy      User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  status         OutreachJobStatus @default(PENDING)
+  attempts       Int               @default(0)
+  error          String?
+  skipReason     String?           // no_email | opted_out | draft_exists | lead_deleted
+  websiteId      String?
+  draftId        String?
+  processedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([organizationId, status])
 }
 
 model SalesScript {

@@ -131,6 +131,7 @@ appRouter = {
   emails:           emailsRouter,           // CAN-SPAM outreach email drafts + send (Resend) + tracking
   pipeline:         pipelineRouter,         // deal pipeline board (stages + lead placement)
   analytics:        analyticsRouter,        // analytics aggregations for /analytics
+  outreach:         outreachRouter,         // automated outreach queue (cron worker + review/bulk-send)
 }
 ```
 
@@ -234,6 +235,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Scripts | `/dialer`, lead modal | `scripts` | `ScriptsPanel` | Implemented |
 | AI | (in lead modal) | `ai` | lead qualification + email copy | Implemented |
 | Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail`, `leads.*Tag` | Profile + Members + Tags tabs | Implemented |
+| Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
 
 ### Key tRPC procedures per namespace
 
@@ -248,6 +250,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | `teams` | `list`, `organizationMembers`, `myTeam`, `activityFeed`, `memberDetail`, `create`, `update`, `delete`, `setMembership`, `inviteByEmail`, `listInvitations`, `revokeInvitation`, `getInvitation`, `acceptInvitation` |
 | `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
 | `websites` | `getForLead`, `generate`, `update`, `delete` |
+| `outreach` | `stats`, `list`, `retry`, `bulkSend` |
 
 ---
 
@@ -308,6 +311,20 @@ The lead scraper (`/scraper`) generates leads from Google Maps.
 - **Import**: `src/server/scraper/importer.ts` parses CSV (PapaParse), deduplicates by `(company, normalized_phone)`, and bulk-inserts leads.
 - **Jobs**: persisted in `ScraperJob` DB model; active job registry is in-memory (server restart clears it). `runner.ts` uses a `globalThis`-based registry to survive Next.js hot-reload.
 - **Auto-import**: `ScraperJob.autoImport` flag triggers import on completion.
+- **Auto-outreach**: `ScraperJob.autoOutreach` flag (opt-in) enqueues imported leads into the outreach pipeline.
+
+---
+
+## Automated outreach pipeline
+
+Scraper import → `OutreachJob` queue → cron worker → review queue at `/outreach`.
+
+- **Enqueue** (`src/features/outreach/server/enqueue.ts`): called after auto-import (runner) and manual `scraper.importResults` when the job's `autoOutreach` flag is set. Idempotent via unique `OutreachJob.leadId`.
+- **Worker** (`src/features/outreach/server/worker.ts`): `processOutreachQueue()` claims PENDING jobs atomically, generates an AI demo site (`generateWebsiteForLead`) and email draft (`generateDraftForLead`) per lead, skips leads with no email / opted out / existing draft, retries failures up to 3 attempts. Never sends — sending is always a user action.
+- **Cron** (`POST /api/cron/outreach`): Bearer `CRON_SECRET` auth (same pattern as the scraper cron); run every 1–5 minutes. Batch size via `OUTREACH_BATCH_SIZE` (default 5).
+- **Shared services**: `src/features/websites/server/service.ts` (`generateWebsiteForLead`) and `src/features/emails/server/service.ts` (`generateDraftForLead`, `sendDraft`, `OutreachEmailError`) are the single code path used by both the tRPC routers and the worker.
+- **Photos**: Google Places photos → Pexels stock fallback (`src/lib/stockPhotos.ts`, `PEXELS_API_KEY`) → Maps-embed fallback.
+- **Email capture**: `scraper.py` extracts emails from the Maps panel, the homepage body (free — already fetched during the website check), and `/contact`-style pages; `importer.ts` sanitizes and maps the CSV `Email` column onto `Lead.email`.
 
 ---
 

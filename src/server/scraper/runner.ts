@@ -326,7 +326,13 @@ export async function startScraperJob(jobId: string): Promise<void> {
     const freshJob = await prisma.scraperJob
       .findUnique({
         where: { id: jobId },
-        select: { autoImport: true, organizationId: true, userId: true, stopRequestedAt: true },
+        select: {
+          autoImport: true,
+          autoOutreach: true,
+          organizationId: true,
+          userId: true,
+          stopRequestedAt: true,
+        },
       })
       .catch(() => null);
 
@@ -350,6 +356,15 @@ export async function startScraperJob(jobId: string): Promise<void> {
           `Imported ${importResult.inserted} new leads (skipped ${importResult.skipped} duplicates/empty).`,
           outDir
         );
+        if (freshJob.autoOutreach && importResult.createdLeads.length > 0) {
+          const { enqueueOutreachForLeads } = await import("@/features/outreach/server/enqueue");
+          const { enqueued } = await enqueueOutreachForLeads(prisma, {
+            leadIds: importResult.createdLeads.map((lead) => lead.id),
+            organizationId: freshJob.organizationId,
+            createdById: freshJob.userId,
+          });
+          appendLog(jobId, `Enqueued ${enqueued} leads for automated outreach.`, outDir);
+        }
       } catch (e) {
         importError = e instanceof Error ? e.message : String(e);
         appendLog(jobId, `[import-error] ${importError}`, outDir);
