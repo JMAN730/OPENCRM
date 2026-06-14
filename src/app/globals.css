@@ -49,6 +49,9 @@
 }
 
 :root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-sans: var(--font-sans);
+  --font-geist-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -198,53 +201,53 @@
    ============================================================ */
 
 .dark .crm-app {
-  /* Surfaces */
-  --crm-bg:             oklch(13% 0.008 70);
-  --crm-surface:        oklch(18% 0.008 70);
-  --crm-surface-2:      oklch(15% 0.008 70);
-  --crm-surface-hover:  oklch(23% 0.008 70);
-  --crm-bg-card:        oklch(18% 0.008 70);
+  /* Surfaces — deep navy/indigo palette (ClientCore style) */
+  --crm-bg:             oklch(9.5% 0.042 265);
+  --crm-surface:        oklch(13.5% 0.050 265);
+  --crm-surface-2:      oklch(11.5% 0.046 265);
+  --crm-surface-hover:  oklch(18% 0.060 265);
+  --crm-bg-card:        oklch(13.5% 0.050 265);
 
   /* Borders */
-  --crm-border:         oklch(30% 0.008 70);
-  --crm-border-soft:    oklch(24% 0.008 70);
-  --crm-border-strong:  oklch(42% 0.008 70);
+  --crm-border:         oklch(26% 0.055 265);
+  --crm-border-soft:    oklch(21% 0.050 265);
+  --crm-border-strong:  oklch(38% 0.065 265);
 
   /* Foreground */
-  --crm-fg:             oklch(92% 0.006 70);
-  --crm-fg-muted:       oklch(68% 0.006 70);
-  --crm-fg-faint:       oklch(50% 0.006 70);
+  --crm-fg:             oklch(94% 0.010 265);
+  --crm-fg-muted:       oklch(66% 0.018 265);
+  --crm-fg-faint:       oklch(48% 0.016 265);
   --crm-fg-onaccent:    #ffffff;
 
-  /* Accent */
-  --crm-accent:         oklch(64% 0.18 280);
-  --crm-accent-hover:   oklch(68% 0.18 280);
-  --crm-accent-soft:    oklch(22% 0.09 280);
-  --crm-accent-fg:      oklch(76% 0.16 280);
+  /* Accent — vivid purple */
+  --crm-accent:         oklch(56% 0.26 280);
+  --crm-accent-hover:   oklch(62% 0.26 280);
+  --crm-accent-soft:    oklch(19% 0.10 280);
+  --crm-accent-fg:      oklch(78% 0.20 280);
 
   /* Semantic colours */
-  --crm-pos:            oklch(64% 0.14 155);
-  --crm-pos-soft:       oklch(18% 0.06 155);
-  --crm-neg:            oklch(66% 0.18 25);
-  --crm-neg-soft:       oklch(18% 0.07 25);
-  --crm-warn:           oklch(74% 0.13 70);
-  --crm-warn-soft:      oklch(18% 0.07 70);
-  --crm-hot:            oklch(70% 0.20 35);
-  --crm-hot-soft:       oklch(19% 0.08 40);
-  --crm-cool:           oklch(66% 0.13 220);
-  --crm-cool-soft:      oklch(18% 0.05 220);
+  --crm-pos:            oklch(68% 0.16 150);
+  --crm-pos-soft:       oklch(16% 0.07 150);
+  --crm-neg:            oklch(64% 0.20 25);
+  --crm-neg-soft:       oklch(16% 0.08 25);
+  --crm-warn:           oklch(76% 0.14 70);
+  --crm-warn-soft:      oklch(17% 0.07 70);
+  --crm-hot:            oklch(70% 0.22 35);
+  --crm-hot-soft:       oklch(17% 0.09 35);
+  --crm-cool:           oklch(68% 0.14 220);
+  --crm-cool-soft:      oklch(16% 0.06 220);
 
-  /* Shadows — heavier / darker in dark mode */
+  /* Shadows */
   --crm-shadow-modal:
-    0 32px 80px -20px oklch(0% 0 0 / 0.65),
-    0 8px 24px -8px oklch(0% 0 0 / 0.45);
-  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.30);
+    0 32px 80px -20px oklch(0% 0 0 / 0.72),
+    0 8px 24px -8px oklch(0% 0 0 / 0.52);
+  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.35);
   --crm-shadow-soft:
-    0 1px 2px oklch(0% 0 0 / 0.25),
-    0 4px 12px -4px oklch(0% 0 0 / 0.30);
+    0 1px 2px oklch(0% 0 0 / 0.28),
+    0 4px 12px -4px oklch(0% 0 0 / 0.34);
   --crm-shadow-pop:
-    0 12px 32px -10px oklch(0% 0 0 / 0.55),
-    0 2px 6px -2px oklch(0% 0 0 / 0.35);
+    0 12px 32px -10px oklch(0% 0 0 / 0.60),
+    0 2px 6px -2px oklch(0% 0 0 / 0.40);
 }
 
 /* Fix gradient backgrounds that mix with white (looks wrong on dark surfaces) */
@@ -1161,7 +1164,7 @@
   animation: crm-fade 0.16s ease-out;
 }
 .crm-modal {
-  width: min(620px, 92%);
+  width: min(820px, 92%);
   max-height: 86%;
   background: var(--crm-surface);
   border-radius: var(--crm-radius-lg);
@@ -1176,6 +1179,70 @@
 @keyframes crm-pop  {
   from { opacity: 0; transform: translateY(8px) scale(0.985); }
   to   { opacity: 1; transform: translateY(0)  scale(1); }
+}
+@keyframes demo-marquee { to { transform: translateX(-33.333%); } }
+@keyframes crm-dot-pulse {
+  0%, 60%, 100% { opacity: 0.2; transform: scale(0.85); }
+  30%            { opacity: 1;   transform: scale(1); }
+}
+.crm-typing-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: crm-dot-pulse 1.2s ease-in-out infinite;
+}
+.crm-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.crm-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Markdown rendering inside the Opulence chat ── */
+.crm-md { font-size: 13px; line-height: 1.55; color: var(--crm-fg); }
+.crm-md > :first-child { margin-top: 0; }
+.crm-md > :last-child { margin-bottom: 0; }
+.crm-md p { margin: 0 0 8px; }
+.crm-md ul, .crm-md ol { margin: 0 0 8px; padding-left: 18px; }
+.crm-md li { margin: 2px 0; }
+.crm-md li > p { margin: 0; }
+.crm-md strong { font-weight: 600; color: var(--crm-fg); }
+.crm-md h1, .crm-md h2, .crm-md h3, .crm-md h4 {
+  font-size: 13px; font-weight: 600; margin: 10px 0 6px; color: var(--crm-fg);
+}
+.crm-md a { color: var(--crm-accent); text-decoration: underline; text-underline-offset: 2px; }
+.crm-md code {
+  font-family: var(--crm-font-mono);
+  font-size: 12px;
+  background: var(--crm-surface-hover);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.crm-md pre {
+  background: var(--crm-surface-hover);
+  border: 1px solid var(--crm-border-soft);
+  border-radius: var(--crm-radius-sm, 6px);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+.crm-md pre code { background: none; padding: 0; }
+.crm-md table { border-collapse: collapse; width: 100%; margin: 0 0 8px; font-size: 12px; }
+.crm-md th, .crm-md td { border: 1px solid var(--crm-border-soft); padding: 4px 8px; text-align: left; }
+.crm-md th { background: var(--crm-surface-2); font-weight: 600; }
+.crm-md blockquote {
+  margin: 0 0 8px; padding-left: 10px;
+  border-left: 2px solid var(--crm-border); color: var(--crm-fg-muted);
+}
+
+/* ── Streaming skeleton lines (shown before first token arrives) ── */
+.crm-skeleton-line {
+  height: 9px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--crm-surface-2) 25%, var(--crm-surface-hover) 50%, var(--crm-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: crm-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes crm-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .crm-modal-head {
@@ -1218,6 +1285,8 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
   animation: crm-pop 0.14s cubic-bezier(.2,.8,.2,1);
 }
 .crm-outcome-pop-head {
@@ -1244,6 +1313,24 @@
   width: 100%;
 }
 .crm-outcome-item:hover { background: var(--crm-surface-hover); }
+.crm-outcome-row { display: flex; align-items: stretch; gap: 1px; }
+.crm-outcome-rowbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  border-radius: var(--crm-radius-sm);
+  cursor: pointer;
+  color: var(--crm-fg-faint);
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.crm-outcome-row:hover .crm-outcome-rowbtn { opacity: 1; }
+.crm-outcome-rowbtn:hover { background: var(--crm-surface-hover); color: var(--crm-fg); }
+.crm-outcome-rowbtn:disabled { cursor: default; opacity: 0.4; }
 .crm-outcome-item.active { background: var(--crm-accent-soft); color: var(--crm-accent-fg); }
 .crm-outcome-item .lab { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .crm-outcome-item .t { font-size: 13px; font-weight: 500; letter-spacing: -0.005em; }

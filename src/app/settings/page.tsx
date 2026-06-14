@@ -5,13 +5,18 @@ import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { Plus, Trash2, UserPlus } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
+import {
+  getBrowserStorage,
+  type LoadingAnimationMode,
+  writeLoadingAnimationMode,
+} from "@/lib/loading-animation";
 
 // Only surface tabs that have a working backend. Billing, API, Audit log,
 // Integrations, and Workspace settings are roadmap items — exposing empty
 // tabs misleads users into thinking the features exist.
-const NAV = ["Profile", "Members"];
+const NAV = ["Profile", "Members", "Tags"];
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession();
@@ -19,15 +24,22 @@ export default function SettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  // Current password required to change email (auth.updateProfile gates this).
+  const [editPassword, setEditPassword] = useState("");
 
   const userName = session?.user?.name ?? "—";
   const userEmail = session?.user?.email ?? "—";
+  const loadingAnimationMode = session?.user?.loadingAnimationMode ?? "ALWAYS";
 
   const updateProfile = trpc.auth.updateProfile.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
+      if (variables.loadingAnimationMode) {
+        writeLoadingAnimationMode(getBrowserStorage(), variables.loadingAnimationMode);
+      }
       await updateSession();
       toast.success("Profile updated");
       setEditing(null);
+      setEditPassword("");
     },
     onError: (err) => {
       toast.error(err.message || "Failed to update profile");
@@ -80,12 +92,19 @@ export default function SettingsPage() {
   const handleEdit = (key: string, current: string) => {
     setEditing(key);
     setEditValue(current === "—" ? "" : current);
+    setEditPassword("");
   };
 
   const handleSave = (key: string) => {
     if (!editValue.trim()) return;
     if (key === "Name") updateProfile.mutate({ name: editValue.trim() });
-    else if (key === "Email") updateProfile.mutate({ email: editValue.trim() });
+    else if (key === "Email") {
+      if (!editPassword) {
+        toast.error("Enter your current password to change your email.");
+        return;
+      }
+      updateProfile.mutate({ email: editValue.trim(), currentPassword: editPassword });
+    }
   };
 
   const profileRows: [string, string][] = [
@@ -94,12 +113,10 @@ export default function SettingsPage() {
     ["Role",  userRole ?? "USER"],
   ];
 
-  const rows: [string, string][] =
-    active === "Profile" ? profileRows : [];
-
   const desc: Record<string, string> = {
     Profile: "Your personal information and account preferences.",
     Members: "Manage who has access to this workspace.",
+    Tags: "Manage labels you can attach to leads to categorize and filter them.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -133,9 +150,9 @@ export default function SettingsPage() {
             <h3 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600, color: "var(--crm-fg)" }}>{active}</h3>
             <p style={{ margin: "0 0 20px", color: "var(--crm-fg-muted)", fontSize: 13 }}>{desc[active]}</p>
 
-            {rows.length > 0 ? (
+            {active === "Profile" ? (
               <>
-                {rows.map(([k, v]) => (
+                {profileRows.map(([k, v]) => (
                   <div
                     key={k}
                     style={{
@@ -164,10 +181,30 @@ export default function SettingsPage() {
                               outline: "none",
                             }}
                           />
+                          {k === "Email" && (
+                            <input
+                              type="password"
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSave(k);
+                                if (e.key === "Escape") setEditing(null);
+                              }}
+                              placeholder="Current password"
+                              aria-label="Current password"
+                              autoComplete="current-password"
+                              style={{
+                                flex: 1, padding: "4px 8px", fontSize: 13,
+                                border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+                                background: "var(--crm-surface)", color: "var(--crm-fg)",
+                                outline: "none",
+                              }}
+                            />
+                          )}
                           <button
                             className="crm-btn primary"
                             style={{ height: 24, padding: "0 10px", fontSize: 12 }}
-                            disabled={updateProfile.isPending || !editValue.trim()}
+                            disabled={updateProfile.isPending || !editValue.trim() || (k === "Email" && !editPassword)}
                             onClick={() => handleSave(k)}
                           >
                             {updateProfile.isPending ? "Saving…" : "Save"}
@@ -198,44 +235,70 @@ export default function SettingsPage() {
                   </div>
                 ))}
 
-                {active === "Profile" && (
-                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>
-                    <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
-                      Once you delete your account, there is no going back.
-                    </div>
-                    {!confirmDelete ? (
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-fg)", marginBottom: 4 }}>
+                    Personalization
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
+                    Choose how often the startup loading animation appears in this browser.
+                  </div>
+                  <label style={{ display: "grid", gridTemplateColumns: "180px minmax(0, 260px)", alignItems: "center", fontSize: 13 }}>
+                    <span style={{ color: "var(--crm-fg-muted)" }}>Loading animation</span>
+                    <select
+                      aria-label="Loading animation"
+                      value={loadingAnimationMode}
+                      disabled={updateProfile.isPending}
+                      onChange={(e) => updateProfile.mutate({ loadingAnimationMode: e.target.value as LoadingAnimationMode })}
+                      style={{
+                        height: 32, padding: "0 8px", fontSize: 13,
+                        border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+                        background: "var(--crm-surface)", color: "var(--crm-fg)",
+                      }}
+                    >
+                      <option value="ALWAYS">Always on</option>
+                      <option value="ONCE_DAILY">Once a day</option>
+                      <option value="OFF">Off</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-neg)", marginBottom: 4 }}>Danger zone</div>
+                  <div style={{ fontSize: 13, color: "var(--crm-fg-muted)", marginBottom: 12 }}>
+                    Once you delete your account, there is no going back.
+                  </div>
+                  {!confirmDelete ? (
+                    <button
+                      className="crm-btn"
+                      style={{ height: 32, padding: "0 16px", border: "1px solid var(--crm-neg)", color: "var(--crm-neg)" }}
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete account
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>Are you sure?</span>
                       <button
                         className="crm-btn"
-                        style={{ height: 32, padding: "0 16px", border: "1px solid var(--crm-neg)", color: "var(--crm-neg)" }}
-                        onClick={() => setConfirmDelete(true)}
+                        style={{ height: 32, padding: "0 14px", background: "var(--crm-neg)", color: "white", border: "none" }}
+                        disabled={deleteAccount.isPending}
+                        onClick={() => deleteAccount.mutate()}
                       >
-                        Delete account
+                        {deleteAccount.isPending ? "Deleting…" : "Yes, delete"}
                       </button>
-                    ) : (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 13, color: "var(--crm-fg-muted)" }}>Are you sure?</span>
-                        <button
-                          className="crm-btn"
-                          style={{ height: 32, padding: "0 14px", background: "var(--crm-neg)", color: "white", border: "none" }}
-                          disabled={deleteAccount.isPending}
-                          onClick={() => deleteAccount.mutate()}
-                        >
-                          {deleteAccount.isPending ? "Deleting…" : "Yes, delete"}
-                        </button>
-                        <button
-                          className="crm-btn"
-                          style={{ height: 32, padding: "0 14px" }}
-                          onClick={() => setConfirmDelete(false)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
+                      <button
+                        className="crm-btn"
+                        style={{ height: 32, padding: "0 14px" }}
+                        onClick={() => setConfirmDelete(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
+            ) : active === "Tags" ? (
+              <TagsPanel />
             ) : (
               <MembersPanel
                 isAdmin={isAdmin}
@@ -395,6 +458,104 @@ function MembersPanel({
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagsPanel() {
+  const utils = trpc.useUtils();
+  const { data: tags = [], isLoading } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 30_000 });
+  const [newName, setNewName] = useState("");
+
+  const createTag = trpc.leads.createTag.useMutation({
+    onSuccess: () => {
+      setNewName("");
+      void utils.leads.listOrgTags.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteTag = trpc.leads.deleteTag.useMutation({
+    onSuccess: () => void utils.leads.listOrgTags.invalidate(),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleCreate = () => {
+    const name = newName.trim();
+    if (!name) return;
+    createTag.mutate({ name });
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input
+          placeholder="New tag name…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+          maxLength={50}
+          style={{
+            flex: 1, padding: "6px 10px", fontSize: 13,
+            border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+            background: "var(--crm-surface)", color: "var(--crm-fg)", outline: "none",
+          }}
+        />
+        <button
+          className="crm-btn primary"
+          style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
+          disabled={!newName.trim() || createTag.isPending}
+          onClick={handleCreate}
+        >
+          <Plus size={13} /> {createTag.isPending ? "Adding…" : "Add tag"}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
+      ) : tags.length === 0 ? (
+        <div style={{ color: "var(--crm-fg-faint)", fontSize: 13, padding: "16px 0", borderTop: "1px solid var(--crm-border)" }}>
+          No tags yet. Create one above.
+        </div>
+      ) : (
+        <div style={{ borderTop: "1px solid var(--crm-border)" }}>
+          {(tags as { id: string; name: string }[]).map((tag) => (
+            <div
+              key={tag.id}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 0", borderBottom: "1px solid var(--crm-border)", fontSize: 13,
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "2px 10px", borderRadius: 999,
+                  background: "var(--crm-surface-2)", border: "1px solid var(--crm-border)",
+                  fontWeight: 500, color: "var(--crm-fg-muted)",
+                }}
+              >
+                {tag.name}
+              </span>
+              <button
+                className="crm-btn ghost sm icon"
+                title="Delete tag"
+                disabled={deleteTag.isPending}
+                onClick={() => {
+                  if (confirm(`Delete tag "${tag.name}"? It will be removed from all leads.`)) {
+                    deleteTag.mutate({ id: tag.id });
+                  }
+                }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 8 }}>
+            {tags.length} / 100 tags used
+          </div>
         </div>
       )}
     </div>

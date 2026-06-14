@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { trpc } from "@/app/_trpc/client";
 
@@ -21,11 +22,11 @@ const LEAD_STATUS_COLOR: Record<string, string> = {
   CONNECTED: "var(--crm-pos)",
 };
 
-const TEMP_LABEL: Record<string, string> = { HOT: "Hot", WARM: "Warm", COLD: "Cold", Auto: "Auto" };
+const TEMP_LABEL: Record<string, string> = { HOT: "Hot", WARM: "Warm", COOL: "Cool", Auto: "Auto" };
 const TEMP_COLOR: Record<string, string> = {
   HOT: "var(--crm-neg)",
   WARM: "var(--crm-warn)",
-  COLD: "oklch(72% 0.11 230)",
+  COOL: "oklch(72% 0.11 230)",
   Auto: "var(--crm-fg-faint)",
 };
 
@@ -114,6 +115,18 @@ function HBar({ label, count, max, color }: { label: string; count: number; max:
   );
 }
 
+function RateBar({ label, rate, sample, color }: { label: string; rate: number; sample: string; color: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, marginBottom: 10 }}>
+      <div style={{ width: 130, color: "var(--crm-fg-muted)", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ flex: 1, height: 6, background: "var(--crm-surface-2)", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{ width: `${Math.min(rate, 100)}%`, height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
+      </div>
+      <div style={{ width: 78, textAlign: "right", fontFamily: "var(--crm-font-mono)", color: "var(--crm-fg-muted)", flexShrink: 0, fontSize: 12 }}>{rate}% · {sample}</div>
+    </div>
+  );
+}
+
 function KpiCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="crm-card crm-kpi">
@@ -139,6 +152,18 @@ export default function AnalyticsPage() {
   const { data: overview, isLoading } = trpc.analytics.overview.useQuery();
   const { data: teamData } = trpc.dashboard.getTeamStats.useQuery();
   const { data: kpiData } = trpc.dashboard.getKpiStats.useQuery();
+  const { data: topCallers } = trpc.analytics.topCallers.useQuery();
+  const { data: repPerf } = trpc.analytics.repPerformance.useQuery();
+  const { data: leadQuality } = trpc.analytics.leadQuality.useQuery();
+
+  // Merge calling stats with per-rep performance (pipeline value) by userId.
+  const perfById = new Map((repPerf ?? []).map((r) => [r.userId, r]));
+  const leaderboard = (topCallers ?? []).map((c) => ({
+    ...c,
+    pipelineValue: perfById.get(c.userId)?.pipelineValue ?? 0,
+  }));
+  const topNiches = (leadQuality?.byNiche ?? []).filter((n) => n.total >= 3).slice(0, 6);
+  const topCities = (leadQuality?.byCity ?? []).filter((c) => c.total >= 3).slice(0, 6);
 
   const kpis = overview?.kpis;
   const leadsPerDay = overview?.leadsPerDay ?? [];
@@ -174,6 +199,72 @@ export default function AnalyticsPage() {
           <KpiCard label="Connected" value={fmt(kpis?.connectedCount ?? 0)} sub="total in pipeline" />
           <KpiCard label="Contact rate" value={`${kpis?.contactRate ?? "0.0"}%`} sub={`${fmt(totalTouched)} of ${fmt(kpis?.totalLeads ?? 0)} touched`} />
         </div>
+
+        {/* ── Rep leaderboard ── */}
+        {leaderboard.length > 0 && (
+          <div className="crm-card flush">
+            <div className="crm-card-head">
+              <h3>Rep leaderboard</h3>
+              <span className="crm-sub">· cold-calling performance</span>
+            </div>
+            <table className="crm-table">
+              <thead>
+                <tr>
+                  <th>Rep</th>
+                  <th>Calls</th>
+                  <th>Connected</th>
+                  <th>Connect rate</th>
+                  <th>Conversions</th>
+                  <th>Close rate</th>
+                  <th>Pipeline value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((r) => (
+                  <tr key={r.userId}>
+                    <td>
+                      <Link href={`/team/${r.userId}`} style={{ color: "var(--crm-accent)", fontWeight: 500 }}>
+                        {r.name}
+                      </Link>
+                    </td>
+                    <td className="mono">{fmt(r.totalCalls)}</td>
+                    <td className="mono">{fmt(r.connectedCalls)}</td>
+                    <td className="mono">{r.connectionRate}%</td>
+                    <td className="mono">{fmt(r.conversions)}</td>
+                    <td className="mono">{r.closeRate}%</td>
+                    <td className="mono">{r.pipelineValue > 0 ? `$${fmt(r.pipelineValue)}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Lead quality: niche & city conversion ── */}
+        {(topNiches.length > 0 || topCities.length > 0) && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div className="crm-card" style={{ padding: 24 }}>
+              <SectionHead title="Top niches by conversion" sub="≥3 leads" />
+              {topNiches.length === 0 ? (
+                <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Not enough data yet</div>
+              ) : (
+                topNiches.map((n) => (
+                  <RateBar key={n.key} label={n.key} rate={n.conversionRate} sample={`${n.converted}/${n.total}`} color="var(--crm-pos)" />
+                ))
+              )}
+            </div>
+            <div className="crm-card" style={{ padding: 24 }}>
+              <SectionHead title="Top cities by conversion" sub="≥3 leads" />
+              {topCities.length === 0 ? (
+                <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Not enough data yet</div>
+              ) : (
+                topCities.map((c) => (
+                  <RateBar key={c.key} label={c.key} rate={c.conversionRate} sample={`${c.converted}/${c.total}`} color="var(--crm-accent)" />
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── 30-day trends ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

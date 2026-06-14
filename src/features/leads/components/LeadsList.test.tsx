@@ -162,6 +162,7 @@ vi.mock("@/app/_trpc/client", () => ({
     useUtils: () => ({
       leads: {
         getAll: { invalidate: invalidateLeads },
+        getStatusCounts: { invalidate: vi.fn() },
       },
       tasks: {
         getDueToday: { invalidate: invalidateDueToday },
@@ -171,13 +172,45 @@ vi.mock("@/app/_trpc/client", () => ({
     }),
     leads: {
       getAll: {
-        useQuery: vi.fn((input: { search?: string; limit: number; cursor?: string }) => {
+        useQuery: vi.fn((input: {
+          search?: string;
+          limit: number;
+          cursor?: string;
+          stages?: string[];
+          customOutcomeIds?: string[];
+          scope?: "mine";
+          assignedToIds?: string[];
+        }) => {
           leadQueryCalls.push(input);
           const page = leadPages[input.cursor ?? "root"] ?? { items: [], nextCursor: null };
           const search = input.search?.toLowerCase().trim();
-          const items = !search
+          let items = !search
             ? page.items
             : page.items.filter((lead) => JSON.stringify(lead).toLowerCase().includes(search));
+
+          // Mirror the server-side stage/custom-outcome filtering (combined as a union).
+          const hasStages = (input.stages?.length ?? 0) > 0;
+          const hasCustom = (input.customOutcomeIds?.length ?? 0) > 0;
+          if (hasStages || hasCustom) {
+            items = items.filter((lead) => {
+              const row = lead as { status: string; callOutcome?: string | null; customOutcomeId?: string | null };
+              const matchesStage =
+                hasStages && row.callOutcome !== "CUSTOM" && input.stages!.includes(row.status);
+              const matchesCustom =
+                hasCustom &&
+                row.callOutcome === "CUSTOM" &&
+                input.customOutcomeIds!.includes(row.customOutcomeId ?? "");
+              return matchesStage || matchesCustom;
+            });
+          }
+          if (input.scope === "mine") {
+            items = items.filter((lead) => (lead as { assignedToId: string | null }).assignedToId === "user-1");
+          }
+          if (input.assignedToIds && input.assignedToIds.length > 0) {
+            items = items.filter((lead) =>
+              input.assignedToIds!.includes((lead as { assignedToId: string | null }).assignedToId ?? ""),
+            );
+          }
 
           return {
             data: { items, nextCursor: page.nextCursor },
@@ -201,8 +234,23 @@ vi.mock("@/app/_trpc/client", () => ({
       bulkDelete: {
         useMutation: vi.fn(() => ({ mutateAsync: bulkDeleteMutateAsync, isPending: false })),
       },
+      export: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      bulkSetTemperature: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      bulkAddTag: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      listOrgTags: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
+      },
+      getStatusCounts: {
+        useQuery: vi.fn(() => ({ data: undefined })),
       },
     },
     tasks: {
@@ -222,6 +270,11 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       organizationMembers: {
         useQuery: vi.fn(() => ({ data: orgMembersState })),
+      },
+    },
+    scoring: {
+      getRules: {
+        useQuery: vi.fn(() => ({ data: [] })),
       },
     },
   },
@@ -333,6 +386,7 @@ describe("LeadsList", () => {
             company: "Acme Corp",
             assignedToId: "user-1",
             rating: 5,
+            temperatureOverride: "HOT",
           }),
           makeLead({
             id: "lead-2",
@@ -342,6 +396,7 @@ describe("LeadsList", () => {
             rating: 3.6,
             reviewCount: 12,
             status: "CONNECTED",
+            callOutcome: "ANSWERED",
             assignedToId: "user-2",
             assignedTo: {
               id: "user-2",

@@ -43,6 +43,10 @@ model User {
   image         String?
   password      String?
   role          UserRole  @default(USER)
+  loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
+  // Bumped whenever credentials change (password reset / email change) so
+  // JWTs minted before the change are rejected on their next refresh (CWE-613).
+  sessionVersion Int      @default(0)
   accounts      Account[]
   sessions      Session[]
 
@@ -77,6 +81,12 @@ enum UserRole {
   USER
 }
 
+enum LoadingAnimationMode {
+  ALWAYS
+  ONCE_DAILY
+  OFF
+}
+
 model Organization {
   id             String          @id @default(cuid())
   name           String
@@ -93,6 +103,12 @@ model Organization {
   leadTags       LeadTag[]
   invitations    Invitation[]
   pipelines      Pipeline[]
+
+  scraperCategories OrgScraperCategory[]
+  scheduledScrapes  ScheduledScrape[]
+  emailDrafts       EmailDraft[]
+  emailOptOuts      EmailOptOut[]
+  salesScripts      SalesScript[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -147,17 +163,22 @@ model Lead {
   assignedTo   User?   @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   customOutcomeId String?
-  customOutcome   CustomOutcome? @relation(fields: [customOutcomeId], references: [id], onDelete: SetNull)
+  customOutcome   CustomOutcome? @relation("PrimaryOutcome", fields: [customOutcomeId], references: [id], onDelete: SetNull)
+
+  secondaryOutcomeId String?
+  secondaryOutcome   CustomOutcome? @relation("SecondaryOutcome", fields: [secondaryOutcomeId], references: [id], onDelete: SetNull)
 
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
+  qualificationSummary String?
 
-  calls      CallLog[]
-  notes      Note[]
-  activities Activity[]
-  tasks      Task[]
-  tags       LeadTag[]
-  websites   GeneratedWebsite[]
+  calls        CallLog[]
+  notes        Note[]
+  activities   Activity[]
+  tasks        Task[]
+  tags         LeadTag[]
+  websites     GeneratedWebsite[]
+  emailDrafts  EmailDraft[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,14 +209,16 @@ enum LeadTemperatureOverride {
 }
 
 model LeadTag {
-  id    String @id @default(cuid())
-  name  String
-  leads Lead[]
+  id     String @id @default(cuid())
+  name   String
+  tagKey String
+  leads  Lead[]
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([name, organizationId])
+  @@unique([organizationId, tagKey])
 }
 
 model Pipeline {
@@ -222,11 +245,11 @@ model PipelineStage {
 }
 
 model CallLog {
-  id     String @id @default(cuid())
-  leadId String
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id     String  @id @default(cuid())
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   duration     Int?
   status       CallStatus
@@ -266,7 +289,8 @@ model CustomOutcome {
   hint           String?      @db.VarChar(200)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leads          Lead[]
+  primaryLeads   Lead[] @relation("PrimaryOutcome")
+  secondaryLeads Lead[] @relation("SecondaryOutcome")
 
   createdAt DateTime @default(now())
 
@@ -303,10 +327,15 @@ enum ActivityType {
   CALL_OUTCOME
   CALL_LOGGED
   LEAD_TEMPERATURE_OVERRIDE
+  LEAD_VALUE_UPDATED
+  LEAD_QUALIFIED
   TASK_CREATED
   TASK_COMPLETED
   NOTE_ADDED
   NOTE_DELETED
+  EMAIL_DRAFT_CREATED
+  EMAIL_SENT
+  DEMO_GENERATED
 }
 
 model Activity {
@@ -520,14 +549,128 @@ model ScoringRule {
 }
 
 model GeneratedWebsite {
-  id        String   @id @default(cuid())
-  leadId    String
-  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  template  String
-  title     String
-  content   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String       @id @default(cuid())
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  template       String
+  title          String
+  content        Json
+  slug           String?      @unique
+  organizationId String?
+  emailDrafts    EmailDraft[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([leadId])
+  @@index([organizationId])
+}
+
+model OrgScraperCategory {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+}
+
+model ScheduledScrape {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  locations      Json         @default("[]")
+  categories     Json         @default("[]")
+  limit          Int          @default(20)
+  concurrency    Int          @default(1)
+  dayOfWeek      Int          // 0=Sunday … 6=Saturday
+  hourOfDay      Int          // 0-23 UTC
+  enabled        Boolean      @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  autoImport     Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([enabled, nextRunAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email outreach feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EmailDraftStatus {
+  DRAFT
+  SENT
+  OPENED
+  CLICKED
+  BOUNCED
+  COMPLAINED
+  UNSUBSCRIBED
+}
+
+model EmailDraft {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId           String
+  lead             Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteId        String?
+  website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  subject          String
+  body             String           @db.Text
+  status           EmailDraftStatus @default(DRAFT)
+  unsubscribeToken String           @unique
+  resendMessageId  String?
+  sentAt           DateTime?
+  events           EmailEvent[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([leadId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([resendMessageId])
+}
+
+model EmailEvent {
+  id        String     @id @default(cuid())
+  draftId   String
+  draft     EmailDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  event     String
+  // Svix message id from the delivering webhook. Used to deduplicate
+  // at-least-once retries so a redelivered event doesn't append a duplicate
+  // audit row. Nullable for events recorded outside the webhook path.
+  svixId    String?    @unique
+  data      Json?
+  createdAt DateTime   @default(now())
+
+  @@index([draftId, createdAt])
+}
+
+model EmailOptOut {
+  id             String       @id @default(cuid())
+  email          String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([email, organizationId])
+  @@index([organizationId])
+}
+
+model SalesScript {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       String
+  title          String
+  body           String       @db.Text
+  order          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
 }

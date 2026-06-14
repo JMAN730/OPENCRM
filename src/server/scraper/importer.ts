@@ -11,7 +11,7 @@ export type ScrapedRow = {
   Website?: string;
   "Google Maps URL"?: string;
   Rating?: string;
-  ReviewCount?: string;
+  Reviews?: string;
   Category?: string;
   Location?: string;
 };
@@ -170,7 +170,7 @@ export async function importRowsToLeads(opts: {
     const website = (row.Website ?? "").trim() || null;
     const mapsUrl = (row["Google Maps URL"] ?? "").trim() || null;
     const ratingRaw = (row.Rating ?? "").trim();
-    const reviewCountRaw = (row.ReviewCount ?? "").trim();
+    const reviewCountRaw = (row.Reviews ?? "").trim();
     const rating = ratingRaw ? Number(ratingRaw) : null;
     const reviewCount = reviewCountRaw ? Number(reviewCountRaw) : null;
     const location = parseCityState(row.Location);
@@ -187,12 +187,19 @@ export async function importRowsToLeads(opts: {
         data.reviewCount = nextReviewCount;
       }
       if (Object.keys(data).length > 0) {
-        toUpdate.push({ id: existing.id, data });
-        existingKeys.set(key, {
-          ...existing,
-          rating: data.rating ?? existing.rating,
-          reviewCount: data.reviewCount ?? existing.reviewCount,
-        });
+        // Only enqueue a DB update for rows that map to a real persisted lead.
+        // A brand-new row earlier in this same batch stores a placeholder
+        // `id: ""` (see below); updating `where: { id: "" }` throws
+        // RecordNotFound and rejects the whole import (#187-2). The new row's
+        // values were already captured by the first occurrence's insert.
+        if (existing.id) {
+          toUpdate.push({ id: existing.id, data });
+          existingKeys.set(key, {
+            ...existing,
+            rating: data.rating ?? existing.rating,
+            reviewCount: data.reviewCount ?? existing.reviewCount,
+          });
+        }
       }
       skipped++;
       continue;

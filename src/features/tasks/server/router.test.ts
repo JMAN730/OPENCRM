@@ -29,6 +29,20 @@ describe("tasksRouter", () => {
       });
     });
 
+    it("rejects an over-length title or description (#188-N1)", async () => {
+      prisma.task.create.mockResolvedValue({ id: "t1" });
+
+      await expect(
+        caller.tasks.create({ title: "a".repeat(256) }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      await expect(
+        caller.tasks.create({ title: "ok", description: "d".repeat(5001) }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      expect(prisma.task.create).not.toHaveBeenCalled();
+    });
+
     it("defaults assignedToId to the creator when not provided", async () => {
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
@@ -39,12 +53,21 @@ describe("tasksRouter", () => {
     });
 
     it("uses provided assignedToId when specified", async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: "user-2" }); // assignee in org
       prisma.task.create.mockResolvedValue({ id: "t1" });
 
       await caller.tasks.create({ title: "Delegate task", assignedToId: "user-2" });
 
       const data = prisma.task.create.mock.calls[0][0].data;
       expect(data.assignedToId).toBe("user-2");
+    });
+
+    it("refuses when assignedToId points at a user in another org", async () => {
+      prisma.user.findFirst.mockResolvedValue(null); // assignee not in org
+
+      await expect(
+        caller.tasks.create({ title: "Delegate task", assignedToId: "user-other-org" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
     it("checks lead org ownership when leadId is supplied", async () => {
@@ -173,6 +196,38 @@ describe("tasksRouter", () => {
       const data = prisma.task.update.mock.calls[0][0].data;
       expect(data.status).toBe("PENDING");
     });
+
+    it("rejects when leadId points at a lead in another org", async () => {
+      prisma.task.findFirst.mockResolvedValue({
+        id: "t1",
+        userId: "user-1",
+        leadId: null,
+        title: "t",
+      });
+      prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", leadId: "lead-other-org" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects when assignedToId points at a user in another org", async () => {
+      prisma.task.findFirst.mockResolvedValue({
+        id: "t1",
+        userId: "user-1",
+        leadId: null,
+        title: "t",
+      });
+      prisma.user.findFirst.mockResolvedValue(null); // user not in org
+
+      await expect(
+        caller.tasks.update({ taskId: "t1", assignedToId: "user-other-org" })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("delete", () => {
@@ -254,6 +309,7 @@ describe("tasksRouter", () => {
 
       await caller.tasks.getById({ taskId: "task-1" });
 
+      // ADMIN sees the whole org (scope kind === "all")
       expect(prisma.task.findFirst).toHaveBeenCalledWith({
         where: {
           id: "task-1",
@@ -267,16 +323,31 @@ describe("tasksRouter", () => {
         },
       });
     });
+
+    it("restricts a USER to tasks they own or are assigned (#198 intra-org leak)", async () => {
+      const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+      prisma.task.findFirst.mockResolvedValue(null);
+
+      await caller.tasks.getById({ taskId: "task-1" });
+
+      const args = prisma.task.findFirst.mock.calls[0][0];
+      expect(args.where.organizationId).toBe("org-1");
+      expect(args.where.OR).toEqual([
+        { userId: { in: ["user-1"] } },
+        { assignedToId: { in: ["user-1"] } },
+      ]);
+    });
   });
 
   describe("getDueToday", () => {
-    it("filters by user.organizationId, excludes COMPLETED, takes 5, excludes deleted", async () => {
+    it("filters by org scope (ADMIN), excludes COMPLETED, takes 5, excludes deleted", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
       await caller.tasks.getDueToday();
 
       const args = prisma.task.findMany.mock.calls[0][0];
-      expect(args.where.user).toEqual({ organizationId: "org-1" });
+      expect(args.where.organizationId).toBe("org-1");
+      expect(args.where.OR).toBeUndefined();
       expect(args.where.status).toEqual({ not: "COMPLETED" });
       expect(args.where.deletedAt).toBe(null);
       expect(args.take).toBe(5);
@@ -284,13 +355,43 @@ describe("tasksRouter", () => {
   });
 
   describe("getAll", () => {
-    it("scopes to the caller's organization and excludes soft-deleted", async () => {
+    it("scopes to the caller's organization (ADMIN) and excludes soft-deleted", async () => {
       prisma.task.findMany.mockResolvedValue([]);
 
       await caller.tasks.getAll();
 
       const args = prisma.task.findMany.mock.calls[0][0];
-      expect(args.where).toEqual({ user: { organizationId: "org-1" }, deletedAt: null });
+      expect(args.where).toEqual({ organizationId: "org-1", deletedAt: null });
+    });
+
+    it("restricts a USER to tasks they own or are assigned (#198 intra-org leak)", async () => {
+      const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+      prisma.task.findMany.mockResolvedValue([]);
+
+      await caller.tasks.getAll();
+
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.where.organizationId).toBe("org-1");
+      expect(args.where.OR).toEqual([
+        { userId: { in: ["user-1"] } },
+        { assignedToId: { in: ["user-1"] } },
+      ]);
+    });
+
+    it("widens a team leader's scope to their team members", async () => {
+      const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "MANAGER" } });
+      prisma.team.findMany.mockResolvedValue([
+        { id: "team-1", users: [{ id: "user-2" }, { id: "user-3" }] },
+      ]);
+      prisma.task.findMany.mockResolvedValue([]);
+
+      await caller.tasks.getAll();
+
+      const args = prisma.task.findMany.mock.calls[0][0];
+      expect(args.where.OR).toEqual([
+        { userId: { in: ["user-1", "user-2", "user-3"] } },
+        { assignedToId: { in: ["user-1", "user-2", "user-3"] } },
+      ]);
     });
 
     it("returns paginated shape { items, nextCursor }", async () => {
@@ -384,7 +485,7 @@ describe("tasksRouter", () => {
       await caller.tasks.getUpcomingFollowUps();
 
       const args = prisma.task.findMany.mock.calls[0][0];
-      expect(args.where.user).toEqual({ organizationId: "org-1" });
+      expect(args.where.organizationId).toBe("org-1");
       expect(args.where.status).toEqual({ not: "COMPLETED" });
       expect(args.where.deletedAt).toBe(null);
       expect(args.where.leadId).toEqual({ not: null });

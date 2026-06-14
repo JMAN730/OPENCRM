@@ -60,15 +60,19 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+# Pin browser binaries to a fixed path so they're accessible regardless of
+# which user's $HOME the runtime process sees (nextjs user has home=/nonexistent)
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
 COPY --chown=nextjs:nodejs scraper/requirements.txt /app/scraper/requirements.txt
-RUN pip install --no-cache-dir -r /app/scraper/requirements.txt \
+RUN pip install --no-cache-dir --retries 5 --timeout 120 -r /app/scraper/requirements.txt \
  && python3 -m playwright install --with-deps chromium
 
 COPY --chown=nextjs:nodejs src/server/scraper/scraper.py /app/scraper/scraper.py
 
 # Writable output dir for scraper CSVs
 RUN mkdir -p /app/scraper-output \
- && chown -R nextjs:nodejs /app/scraper-output /opt/venv
+ && chown -R nextjs:nodejs /app/scraper-output /opt/venv /opt/ms-playwright
 
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh

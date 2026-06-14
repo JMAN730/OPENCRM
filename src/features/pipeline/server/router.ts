@@ -14,6 +14,12 @@ const DEFAULT_STAGES = [
   { name: 'Lost',        order: 5 },
 ];
 
+const DEFAULT_STAGE_NAMES = new Set(DEFAULT_STAGES.map((s) => s.name.toLowerCase()));
+
+function isDefaultStageName(name: string) {
+  return DEFAULT_STAGE_NAMES.has(name.trim().toLowerCase());
+}
+
 async function getOrCreateDefaultPipeline(prisma: PrismaClient, organizationId: string) {
   let pipeline = await prisma.pipeline.findFirst({
     where: { organizationId },
@@ -65,12 +71,17 @@ const LEAD_SELECT = {
 export const pipelineRouter = createTRPCRouter({
   getBoard: organizationProcedure.query(async ({ ctx }) => {
     const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
+    // Scope the nested leads to what the caller is allowed to see (mirrors
+    // moveLead and the rest of the pipeline mutations). leadWhereFromScope
+    // already constrains by organizationId, so a USER/team-leader no longer
+    // sees every org lead's names, companies, deal values, and assignees.
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const stages = await ctx.prisma.pipelineStage.findMany({
       where: { pipelineId: pipeline.id },
       orderBy: { order: 'asc' },
       include: {
         leads: {
-          where: { organizationId: ctx.organizationId },
+          where: leadWhereFromScope(scope),
           select: LEAD_SELECT,
           orderBy: { updatedAt: 'desc' },
         },
@@ -83,17 +94,109 @@ export const pipelineRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string(), stageId: z.string().nullable() }))
     .mutation(async ({ ctx, input }) => {
       if (input.stageId) {
+        const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
         const stage = await ctx.prisma.pipelineStage.findFirst({
           where: { id: input.stageId },
           include: { pipeline: true },
         });
-        if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        // Stage must be org-owned AND belong to the active pipeline — otherwise a
+        // stage from another of the org's pipelines could corrupt the board.
+        if (!stage || stage.pipeline.organizationId !== ctx.organizationId || stage.pipelineId !== pipeline.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
       }
+
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: 'FORBIDDEN', message: 'Lead not found' });
+
       return ctx.prisma.lead.update({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
+        where: { id: lead.id },
         data: { pipelineStageId: input.stageId },
+      });
+    }),
+
+  renameStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1), name: z.string().trim().min(1).max(50) }))
+    .mutation(async ({ ctx, input }) => {
+      const stage = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true },
+      });
+      if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      return ctx.prisma.pipelineStage.update({
+        where: { id: stage.id },
+        data: { name: input.name },
+      });
+    }),
+
+  deleteStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const stage = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true, _count: { select: { leads: true } } },
+      });
+      if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      if (isDefaultStageName(stage.name)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Default stages cannot be deleted' });
+      }
+      if (stage._count.leads > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Move deals out of this stage before deleting',
+        });
+      }
+      await ctx.prisma.pipelineStage.delete({ where: { id: stage.id } });
+      return { ok: true };
+    }),
+
+  duplicateStage: organizationProcedure
+    .input(z.object({ stageId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const source = await ctx.prisma.pipelineStage.findFirst({
+        where: { id: input.stageId },
+        include: { pipeline: true },
+      });
+      if (!source || source.pipeline.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
+      }
+      const created = await ctx.prisma.$transaction(async (tx) => {
+        await tx.pipelineStage.updateMany({
+          where: { pipelineId: source.pipelineId, order: { gt: source.order } },
+          data: { order: { increment: 1 } },
+        });
+        return tx.pipelineStage.create({
+          data: {
+            name: `${source.name} (Copy)`,
+            order: source.order + 1,
+            pipelineId: source.pipelineId,
+          },
+        });
+      });
+      return created;
+    }),
+
+  updateDealValue: organizationProcedure
+    .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(1_000_000_000).nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const lead = await ctx.prisma.lead.findFirst({
+        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        select: { id: true },
+      });
+      if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Lead not found' });
+      return ctx.prisma.lead.update({
+        where: { id: lead.id },
+        data: { value: input.value },
+        select: LEAD_SELECT,
       });
     }),
 
@@ -102,12 +205,12 @@ export const pipelineRouter = createTRPCRouter({
       z.union([
         z.object({
           leadId: z.string(),
-          value: z.number().nonnegative().nullable().optional(),
+          value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
           stageId: z.string().nullable().optional(),
         }),
         z.object({
           company: z.string().trim().min(1, 'Company is required').max(200),
-          value: z.number().nonnegative().nullable().optional(),
+          value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
           stageId: z.string().nullable().optional(),
         }),
       ]),
@@ -116,11 +219,13 @@ export const pipelineRouter = createTRPCRouter({
       let stageId: string | null = null;
       let stageName: string | null = null;
       if (input.stageId) {
+        const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
         const stage = await ctx.prisma.pipelineStage.findFirst({
           where: { id: input.stageId },
           include: { pipeline: true },
         });
-        if (!stage || stage.pipeline.organizationId !== ctx.organizationId) {
+        // Stage must be org-owned AND belong to the active pipeline.
+        if (!stage || stage.pipeline.organizationId !== ctx.organizationId || stage.pipelineId !== pipeline.id) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Stage not found' });
         }
         stageId = stage.id;

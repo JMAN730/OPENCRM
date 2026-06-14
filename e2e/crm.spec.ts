@@ -146,6 +146,7 @@ function buildSession(user: SessionUser) {
       role: user.role,
       organizationId: user.organizationId,
       teamId: user.teamId,
+      loadingAnimationMode: "ALWAYS",
     },
     expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   };
@@ -161,6 +162,7 @@ async function seedAuthenticatedSession(context: BrowserContext, user: SessionUs
       role: user.role,
       organizationId: user.organizationId,
       teamId: user.teamId,
+      loadingAnimationMode: "ALWAYS",
     },
     secret: NEXTAUTH_SECRET,
     maxAge: 30 * 24 * 60 * 60,

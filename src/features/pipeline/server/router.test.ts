@@ -1,5 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
+
+// moveLead/createDeal resolve the org's active pipeline (getOrCreateDefaultPipeline)
+// to assert the target stage belongs to it. Stages must therefore carry the
+// active pipeline's id, and pipeline.findFirst must return a fully-seeded pipeline
+// so the helper doesn't fall into its create/migrate branches.
+const ACTIVE_PIPELINE = {
+  id: "pipeline-1",
+  stages: ["Potential", "Qualified", "Proposal", "Negotiation", "Won", "Lost"].map(
+    (name, order) => ({ id: `s-${order}`, name, order, pipelineId: "pipeline-1" }),
+  ),
+};
 
 describe("pipelineRouter.createDeal", () => {
   let caller: ReturnType<typeof createTestCaller>["caller"];
@@ -7,9 +18,11 @@ describe("pipelineRouter.createDeal", () => {
 
   beforeEach(() => {
     ({ caller, prisma } = createTestCaller());
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
     prisma.pipelineStage.findFirst.mockResolvedValue({
       id: "stage-1",
       name: "Proposal",
+      pipelineId: "pipeline-1",
       pipeline: { organizationId: "org-1" },
     });
   });
@@ -102,5 +115,274 @@ describe("pipelineRouter.createDeal", () => {
 
       expect(prisma.lead.create).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("pipelineRouter.renameStage", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+  });
+
+  it("renames a stage owned by the caller's organization", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-1",
+      name: "Proposal",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.pipelineStage.update.mockResolvedValue({ id: "stage-1", name: "Pitching" });
+
+    const result = await caller.pipeline.renameStage({ stageId: "stage-1", name: "Pitching" });
+
+    expect(prisma.pipelineStage.update).toHaveBeenCalledWith({
+      where: { id: "stage-1" },
+      data: { name: "Pitching" },
+    });
+    expect(result.name).toBe("Pitching");
+  });
+
+  it("rejects with FORBIDDEN for a stage from another organization", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-x",
+      name: "Proposal",
+      pipeline: { organizationId: "other-org" },
+    });
+
+    await expect(
+      caller.pipeline.renameStage({ stageId: "stage-x", name: "Hi" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(prisma.pipelineStage.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.deleteStage", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+  });
+
+  it("deletes an empty non-default stage", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-custom",
+      name: "Discovery",
+      pipeline: { organizationId: "org-1" },
+      _count: { leads: 0 },
+    });
+    prisma.pipelineStage.delete.mockResolvedValue({ id: "stage-custom" });
+
+    await caller.pipeline.deleteStage({ stageId: "stage-custom" });
+
+    expect(prisma.pipelineStage.delete).toHaveBeenCalledWith({ where: { id: "stage-custom" } });
+  });
+
+  it("refuses to delete a default stage", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-potential",
+      name: "Potential",
+      pipeline: { organizationId: "org-1" },
+      _count: { leads: 0 },
+    });
+
+    await expect(
+      caller.pipeline.deleteStage({ stageId: "stage-potential" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(prisma.pipelineStage.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a stage that still has deals", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-custom",
+      name: "Discovery",
+      pipeline: { organizationId: "org-1" },
+      _count: { leads: 3 },
+    });
+
+    await expect(
+      caller.pipeline.deleteStage({ stageId: "stage-custom" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(prisma.pipelineStage.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.duplicateStage", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+    // Run the transaction callback against the same mock prisma so the
+    // assertions below can observe the calls.
+    prisma.$transaction.mockImplementation(async (arg: unknown) => {
+      if (typeof arg === "function") {
+        return (arg as (tx: unknown) => unknown)(prisma);
+      }
+      if (Array.isArray(arg)) return Promise.all(arg);
+      return undefined;
+    });
+  });
+
+  it("creates a copy and shifts later stages down by 1", async () => {
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-2",
+      name: "Qualified",
+      order: 1,
+      pipelineId: "pipe-1",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.pipelineStage.updateMany.mockResolvedValue({ count: 4 });
+    prisma.pipelineStage.create.mockResolvedValue({
+      id: "stage-new",
+      name: "Qualified (Copy)",
+      order: 2,
+      pipelineId: "pipe-1",
+    });
+
+    const result = await caller.pipeline.duplicateStage({ stageId: "stage-2" });
+
+    expect(prisma.pipelineStage.updateMany).toHaveBeenCalledWith({
+      where: { pipelineId: "pipe-1", order: { gt: 1 } },
+      data: { order: { increment: 1 } },
+    });
+    expect(prisma.pipelineStage.create).toHaveBeenCalledWith({
+      data: { name: "Qualified (Copy)", order: 2, pipelineId: "pipe-1" },
+    });
+    expect(result.id).toBe("stage-new");
+  });
+});
+
+describe("pipelineRouter.updateDealValue", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+  });
+
+  it("updates the value on an existing lead", async () => {
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1", value: 5000 });
+
+    const result = await caller.pipeline.updateDealValue({ leadId: "lead-1", value: 5000 });
+
+    expect(prisma.lead.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "lead-1" }, data: { value: 5000 } }),
+    );
+    expect(result).toMatchObject({ id: "lead-1" });
+  });
+
+  it("allows clearing the value with null", async () => {
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1", value: null });
+
+    await caller.pipeline.updateDealValue({ leadId: "lead-1", value: null });
+
+    expect(prisma.lead.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { value: null } }),
+    );
+  });
+
+  it("throws NOT_FOUND when the lead is not in the org", async () => {
+    prisma.lead.findFirst.mockResolvedValue(null);
+
+    await expect(caller.pipeline.updateDealValue({ leadId: "other-lead", value: 100 })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.getBoard (scope)", () => {
+  it("scopes the nested stage leads to the caller (no org-wide leak for USER) (#187-1)", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER", id: "user-1" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.team.findMany.mockResolvedValue([]); // no led teams → own leads only
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({
+      organizationId: "org-1",
+      assignedToId: { in: ["user-1"] },
+    });
+  });
+
+  it("returns all org leads for an ADMIN", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.pipelineStage.findMany.mockResolvedValue([]);
+
+    await caller.pipeline.getBoard();
+
+    const args = prisma.pipelineStage.findMany.mock.calls[0][0];
+    expect(args.include.leads.where).toEqual({ organizationId: "org-1" });
+  });
+});
+
+describe("pipelineRouter.moveLead", () => {
+  it("allows ADMIN to move any lead", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-1",
+      pipelineId: "pipeline-1",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+    prisma.lead.update.mockResolvedValue({ id: "lead-1" });
+
+    await caller.pipeline.moveLead({ leadId: "lead-1", stageId: "stage-1" });
+    expect(prisma.lead.update).toHaveBeenCalled();
+  });
+
+  it("blocks USER from moving a lead not in their scope", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-1",
+      pipelineId: "pipeline-1",
+      pipeline: { organizationId: "org-1" },
+    });
+    prisma.lead.findFirst.mockResolvedValue(null); // not in scope
+
+    await expect(
+      caller.pipeline.moveLead({ leadId: "unowned-lead", stageId: "stage-1" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stage that belongs to a different pipeline in the same org", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "ADMIN" } });
+    prisma.pipeline.findFirst.mockResolvedValue(ACTIVE_PIPELINE);
+    // Org-owned stage, but on a different pipeline than the active one.
+    prisma.pipelineStage.findFirst.mockResolvedValue({
+      id: "stage-other-pipeline",
+      pipelineId: "pipeline-2",
+      pipeline: { organizationId: "org-1" },
+    });
+
+    await expect(
+      caller.pipeline.moveLead({ leadId: "lead-1", stageId: "stage-other-pipeline" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    expect(prisma.lead.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineRouter.updateDealValue (scope)", () => {
+  it("blocks USER from updating a lead not in their scope", async () => {
+    const { caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } });
+    prisma.lead.findFirst.mockResolvedValue(null);
+
+    await expect(
+      caller.pipeline.updateDealValue({ leadId: "unowned-lead", value: 5000 })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    expect(prisma.lead.update).not.toHaveBeenCalled();
   });
 });

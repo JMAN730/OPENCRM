@@ -7,6 +7,7 @@ import {
   scoreOf,
   touchesOf,
   type Lead,
+  type ScoringRuleConfig,
 } from "./shared";
 
 type FocusTask = inferRouterOutputs<AppRouter>["tasks"]["getDueToday"][number];
@@ -54,13 +55,13 @@ function formatTaskDueLabel(task: FocusTask) {
   return `Due ${format(dueDate, "EEE 'at' h:mm a")}`;
 }
 
-function sortByScoreThenFreshness(left: Lead, right: Lead) {
-  const scoreDelta = scoreOf(right) - scoreOf(left);
+function sortByScoreThenFreshness(left: Lead, right: Lead, rules?: ScoringRuleConfig[]) {
+  const scoreDelta = scoreOf(right, rules) - scoreOf(left, rules);
   if (scoreDelta !== 0) return scoreDelta;
   return createdAtTime(right) - createdAtTime(left);
 }
 
-function sortTasksAgainstLeadMap(left: FocusTask, right: FocusTask, leadMap: Map<string, Lead>) {
+function sortTasksAgainstLeadMap(left: FocusTask, right: FocusTask, leadMap: Map<string, Lead>, rules?: ScoringRuleConfig[]) {
   const dueDelta = taskDueTime(left) - taskDueTime(right);
   if (dueDelta !== 0) return dueDelta;
 
@@ -68,7 +69,7 @@ function sortTasksAgainstLeadMap(left: FocusTask, right: FocusTask, leadMap: Map
   const rightLead = leadMap.get(taskLeadId(right) ?? "");
 
   if (leftLead && rightLead) {
-    const scoreDelta = scoreOf(rightLead) - scoreOf(leftLead);
+    const scoreDelta = scoreOf(rightLead, rules) - scoreOf(leftLead, rules);
     if (scoreDelta !== 0) return scoreDelta;
 
     return createdAtTime(rightLead) - createdAtTime(leftLead);
@@ -79,7 +80,7 @@ function sortTasksAgainstLeadMap(left: FocusTask, right: FocusTask, leadMap: Map
   return 0;
 }
 
-function buildFocusCard(lead: Lead, urgency: FocusUrgency, rank: number, task?: FocusTask): FocusLeadCard {
+function buildFocusCard(lead: Lead, urgency: FocusUrgency, rank: number, rules?: ScoringRuleConfig[], task?: FocusTask): FocusLeadCard {
   let reason: string;
   if (urgency === "overdue") {
     reason = "Overdue follow-up";
@@ -99,7 +100,7 @@ function buildFocusCard(lead: Lead, urgency: FocusUrgency, rank: number, task?: 
     urgency,
     reason,
     dueLabel: task ? formatTaskDueLabel(task) : null,
-    score: scoreOf(lead),
+    score: scoreOf(lead, rules),
     touches: touchesOf(lead),
     nextAction: nextActionForLead(lead),
   };
@@ -143,12 +144,14 @@ export function buildFocusSpotlightLeads({
   dueTodayTasks,
   upcomingFollowUpTasks = [],
   limit = 3,
+  scoringRules,
 }: {
   leads: Lead[];
   overdueTasks: FocusTask[];
   dueTodayTasks: FocusTask[];
   upcomingFollowUpTasks?: FocusTask[];
   limit?: number;
+  scoringRules?: ScoringRuleConfig[];
 }) {
   const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
   const usedLeadIds = new Set<string>();
@@ -166,8 +169,8 @@ export function buildFocusSpotlightLeads({
     }
   }
 
-  const sortedOverdue = [...overdueTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap));
-  const sortedDueToday = [...dueTodayTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap));
+  const sortedOverdue = [...overdueTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap, scoringRules));
+  const sortedDueToday = [...dueTodayTasks].sort((left, right) => sortTasksAgainstLeadMap(left, right, leadMap, scoringRules));
 
   for (const task of sortedOverdue) {
     const leadId = taskLeadId(task);
@@ -176,7 +179,7 @@ export function buildFocusSpotlightLeads({
     const lead = leadMap.get(leadId);
     if (!lead) continue;
 
-    spotlight.push(buildFocusCard(lead, "overdue", spotlight.length + 1, task));
+    spotlight.push(buildFocusCard(lead, "overdue", spotlight.length + 1, scoringRules, task));
     usedLeadIds.add(leadId);
     if (spotlight.length >= limit) return spotlight;
   }
@@ -188,18 +191,18 @@ export function buildFocusSpotlightLeads({
     const lead = leadMap.get(leadId);
     if (!lead) continue;
 
-    spotlight.push(buildFocusCard(lead, "today", spotlight.length + 1, task));
+    spotlight.push(buildFocusCard(lead, "today", spotlight.length + 1, scoringRules, task));
     usedLeadIds.add(leadId);
     if (spotlight.length >= limit) return spotlight;
   }
 
   const hotLeads = leads
     .filter((lead) => !usedLeadIds.has(lead.id) && effectiveTempOf(lead) === "hot")
-    .sort(sortByScoreThenFreshness);
+    .sort((a, b) => sortByScoreThenFreshness(a, b, scoringRules));
 
   for (const lead of hotLeads) {
     const upcoming = upcomingByLead.get(lead.id);
-    spotlight.push(buildFocusCard(lead, "hot", spotlight.length + 1, upcoming));
+    spotlight.push(buildFocusCard(lead, "hot", spotlight.length + 1, scoringRules, upcoming));
     usedLeadIds.add(lead.id);
     if (spotlight.length >= limit) return spotlight;
   }

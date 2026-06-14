@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Papa from "papaparse";
 import readXlsxFile from "read-excel-file/browser";
+import { useSession } from "next-auth/react";
 import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle2, AlertCircle, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { normalizeState, parseCityState } from "@/features/leads/location";
@@ -30,15 +31,22 @@ const FIELD_MAP: Record<string, string> = {
   // Contact
   email: "email", "email address": "email",
   phone: "phone", "phone number": "phone", mobile: "phone", telephone: "phone",
+  "normalized phone": "phone",
   // Location
   city: "city", "city/town": "city", town: "city", location: "city",
   state: "state", province: "state", region: "state",
   // Other
   website: "website", url: "website", "final url": "website", "website url": "website",
+  "google maps url": "mapsUrl", "maps url": "mapsUrl", "google maps": "mapsUrl",
   rating: "rating", stars: "rating", "star rating": "rating", reviews: "reviewCount",
   "review count": "reviewCount", "total reviews": "reviewCount",
   source: "source", "lead source": "source", category: "source",
   status: "status",
+  "personalized observation": "qualificationSummary",
+  "personalized_observation": "qualificationSummary",
+  observation: "qualificationSummary",
+  notes: "qualificationSummary",
+  qualification: "qualificationSummary",
 };
 
 type ParsedLead = {
@@ -50,9 +58,11 @@ type ParsedLead = {
   city?: string;
   state?: string;
   website?: string;
+  mapsUrl?: string;
   rating?: number;
   reviewCount?: number;
   source?: string;
+  qualificationSummary?: string;
   status?: "NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP";
 };
 
@@ -109,6 +119,11 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
     else delete lead.website;
   }
 
+  // Validate mapsUrl — must be an absolute URL
+  if (lead.mapsUrl) {
+    if (!isValidUrl(lead.mapsUrl)) delete lead.mapsUrl;
+  }
+
   const validStatuses = ["NOT_CONTACTED","CONNECTED","AI_VOICEMAIL","NO_ANSWER","HUNG_UP"] as const;
   const rawStatus = lead.status?.toUpperCase();
   const rating = lead.rating ? Number(lead.rating) : undefined;
@@ -143,7 +158,25 @@ export function ImportLeadsDialog({ onImported }: Props) {
   const [sheetName, setSheetName] = useState<string>("");
   // Store all parsed sheets so switching doesn't require re-reading the file
   const [allSheets, setAllSheets] = useState<{ sheet: string; data: RawCell[][] }[] | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string | undefined>(undefined);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [newTagName, setNewTagName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: session } = useSession();
+  const isAdminOrManager =
+    session?.user?.role === "ADMIN" || session?.user?.role === "MANAGER";
+
+  const utils = trpc.useUtils();
+  const { data: orgMembers } = trpc.teams.organizationMembers.useQuery(undefined, {
+    enabled: isAdminOrManager,
+    staleTime: 60_000,
+  });
+  const { data: myTeam } = trpc.teams.myTeam.useQuery(undefined, { staleTime: 60_000 });
+  const { data: orgTags } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 120_000 });
+  const createTag = trpc.leads.createTag.useMutation();
+
+  const assignableUsers = isAdminOrManager ? (orgMembers ?? []) : (myTeam?.users ?? []);
 
   const bulkCreate = trpc.leads.bulkCreate.useMutation({
     onSuccess: (data) => {
@@ -155,6 +188,19 @@ export function ImportLeadsDialog({ onImported }: Props) {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const handleCreateTag = async () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    try {
+      const tag = await createTag.mutateAsync({ name });
+      setSelectedTagIds((ids) => [...ids, tag.id]);
+      setNewTagName("");
+      void utils.leads.listOrgTags.invalidate();
+    } catch (err: unknown) {
+      toast.error((err as { message?: string }).message ?? "Failed to create tag");
+    }
+  };
 
   const applyRawRows = (rawRows: RawCell[][]) => {
     const [headerRow, ...dataRows] = rawRows;
@@ -247,7 +293,12 @@ export function ImportLeadsDialog({ onImported }: Props) {
     if (file) parseFile(file);
   };
 
-  const handleImport = () => bulkCreate.mutate(rows);
+  const handleImport = () =>
+    bulkCreate.mutate({
+      leads: rows,
+      assigneeId: assigneeId ?? undefined,
+      tagIds: selectedTagIds.length ? selectedTagIds : undefined,
+    });
 
   const reset = () => {
     setRows([]);
@@ -255,6 +306,9 @@ export function ImportLeadsDialog({ onImported }: Props) {
     setSheetNames([]);
     setSheetName("");
     setAllSheets(null);
+    setAssigneeId(undefined);
+    setSelectedTagIds([]);
+    setNewTagName("");
   };
 
   return (
@@ -373,6 +427,83 @@ export function ImportLeadsDialog({ onImported }: Props) {
                 <><CheckCircle2 size={13} className="shrink-0 mt-0.5 text-green-500" />
                 <span>All rows have at least one contact field.</span></>
               )}
+            </div>
+
+            {/* Import options: assign + tags */}
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              {assignableUsers.length > 0 && (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Assign to</p>
+                  <select
+                    className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+                    value={assigneeId ?? ""}
+                    onChange={(e) => setAssigneeId(e.target.value || undefined)}
+                  >
+                    <option value="">Me</option>
+                    {assignableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  Tags{" "}
+                  <span className="font-normal text-muted-foreground">(optional)</span>
+                </p>
+                {(orgTags ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {(orgTags ?? []).map((tag) => {
+                      const active = selectedTagIds.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedTagIds((ids) =>
+                              active
+                                ? ids.filter((id) => id !== tag.id)
+                                : [...ids, tag.id],
+                            )
+                          }
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                            active
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50",
+                          )}
+                        >
+                          <Tag size={10} />
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    className="h-8 flex-1 rounded-md border border-border bg-background px-3 text-xs placeholder:text-muted-foreground"
+                    placeholder="New tag name…"
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void handleCreateTag(); }}
+                    maxLength={50}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!newTagName.trim() || createTag.isPending}
+                    onClick={() => void handleCreateTag()}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}

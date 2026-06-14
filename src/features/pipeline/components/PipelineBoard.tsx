@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -19,7 +19,38 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
+import { LeadModal } from "@/features/leads/components/lead-list/LeadModal";
+import type { Lead as ModalLead } from "@/features/leads/components/lead-list/shared";
+
+const DEFAULT_STAGE_NAMES = new Set([
+  "potential",
+  "qualified",
+  "proposal",
+  "negotiation",
+  "won",
+  "lost",
+]);
+
+function isDefaultStage(name: string) {
+  return DEFAULT_STAGE_NAMES.has(name.trim().toLowerCase());
+}
+
+type SortMode = "value" | "name" | "updated";
+const SORT_LABELS: Record<SortMode, string> = {
+  value: "Value",
+  name: "Name",
+  updated: "Recently updated",
+};
 
 type BoardData = inferRouterOutputs<AppRouter>["pipeline"]["getBoard"];
 type Stage = BoardData["stages"][number];
@@ -166,18 +197,33 @@ function ScoreBar({ score, temp }: { score: number; temp: Lead["temperatureOverr
 
 // ── Lead card ─────────────────────────────────────────────────────────────────
 
-function LeadCard({ lead, onDragStart, onDragEnd }: {
+function LeadCard({ lead, onDragStart, onDragEnd, onValueChange, onSelectLead }: {
   lead: Lead;
-  onDragStart: (e: React.DragEvent, lead: Lead) => void;
-  onDragEnd:   (e: React.DragEvent) => void;
+  onDragStart:   (e: React.DragEvent, lead: Lead) => void;
+  onDragEnd:     (e: React.DragEvent) => void;
+  onValueChange: (leadId: string, value: number | null) => void;
+  onSelectLead:  (leadId: string) => void;
 }) {
+  const [editingValue, setEditingValue] = useState(false);
+  const [valueInput, setValueInput]     = useState("");
   const score  = computeScore(lead);
   const age    = leadAge(lead);
   const name   = leadDisplayName(lead);
   const srcStr = [leadLocation(lead), lead.source].filter(Boolean).join(" · ");
 
+  const commitValue = () => {
+    const raw = valueInput.trim();
+    const num = raw === "" ? null : Number(raw.replace(/[^0-9.]/g, ""));
+    if (num !== null && (!Number.isFinite(num) || num < 0)) {
+      setEditingValue(false);
+      return;
+    }
+    onValueChange(lead.id, num);
+    setEditingValue(false);
+  };
+
   return (
-    <article className="crm-pipeline-lead" draggable onDragStart={(e) => onDragStart(e, lead)} onDragEnd={onDragEnd}>
+    <article className="crm-pipeline-lead" draggable style={{ cursor: "pointer" }} onDragStart={(e) => onDragStart(e, lead)} onDragEnd={onDragEnd} onClick={() => onSelectLead(lead.id)}>
       <div className="crm-pipeline-lead-top">
         <Avatar name={name} id={lead.id} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -187,7 +233,37 @@ function LeadCard({ lead, onDragStart, onDragEnd }: {
         {lead.starred && <span className="crm-pipeline-lead-star on"><Star size={13} fill="currentColor" /></span>}
       </div>
       <div className="crm-pipeline-lead-row">
-        <span className="crm-pipeline-lead-value">{fmtValueFull(lead.value)}</span>
+        {editingValue ? (
+          <input
+            autoFocus
+            className="crm-pipeline-value-input"
+            inputMode="decimal"
+            maxLength={5}
+            value={valueInput}
+            onChange={(e) => setValueInput(e.target.value)}
+            onBlur={commitValue}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitValue();
+              if (e.key === "Escape") setEditingValue(false);
+              e.stopPropagation();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => e.stopPropagation()}
+            style={{ width: 90, fontSize: 12, padding: "1px 4px" }}
+          />
+        ) : (
+          <button
+            className="crm-pipeline-lead-value"
+            title="Click to edit value"
+            onClick={(e) => {
+              e.stopPropagation();
+              setValueInput(lead.value != null ? String(lead.value) : "");
+              setEditingValue(true);
+            }}
+          >
+            {fmtValueFull(lead.value)}
+          </button>
+        )}
         <TempTag temp={lead.temperatureOverride} />
       </div>
       <div className="crm-pipeline-lead-foot">
@@ -206,20 +282,32 @@ function LeadCard({ lead, onDragStart, onDragEnd }: {
 
 // ── Stage column ──────────────────────────────────────────────────────────────
 
-function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal }: {
+function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop, onAddDeal, onRename, onDuplicate, onDelete, onValueChange, onSelectLead }: {
   stage: Stage; leads: Lead[]; dragOverStageId: string | null;
-  onDragStart: (e: React.DragEvent, lead: Lead) => void;
-  onDragEnd:   (e: React.DragEvent) => void;
-  onDragOver:  (e: React.DragEvent, stageId: string) => void;
-  onDragLeave: (e: React.DragEvent, stageId: string) => void;
-  onDrop:      (e: React.DragEvent, stageId: string) => void;
-  onAddDeal:   (stage: Stage) => void;
+  onDragStart:   (e: React.DragEvent, lead: Lead) => void;
+  onDragEnd:     (e: React.DragEvent) => void;
+  onDragOver:    (e: React.DragEvent, stageId: string) => void;
+  onDragLeave:   (e: React.DragEvent, stageId: string) => void;
+  onDrop:        (e: React.DragEvent, stageId: string) => void;
+  onAddDeal:     (stage: Stage) => void;
+  onRename:      (stage: Stage) => void;
+  onDuplicate:   (stage: Stage) => void;
+  onDelete:      (stage: Stage) => void;
+  onValueChange: (leadId: string, value: number | null) => void;
+  onSelectLead:  (leadId: string) => void;
 }) {
-  const name    = stageDisplayName(stage.name);
-  const cfg     = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
-  const total   = leads.reduce((s, l) => s + (l.value ?? 0), 0);
-  const barPct  = name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
-  const isOver  = dragOverStageId === stage.id;
+  const name        = stageDisplayName(stage.name);
+  const cfg         = STAGE_CONFIG[name] ?? { color: "var(--crm-fg-faint)", prob: 0 };
+  const total       = leads.reduce((s, l) => s + (l.value ?? 0), 0);
+  const barPct      = name === "Won" ? 100 : Math.min(100, Math.round((total / 600_000) * 100));
+  const isOver      = dragOverStageId === stage.id;
+  const isDefault   = isDefaultStage(stage.name);
+  const hasLeads    = stage.leads.length > 0;
+  const deleteHint  = isDefault
+    ? "Default stages cannot be deleted"
+    : hasLeads
+      ? "Move deals out of this stage before deleting"
+      : undefined;
 
   return (
     <section className={`crm-pipeline-col${isOver ? " drag-over" : ""}`}>
@@ -228,9 +316,32 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
           <span className="crm-pipeline-col-dot" style={{ background: cfg.color }} />
           <span className="crm-pipeline-col-name">{name}</span>
           <span className="crm-pipeline-col-count">{leads.length}</span>
-          <button className="crm-btn ghost icon crm-pipeline-col-menu" aria-label="Column actions" style={{ marginLeft: "auto" }}>
-            <MoreVertical size={13} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  className="crm-btn ghost icon crm-pipeline-col-menu"
+                  aria-label="Column actions"
+                  style={{ marginLeft: "auto" }}
+                />
+              }
+            >
+              <MoreVertical size={13} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onRename(stage)}>Rename</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(stage)}>Duplicate</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={isDefault || hasLeads}
+                title={deleteHint}
+                onClick={() => onDelete(stage)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="crm-pipeline-col-meta">
           <span className="crm-pipeline-col-value">{fmtValue(total)}</span>
@@ -247,7 +358,7 @@ function StageColumn({ stage, leads, dragOverStageId, onDragStart, onDragEnd, on
         onDrop={(e) => onDrop(e, stage.id)}
       >
         {leads.map((lead) => (
-          <LeadCard key={lead.id} lead={lead} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+          <LeadCard key={lead.id} lead={lead} onDragStart={onDragStart} onDragEnd={onDragEnd} onValueChange={onValueChange} onSelectLead={onSelectLead} />
         ))}
         <button
           type="button"
@@ -338,6 +449,138 @@ function KpiStrip({ stages }: { stages: Stage[] }) {
   );
 }
 
+// ── Forecast view ─────────────────────────────────────────────────────────────
+
+function ForecastView({ stages }: { stages: Stage[] }) {
+  const rows = ACTIVE_STAGES.map((name) => {
+    const stage = stages.find((s) => stageKey(s) === name);
+    const leads = stage?.leads ?? [];
+    const prob  = STAGE_CONFIG[name]?.prob ?? 0;
+    const total = leads.reduce((s, l) => s + (l.value ?? 0), 0);
+    return { name, count: leads.length, total, weighted: total * (prob / 100), prob };
+  });
+
+  const totalPipeline  = rows.reduce((s, r) => s + r.total, 0);
+  const totalWeighted  = rows.reduce((s, r) => s + r.weighted, 0);
+
+  return (
+    <div className="crm-card" style={{ overflow: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--crm-border)", color: "var(--crm-fg-faint)", fontSize: 11 }}>
+            {["Stage", "Deals", "Total value", "Close %", "Weighted value"].map((h) => (
+              <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.name} style={{ borderBottom: "1px solid var(--crm-border-faint)" }}>
+              <td style={{ padding: "10px 12px", fontWeight: 500 }}>
+                <span className="crm-pipeline-col-dot" style={{ background: STAGE_CONFIG[r.name]?.color, marginRight: 6, display: "inline-block", width: 8, height: 8, borderRadius: "50%" }} />
+                {r.name}
+              </td>
+              <td style={{ padding: "10px 12px", color: "var(--crm-fg-muted)" }}>{r.count}</td>
+              <td style={{ padding: "10px 12px" }}>{fmtValue(r.total)}</td>
+              <td style={{ padding: "10px 12px", color: "var(--crm-fg-muted)" }}>{r.prob}%</td>
+              <td style={{ padding: "10px 12px", fontWeight: 600, color: "var(--crm-accent)" }}>{fmtValue(r.weighted)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ borderTop: "2px solid var(--crm-border)", fontWeight: 600 }}>
+            <td style={{ padding: "10px 12px" }}>Total</td>
+            <td style={{ padding: "10px 12px" }}>{rows.reduce((s, r) => s + r.count, 0)}</td>
+            <td style={{ padding: "10px 12px" }}>{fmtValue(totalPipeline)}</td>
+            <td />
+            <td style={{ padding: "10px 12px", color: "var(--crm-accent)" }}>{fmtValue(totalWeighted)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ── Table view ────────────────────────────────────────────────────────────────
+
+function TableView({ stages, filterLeads, onValueChange }: {
+  stages: Stage[];
+  filterLeads: (leads: Lead[]) => Lead[];
+  onValueChange: (leadId: string, value: number | null) => void;
+}) {
+  const [editId, setEditId]       = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const allLeads = useMemo(
+    () => stages.flatMap((s) => filterLeads(s.leads).map((l) => ({ ...l, stageName: stageDisplayName(s.name) }))),
+    [stages, filterLeads],
+  );
+
+  const commitEdit = (leadId: string) => {
+    const raw = editValue.trim();
+    const num = raw === "" ? null : Number(raw.replace(/[^0-9.]/g, ""));
+    if (num !== null && (!Number.isFinite(num) || num < 0)) { setEditId(null); return; }
+    onValueChange(leadId, num);
+    setEditId(null);
+  };
+
+  return (
+    <div className="crm-card" style={{ overflow: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--crm-border)", color: "var(--crm-fg-faint)", fontSize: 11 }}>
+            {["Company / Lead", "Stage", "Value", "Score", "Age", "Owner"].map((h) => (
+              <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 500 }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {allLeads.map((lead) => {
+            const age   = leadAge(lead);
+            const score = computeScore(lead);
+            return (
+              <tr key={lead.id} style={{ borderBottom: "1px solid var(--crm-border-faint)" }}>
+                <td style={{ padding: "8px 12px", fontWeight: 500 }}>{leadDisplayName(lead)}</td>
+                <td style={{ padding: "8px 12px", color: "var(--crm-fg-muted)" }}>{lead.stageName}</td>
+                <td style={{ padding: "8px 12px" }}>
+                  {editId === lead.id ? (
+                    <input
+                      autoFocus
+                      inputMode="decimal"
+                      maxLength={5}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => commitEdit(lead.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit(lead.id);
+                        if (e.key === "Escape") setEditId(null);
+                      }}
+                      style={{ width: 80, fontSize: 12, padding: "1px 4px" }}
+                    />
+                  ) : (
+                    <button
+                      style={{ fontWeight: 500, cursor: "pointer", background: "none", border: "none", padding: 0, color: "inherit" }}
+                      onClick={() => { setEditId(lead.id); setEditValue(lead.value != null ? String(lead.value) : ""); }}
+                    >
+                      {fmtValueFull(lead.value)}
+                    </button>
+                  )}
+                </td>
+                <td style={{ padding: "8px 12px" }}>{score}</td>
+                <td style={{ padding: "8px 12px", color: age.stale ? "var(--crm-neg)" : "var(--crm-fg-muted)" }}>{age.label}</td>
+                <td style={{ padding: "8px 12px", color: "var(--crm-fg-muted)" }}>{lead.assignedTo?.name ?? "—"}</td>
+              </tr>
+            );
+          })}
+          {allLeads.length === 0 && (
+            <tr><td colSpan={6} style={{ padding: "32px 12px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>No deals match the current filter</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Main board ────────────────────────────────────────────────────────────────
 
 type FilterChip = "all" | "mine" | "closing" | "idle" | "hot";
@@ -358,7 +601,52 @@ export function PipelineBoard() {
   const [dealCompany, setDealCompany]       = useState("");
   const [dealValue, setDealValue]           = useState("");
 
+  const [sortMode, setSortMode]             = useState<SortMode>("value");
+  const [filterOwnerId, setFilterOwnerId]   = useState<string>("");
+  const [filterMinValue, setFilterMinValue] = useState<string>("");
+  const [filterMaxValue, setFilterMaxValue] = useState<string>("");
+
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const { data: selectedLeadData } = trpc.leads.getById.useQuery(
+    { id: selectedLeadId! },
+    { enabled: !!selectedLeadId },
+  );
+
+  const [renamingStage, setRenamingStage] = useState<Stage | null>(null);
+  const [renameValue, setRenameValue]     = useState("");
+
   const { data, isLoading } = trpc.pipeline.getBoard.useQuery();
+  const { data: members }   = trpc.teams.organizationMembers.useQuery();
+
+  const renameStage = trpc.pipeline.renameStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage renamed");
+      setRenamingStage(null);
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to rename stage"),
+  });
+
+  const duplicateStage = trpc.pipeline.duplicateStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage duplicated");
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to duplicate stage"),
+  });
+
+  const deleteStage = trpc.pipeline.deleteStage.useMutation({
+    onSuccess: () => {
+      toast.success("Stage deleted");
+      void utils.pipeline.getBoard.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete stage"),
+  });
+
+  const openRenameDialog = useCallback((stage: Stage) => {
+    setRenameValue(stageDisplayName(stage.name));
+    setRenamingStage(stage);
+  }, []);
 
   const createDeal = trpc.pipeline.createDeal.useMutation({
     onSuccess: () => {
@@ -415,6 +703,34 @@ export function PipelineBoard() {
     });
   }, [dealMode, dealLeadId, dealCompany, dealValue, dealStage, createDeal]);
 
+  const updateDealValue = trpc.pipeline.updateDealValue.useMutation({
+    onMutate: async ({ leadId, value }) => {
+      await utils.pipeline.getBoard.cancel();
+      const prev = utils.pipeline.getBoard.getData();
+      utils.pipeline.getBoard.setData(undefined, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          stages: old.stages.map((s) => ({
+            ...s,
+            leads: s.leads.map((l) => (l.id === leadId ? { ...l, value } : l)),
+          })),
+        };
+      });
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      utils.pipeline.getBoard.setData(undefined, ctx?.prev);
+      toast.error("Failed to update deal value");
+    },
+    onSettled: () => void utils.pipeline.getBoard.invalidate(),
+  });
+
+  const handleValueChange = useCallback(
+    (leadId: string, value: number | null) => updateDealValue.mutate({ leadId, value }),
+    [updateDealValue],
+  );
+
   const moveLead = trpc.pipeline.moveLead.useMutation({
     onMutate: async ({ leadId, stageId }) => {
       await utils.pipeline.getBoard.cancel();
@@ -470,6 +786,44 @@ export function PipelineBoard() {
     moveLead.mutate({ leadId: lead.id, stageId });
   }, [moveLead]);
 
+  const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
+
+  // Derive stage data before early returns so hooks are always called unconditionally.
+  const stages = data?.stages ?? [];
+  const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
+  const lostStage    = stageByName[LOST_STAGE];
+  const activeStages = stages.filter((s) => stageDisplayName(s.name) !== LOST_STAGE);
+
+  // These must be defined before the useMemo below because filterLeads (a hoisted
+  // function declaration) closes over them. Accessing a `const` before its
+  // declaration causes a TDZ ReferenceError when the memo callback fires.
+  const minVal = filterMinValue.trim() === "" ? null : Number(filterMinValue);
+  const maxVal = filterMaxValue.trim() === "" ? null : Number(filterMaxValue);
+  const minActive = minVal != null && Number.isFinite(minVal);
+  const maxActive = maxVal != null && Number.isFinite(maxVal);
+  const filterActive = !!filterOwnerId || minActive || maxActive;
+  const filterCount  = (filterOwnerId ? 1 : 0) + (minActive ? 1 : 0) + (maxActive ? 1 : 0);
+
+  const allBoardLeadIds = useMemo(
+    () => activeStages.flatMap((s) => filterLeads(s.leads).map((l) => l.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeStages, activeFilter, filterOwnerId, filterMinValue, filterMaxValue, sortMode],
+  );
+
+  const handleSelectLead = useCallback((id: string) => setSelectedLeadId(id), []);
+
+  const handleModalPrev = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx > 0) setSelectedLeadId(allBoardLeadIds[idx - 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
+  const handleModalNext = useCallback(() => {
+    if (!selectedLeadId) return;
+    const idx = allBoardLeadIds.indexOf(selectedLeadId);
+    if (idx < allBoardLeadIds.length - 1) setSelectedLeadId(allBoardLeadIds[idx + 1]);
+  }, [selectedLeadId, allBoardLeadIds]);
+
   if (isLoading) {
     return (
       <div className="crm-content">
@@ -481,26 +835,54 @@ export function PipelineBoard() {
   }
   if (!data) return null;
 
-  const { stages } = data;
-  const userId = (session?.user as { id?: string } | undefined)?.id ?? "";
-
   function filterLeads(leads: Lead[]): Lead[] {
-    if (activeFilter === "mine")    return leads.filter((l) => l.assignedTo?.id === userId);
-    if (activeFilter === "hot")     return leads.filter((l) => l.temperatureOverride === "HOT");
-    if (activeFilter === "idle")    return leads.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
-    if (activeFilter === "closing") {
+    let out = leads;
+    if (activeFilter === "mine")    out = out.filter((l) => l.assignedTo?.id === userId);
+    else if (activeFilter === "hot")     out = out.filter((l) => l.temperatureOverride === "HOT");
+    else if (activeFilter === "idle")    out = out.filter((l) => differenceInDays(new Date(), new Date(l.updatedAt)) > 14);
+    else if (activeFilter === "closing") {
       const now = new Date();
-      return leads.filter((l) => {
+      out = out.filter((l) => {
         const d = new Date(l.updatedAt);
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       });
     }
-    return leads;
+    if (filterOwnerId) out = out.filter((l) => l.assignedTo?.id === filterOwnerId);
+    if (minActive) out = out.filter((l) => (l.value ?? 0) >= (minVal as number));
+    if (maxActive) out = out.filter((l) => (l.value ?? 0) <= (maxVal as number));
+    return sortLeads(out, sortMode);
   }
 
-  const stageByName  = Object.fromEntries(stages.map((s) => [stageKey(s), s]));
-  const activeStages = ACTIVE_STAGES.map((n) => stageByName[n]).filter(Boolean) as Stage[];
-  const lostStage    = stageByName[LOST_STAGE];
+  function sortLeads(leads: Lead[], mode: SortMode): Lead[] {
+    const copy = [...leads];
+    if (mode === "value") {
+      copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    } else if (mode === "name") {
+      copy.sort((a, b) => leadDisplayName(a).localeCompare(leadDisplayName(b)));
+    } else {
+      copy.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    return copy;
+  }
+
+  function handleDeleteStage(stage: Stage) {
+    if (typeof window !== "undefined" && !window.confirm(`Delete "${stageDisplayName(stage.name)}"?`)) return;
+    deleteStage.mutate({ stageId: stage.id });
+  }
+
+  function submitRename() {
+    if (!renamingStage) return;
+    const name = renameValue.trim();
+    if (!name) {
+      toast.error("Name is required");
+      return;
+    }
+    if (name === stageDisplayName(renamingStage.name)) {
+      setRenamingStage(null);
+      return;
+    }
+    renameStage.mutate({ stageId: renamingStage.id, name });
+  }
 
   const CHIP_LABELS: { id: FilterChip; label: string }[] = [
     { id: "all",     label: "All deals"         },
@@ -543,8 +925,104 @@ export function PipelineBoard() {
           <button key={id} className="crm-pipeline-chip" aria-pressed={activeFilter === id} onClick={() => setActiveFilter(id)}>{label}</button>
         ))}
         <span style={{ flex: 1 }} />
-        <button className="crm-btn ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}><Filter size={13} /> Filter</button>
-        <button className="crm-btn ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}><ArrowUpDown size={13} /> Sort: Value</button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="crm-btn ghost"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              />
+            }
+          >
+            <Filter size={13} /> Filter{filterActive ? ` (${filterCount})` : ""}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64 p-3">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <Label htmlFor="filter-owner" style={{ fontSize: 12 }}>Owner</Label>
+                <select
+                  id="filter-owner"
+                  value={filterOwnerId}
+                  onChange={(e) => setFilterOwnerId(e.target.value)}
+                  style={{
+                    height: 32,
+                    fontSize: 13,
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--crm-border)",
+                    background: "var(--crm-bg-card)",
+                  }}
+                >
+                  <option value="">Anyone</option>
+                  {members?.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                  <Label htmlFor="filter-min" style={{ fontSize: 12 }}>Min value</Label>
+                  <Input
+                    id="filter-min"
+                    inputMode="decimal"
+                    maxLength={5}
+                    placeholder="0"
+                    value={filterMinValue}
+                    onChange={(e) => setFilterMinValue(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                  <Label htmlFor="filter-max" style={{ fontSize: 12 }}>Max value</Label>
+                  <Input
+                    id="filter-max"
+                    inputMode="decimal"
+                    maxLength={5}
+                    placeholder="∞"
+                    value={filterMaxValue}
+                    onChange={(e) => setFilterMaxValue(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!filterActive}
+                  onClick={() => {
+                    setFilterOwnerId("");
+                    setFilterMinValue("");
+                    setFilterMaxValue("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className="crm-btn ghost"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              />
+            }
+          >
+            <ArrowUpDown size={13} /> Sort: {SORT_LABELS[sortMode]}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup
+              value={sortMode}
+              onValueChange={(v) => setSortMode(v as SortMode)}
+            >
+              <DropdownMenuRadioItem value="value">Value (high to low)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="name">Name (A–Z)</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="updated">Recently updated</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {viewTab === "board" ? (
@@ -563,6 +1041,11 @@ export function PipelineBoard() {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onAddDeal={openDealDialog}
+                  onRename={openRenameDialog}
+                  onDuplicate={(s) => duplicateStage.mutate({ stageId: s.id })}
+                  onDelete={handleDeleteStage}
+                  onValueChange={handleValueChange}
+                  onSelectLead={handleSelectLead}
                 />
               ))}
             </div>
@@ -578,14 +1061,54 @@ export function PipelineBoard() {
             />
           )}
         </>
+      ) : viewTab === "forecast" ? (
+        <ForecastView stages={stages} />
       ) : (
-        <div className="crm-card" style={{ padding: "48px 24px", textAlign: "center", color: "var(--crm-fg-faint)" }}>
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--crm-fg)" }}>
-            {viewTab.charAt(0).toUpperCase() + viewTab.slice(1)} view
-          </p>
-          <p style={{ margin: "6px 0 0", fontSize: 13 }}>Coming soon</p>
-        </div>
+        <TableView stages={stages} filterLeads={filterLeads} onValueChange={handleValueChange} />
       )}
+
+      <Dialog
+        open={!!renamingStage}
+        onOpenChange={(open) => { if (!open) setRenamingStage(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename stage</DialogTitle>
+            <DialogDescription>
+              {renamingStage ? `Rename "${stageDisplayName(renamingStage.name)}".` : null}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => { e.preventDefault(); submitRename(); }}
+            className="flex flex-col gap-3"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="rename-stage">Name</Label>
+              <Input
+                id="rename-stage"
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                disabled={renameStage.isPending}
+                maxLength={50}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenamingStage(null)}
+                disabled={renameStage.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={renameStage.isPending}>
+                {renameStage.isPending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dealDialogOpen} onOpenChange={setDealDialogOpen}>
         <DialogContent>
@@ -677,6 +1200,7 @@ export function PipelineBoard() {
               <Input
                 id="deal-value"
                 inputMode="decimal"
+                maxLength={5}
                 value={dealValue}
                 onChange={(e) => setDealValue(e.target.value)}
                 placeholder="0"
@@ -699,6 +1223,15 @@ export function PipelineBoard() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {selectedLeadData && (
+        <LeadModal
+          lead={selectedLeadData as unknown as ModalLead}
+          onClose={() => setSelectedLeadId(null)}
+          onPrev={handleModalPrev}
+          onNext={handleModalNext}
+        />
+      )}
     </div>
   );
 }
