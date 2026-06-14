@@ -67,9 +67,38 @@ export async function POST(req: Request) {
     });
   }
 
-  await prisma.emailEvent.create({
-    data: { draftId: draft.id, event: payload.type, data: payload.data as unknown as import("@prisma/client").Prisma.InputJsonValue },
-  });
+  // Svix/Resend deliver at-least-once, so a transient failure triggers a retry
+  // that re-delivers the same signed payload. Dedup on the svix-id (unique
+  // column) so a redelivery doesn't append a duplicate audit row. The status
+  // update above is already idempotent via UPGRADE_GUARD.
+  if (svixId) {
+    const seen = await prisma.emailEvent.findFirst({
+      where: { svixId },
+      select: { id: true },
+    });
+    if (seen) return new Response("OK");
+  }
+
+  try {
+    await prisma.emailEvent.create({
+      data: {
+        draftId: draft.id,
+        event: payload.type,
+        svixId: svixId || null,
+        data: payload.data as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      },
+    });
+  } catch (err) {
+    // Concurrent retries can race past the pre-check; the unique constraint is
+    // the backstop. Swallow the duplicate-key error so the retry still 200s.
+    if (
+      err && typeof err === "object" && "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
+      return new Response("OK");
+    }
+    throw err;
+  }
 
   return new Response("OK");
 }

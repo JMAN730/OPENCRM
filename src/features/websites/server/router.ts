@@ -144,13 +144,13 @@ export const websitesRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         content: z.object({
-          hero: z.object({ title: z.string(), tagline: z.string(), cta: z.string() }),
-          about: z.object({ heading: z.string(), body: z.string() }),
-          services: z.array(z.object({ title: z.string(), description: z.string() })),
-          contact: z.object({ phone: z.string(), email: z.string(), address: z.string() }),
-          footer: z.object({ tagline: z.string() }),
+          hero: z.object({ title: z.string().max(200), tagline: z.string().max(500), cta: z.string().max(100) }),
+          about: z.object({ heading: z.string().max(200), body: z.string().max(5000) }),
+          services: z.array(z.object({ title: z.string().max(200), description: z.string().max(2000) })).max(50),
+          contact: z.object({ phone: z.string().max(50), email: z.string().max(255), address: z.string().max(500) }),
+          footer: z.object({ tagline: z.string().max(500) }),
         }),
-        title: z.string().optional(),
+        title: z.string().max(200).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
