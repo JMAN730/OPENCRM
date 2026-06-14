@@ -30,5 +30,8 @@ declare module "next-auth/jwt" {
     organizationId: string | null;
     teamId: string | null;
     loadingAnimationMode: LoadingAnimationMode;
+    // Optional so JWTs minted before this field existed still type-check;
+    // such tokens adopt the current version on their next refresh.
+    sessionVersion?: number;
   }
 }

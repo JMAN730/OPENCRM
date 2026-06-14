@@ -44,6 +44,9 @@ model User {
   password      String?
   role          UserRole  @default(USER)
   loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
+  // Bumped whenever credentials change (password reset / email change) so
+  // JWTs minted before the change are rejected on their next refresh (CWE-613).
+  sessionVersion Int      @default(0)
   accounts      Account[]
   sessions      Session[]
 
