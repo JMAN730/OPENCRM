@@ -78,7 +78,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       id: "u1",
@@ -127,7 +127,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: "u1" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       name: "Updated Name",
@@ -135,6 +135,63 @@ describe("jwt callback", () => {
       organizationId: "org-2",
       loadingAnimationMode: "OFF",
     });
+  });
+
+  it("revokes the session when sessionVersion changed after the token was minted (CWE-613)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      name: "X",
+      email: "x@y.com",
+      role: "ADMIN",
+      organizationId: "org-1",
+      teamId: null,
+      loadingAnimationMode: "ALWAYS",
+      sessionVersion: 2,
+    });
+
+    const token = await jwtCallback({
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", teamId: null, sessionVersion: 1 },
+    } as never);
+
+    expect(token).toEqual({});
+  });
+
+  it("keeps the session when sessionVersion still matches", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      name: "X",
+      email: "x@y.com",
+      role: "ADMIN",
+      organizationId: "org-1",
+      teamId: null,
+      loadingAnimationMode: "ALWAYS",
+      sessionVersion: 3,
+    });
+
+    const token = await jwtCallback({
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", teamId: null, sessionVersion: 3 },
+    } as never);
+
+    expect(token).toMatchObject({ id: "u1", role: "ADMIN", sessionVersion: 3 });
+  });
+
+  it("does not revoke a legacy token that predates sessionVersion (adopts current version)", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: "u1",
+      name: "X",
+      email: "x@y.com",
+      role: "ADMIN",
+      organizationId: "org-1",
+      teamId: null,
+      loadingAnimationMode: "ALWAYS",
+      sessionVersion: 5,
+    });
+
+    const token = await jwtCallback({
+      token: { id: "u1", role: "ADMIN", organizationId: "org-1", teamId: null },
+    } as never);
+
+    expect(token).toMatchObject({ id: "u1", sessionVersion: 5 });
   });
 
   it("returns an empty token when the user no longer exists (ghost session)", async () => {
