@@ -65,7 +65,7 @@ When deploying Open CRM, please follow these security best practices:
 If using optional integrations:
 
 - **Twilio**: Secure API credentials, enable request signing
-- **OpenAI**: Use organization-specific API keys, monitor usage
+- **DeepSeek**: Use project-specific API keys, monitor usage
 - **AWS S3**: Use IAM roles with least privilege, enable versioning and encryption
 
 ## Security Headers

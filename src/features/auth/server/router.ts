@@ -7,6 +7,8 @@ import { sendPasswordResetEmail } from "@/lib/email";
 import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
 import { invalidateAuthSnapshot } from "@/lib/auth";
 
+const loadingAnimationModeSchema = z.enum(["ALWAYS", "ONCE_DAILY", "OFF"]);
+
 function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
@@ -84,7 +86,9 @@ export const authRouter = createTRPCRouter({
       await ctx.prisma.$transaction([
         ctx.prisma.user.update({
           where: { id: resetToken.userId },
-          data: { password: hashed },
+          // Bump sessionVersion so any JWT minted before this reset is
+          // rejected on its next refresh (CWE-613 session revocation).
+          data: { password: hashed, sessionVersion: { increment: 1 } },
         }),
         ctx.prisma.passwordResetToken.delete({ where: { tokenHash } }),
       ]);
@@ -150,14 +154,43 @@ export const authRouter = createTRPCRouter({
       z.object({
         name: z.string().min(1).max(255).optional(),
         email: z.string().email().max(255).optional(),
-      }).refine((d) => d.name !== undefined || d.email !== undefined, {
-        message: "At least one field must be provided",
+        currentPassword: z.string().optional(),
+        loadingAnimationMode: loadingAnimationModeSchema.optional(),
+      })
+      .refine(
+        (d) => d.name !== undefined || d.email !== undefined || d.loadingAnimationMode !== undefined,
+        { message: "At least one field must be provided" }
+      )
+      .superRefine((d, ctx) => {
+        if (d.email !== undefined && !d.currentPassword) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Current password is required to change your email.",
+            path: ["currentPassword"],
+          });
+        }
       })
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
       if (input.email) {
+        // Verify current password before allowing email change
+        const user = await ctx.prisma.user.findUnique({
+          where: { id: userId },
+          select: { password: true },
+        });
+        if (!user?.password || !input.currentPassword) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Cannot verify identity — password required.",
+          });
+        }
+        const passwordMatches = await bcrypt.compare(input.currentPassword, user.password);
+        if (!passwordMatches) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Current password is incorrect." });
+        }
+
         const email = input.email.toLowerCase().trim();
         const existing = await ctx.prisma.user.findFirst({
           where: { email, NOT: { id: userId } },
@@ -173,6 +206,10 @@ export const authRouter = createTRPCRouter({
         data: {
           ...(input.name !== undefined && { name: input.name.trim() }),
           ...(input.email !== undefined && { email: input.email }),
+          ...(input.loadingAnimationMode !== undefined && { loadingAnimationMode: input.loadingAnimationMode }),
+          // An email change is a credential change — revoke existing sessions
+          // by bumping sessionVersion (CWE-613).
+          ...(input.email !== undefined && { sessionVersion: { increment: 1 } }),
         },
       });
 

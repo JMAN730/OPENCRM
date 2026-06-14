@@ -29,13 +29,17 @@ import {
   type Lead,
   type LeadSort,
   type LeadSortKey,
+  type ScoringRuleConfig,
 } from "./shared";
 import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
+import { formatLocation } from "@/features/leads/location";
 
-const ALL_COLUMNS = ["Lead", "Company", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
+const ALL_COLUMNS = ["Lead", "Company", "Location", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
 type ColumnName = typeof ALL_COLUMNS[number];
 
 type CustomOutcomeTab = { id: string; label: string };
+
+type OrgTag = { id: string; name: string };
 
 type LeadsTableProps = {
   allLeadsCount: number;
@@ -46,9 +50,12 @@ type LeadsTableProps = {
   isLoading: boolean;
   canGoPrevious: boolean;
   members: AssignableUser[];
+  orgTags?: OrgTag[];
   ownerFilter: Set<string>;
   scoreMin: number | null;
   scoreMax: number | null;
+  scoringRules?: ScoringRuleConfig[];
+  tagFilter?: Set<string>;
   onClearStageFilters: () => void;
   onDeleteLead: (leadId: string) => void;
   onFetchNextPage: () => void;
@@ -58,6 +65,7 @@ type LeadsTableProps = {
   onScoreChange: (min: number | null, max: number | null) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (key: LeadSortKey) => void;
+  onTagToggle?: (id: string) => void;
   onToggleRowSelection: (leadId: string) => void;
   onToggleSelectAllRows: () => void;
   onToggleStage: (stage: string) => void;
@@ -77,6 +85,7 @@ export function LeadsTable({
   isLoading,
   canGoPrevious,
   members,
+  orgTags,
   ownerFilter,
   scoreMin,
   scoreMax,
@@ -89,6 +98,7 @@ export function LeadsTable({
   onScoreChange,
   onSearchChange,
   onSortChange,
+  onTagToggle,
   onToggleRowSelection,
   onToggleSelectAllRows,
   onToggleStage,
@@ -97,6 +107,8 @@ export function LeadsTable({
   sortBy,
   stageCounts,
   stageFilter,
+  tagFilter,
+  scoringRules,
 }: LeadsTableProps) {
   const allSelected =
     filteredLeads.length > 0 && filteredLeads.every((lead) => selectedIds.has(lead.id));
@@ -127,7 +139,8 @@ export function LeadsTable({
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
-    (scoreMax !== null ? 1 : 0);
+    (scoreMax !== null ? 1 : 0) +
+    ((tagFilter?.size ?? 0) > 0 ? 1 : 0);
 
   const toggleColumn = (col: ColumnName) => {
     const next = new Set(visibleColumns);
@@ -265,6 +278,27 @@ export function LeadsTable({
                   </div>
                 )}
 
+                {orgTags && orgTags.length > 0 && onTagToggle && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Tags</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+                      {orgTags.map((tag) => (
+                        <label key={tag.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                          <span
+                            className="crm-checkbox"
+                            data-checked={tagFilter?.has(tag.id)}
+                            onClick={() => onTagToggle(tag.id)}
+                            style={{ flexShrink: 0 }}
+                          >
+                            {tagFilter?.has(tag.id) ? <Check size={9} strokeWidth={2.6} /> : null}
+                          </span>
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Score</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -304,6 +338,9 @@ export function LeadsTable({
                       setScoreMinInput("");
                       setScoreMaxInput("");
                       members.forEach((m) => { if (ownerFilter.has(m.id)) onOwnerToggle(m.id); });
+                      if (onTagToggle) {
+                        (orgTags ?? []).forEach((tag) => { if (tagFilter?.has(tag.id)) onTagToggle(tag.id); });
+                      }
                     }}
                     style={{ display: "flex", alignItems: "center", gap: 4 }}
                   >
@@ -360,6 +397,7 @@ export function LeadsTable({
             </th>
             {show("Lead") && renderSortHeader("Lead", "firstName")}
             {show("Company") && renderSortHeader("Company", "company")}
+            {show("Location") && <th>Location</th>}
             {show("Owner") && renderSortHeader("Owner", "owner")}
             {show("Stage") && renderSortHeader("Stage", "status")}
             {show("Score") && renderSortHeader("Score", "score")}
@@ -386,7 +424,7 @@ export function LeadsTable({
             filteredLeads.map((lead) => {
               const name = fullNameOf(lead);
               const checked = selectedIds.has(lead.id);
-              const score = scoreOf(lead);
+              const score = scoreOf(lead, scoringRules);
               const temp = effectiveTempOf(lead);
               const touches = touchesOf(lead);
               const reviews = reviewSummary(lead);
@@ -417,12 +455,40 @@ export function LeadsTable({
                   )}
                   {show("Company") && (
                     <td>
-                      <div style={{ display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         <span style={{ color: "var(--crm-fg)" }}>{lead.company || "-"}</span>
                         {lead.source ? (
                           <span style={{ color: "var(--crm-fg-faint)", fontSize: 11.5 }}>{lead.source}</span>
                         ) : null}
+                        {lead.tags && lead.tags.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                            {lead.tags.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag.id}
+                                style={{
+                                  fontSize: 10, fontWeight: 500,
+                                  padding: "0 5px", borderRadius: 999, lineHeight: "16px",
+                                  background: "var(--crm-surface-2)",
+                                  border: "1px solid var(--crm-border)",
+                                  color: "var(--crm-fg-faint)",
+                                }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                            {lead.tags.length > 3 ? (
+                              <span style={{ fontSize: 10, color: "var(--crm-fg-faint)", lineHeight: "16px" }}>
+                                +{lead.tags.length - 3}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
+                    </td>
+                  )}
+                  {show("Location") && (
+                    <td style={{ color: "var(--crm-fg-muted)", fontSize: 12 }}>
+                      {formatLocation(lead.city, lead.state) ?? "—"}
                     </td>
                   )}
                   {show("Owner") && (

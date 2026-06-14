@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { SCORING_FACTORS } from "../shared";
+import { assertManagerOrAdmin } from "@/server/authz";
 
 type DefaultRule = {
   factor: string;
@@ -87,6 +88,7 @@ export const scoringRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      assertManagerOrAdmin(ctx.session.user.role);
       const { id, ...data } = input;
       const configJson = toJsonInput(data.config);
 
@@ -133,6 +135,7 @@ export const scoringRouter = createTRPCRouter({
   deleteRule: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      assertManagerOrAdmin(ctx.session.user.role);
       const existing = await ctx.prisma.scoringRule.findFirst({
         where: { id: input.id, organizationId: ctx.organizationId },
         select: { id: true },
@@ -142,6 +145,7 @@ export const scoringRouter = createTRPCRouter({
     }),
 
   resetToDefaults: organizationProcedure.mutation(async ({ ctx }) => {
+    assertManagerOrAdmin(ctx.session.user.role);
     await ctx.prisma.scoringRule.deleteMany({
       where: { organizationId: ctx.organizationId },
     });

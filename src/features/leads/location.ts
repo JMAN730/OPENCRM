@@ -143,6 +143,23 @@ export function parseCityState(value?: string | null): { city?: string; state?: 
   return { city: clean };
 }
 
+export function getMapsUrl(lead: {
+  mapsUrl?: string | null;
+  company?: string | null;
+  city?: string | null;
+  state?: string | null;
+  phone?: string | null;
+}): string | null {
+  // Prefer the exact place URL captured by the scraper.
+  if (lead.mapsUrl) return lead.mapsUrl;
+  // Fallback search: include the phone number, which Google Maps resolves to the
+  // exact listing far more reliably than a company-name search (issue #180).
+  const location = formatLocation(lead.city, lead.state);
+  const parts = [lead.company, location, lead.phone?.trim() || null].filter(Boolean).join(" ");
+  if (!parts) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts)}`;
+}
+
 export function parseLocationSearch(query?: string | null): { city?: string; state: string } | null {
   const clean = query?.trim();
   if (!clean) return null;

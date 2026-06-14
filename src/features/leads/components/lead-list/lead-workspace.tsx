@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatLocation } from "@/features/leads/location";
+import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
   Activity as ActivityIcon,
@@ -36,7 +37,6 @@ import {
   OUTCOMES,
   relativeTime,
   reviewSummary,
-  scoreOf,
   tempLabel,
   type Lead,
   type LeadNote,
@@ -109,7 +109,7 @@ export function LeadHeader({
               {lead.company ? <span>{lead.company}</span> : null}
               {lead.source ? <span>{lead.source}</span> : null}
               {lead.email ? <a href={`mailto:${lead.email}`} className="hover:text-foreground">{lead.email}</a> : null}
-              {lead.phone ? <a href={`tel:${lead.phone}`} className="hover:text-foreground">{lead.phone}</a> : null}
+              {lead.phone ? <a href={`tel:${lead.phone}`} className="hover:text-foreground">{formatPhone(lead.phone)}</a> : null}
               {lead.website && websiteHref ? (
                 <a href={websiteHref} target="_blank" rel="noreferrer" className="hover:text-foreground">
                   {lead.website}
@@ -443,7 +443,7 @@ export function DetailsCard({ lead }: { lead: Lead }) {
       {kv("Owner", lead.assignedTo?.name ?? lead.assignedTo?.email ?? "Unassigned")}
       {kv("Source", lead.source ?? "-")}
       {kv("Location", location ?? "-")}
-      {kv("Phone", lead.phone ?? "-")}
+      {kv("Phone", lead.phone ? formatPhone(lead.phone) : "-")}
       {kv("Website", lead.website ?? "-")}
       {kv("Reviews", reviewSummary(lead) ?? "-")}
       {kv("Created", new Date(lead.createdAt).toLocaleDateString())}
@@ -482,8 +482,6 @@ export function EngagementCard({
         >
           <option value="">Auto ({tempLabel(effectiveTempOf(lead))})</option>
           <option value="HOT">Hot</option>
-          <option value="WARM">Warm</option>
-          <option value="COOL">Cool</option>
         </select>
       </label>
       {kv("Last activity", "Recent")}
@@ -496,8 +494,7 @@ export function EngagementCard({
       </button>
       {showWhy ? (
         <div className="rounded-lg bg-muted/50 p-3 text-xs leading-5 text-muted-foreground">
-          Score uses review quality, review volume, and engagement status. Current base score is{" "}
-          {scoreOf(lead)}.
+          Leads start cool. They move to warm automatically once connected. Hot must be set manually.
         </div>
       ) : null}
     </Card>

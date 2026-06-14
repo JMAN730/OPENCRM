@@ -1,22 +1,52 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const appName = "ClientCore";
+const appDescription =
+  "The all-in-one CRM platform to automate outreach, manage clients, and scale faster with AI.";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https";
+  const appUrl = `${proto}://${host}`;
 
-export const metadata: Metadata = {
-  title: "OpenCRM",
-  description: "Pipeline, call logging, and team-aware CRM in one place.",
-};
+  return {
+    metadataBase: new URL(appUrl),
+    applicationName: appName,
+    title: {
+      default: appName,
+      template: `%s | ${appName}`,
+    },
+    description: appDescription,
+    alternates: {
+      canonical: "/",
+    },
+    openGraph: {
+      type: "website",
+      url: "/",
+      siteName: appName,
+      title: `${appName} — AI CRM & Lead Automation`,
+      description: appDescription,
+      images: [
+        {
+          url: "/opengraph-image",
+          width: 1200,
+          height: 630,
+          alt: `${appName} — AI CRM & Lead Automation`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${appName} — AI CRM & Lead Automation`,
+      description: appDescription,
+      images: ["/twitter-image"],
+    },
+  };
+}
 
 export default function RootLayout({
   children,
@@ -26,9 +56,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
       suppressHydrationWarning
     >
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+      </head>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>

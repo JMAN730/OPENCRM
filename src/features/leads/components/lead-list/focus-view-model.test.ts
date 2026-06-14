@@ -16,13 +16,13 @@ function makeLead(overrides: Partial<Lead> = {}): Lead {
     lastName: "Stone",
     company: "Acme Corp",
     status: "CONNECTED",
-    // High rating + lots of reviews + CONNECTED => hot
     rating: 4.9,
     reviewCount: 500,
     callOutcome: "ANSWERED",
+    temperatureOverride: "HOT",
     createdAt: "2026-05-14T13:00:00.000Z",
     ...overrides,
-  };
+  } as Lead;
 }
 
 function makeTask(overrides: Partial<Task> = {}): Task {

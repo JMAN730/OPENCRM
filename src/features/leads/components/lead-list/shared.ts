@@ -13,6 +13,7 @@ export type Lead = {
   mapsUrl?: string | null;
   rating?: number | null;
   reviewCount?: number | null;
+  value?: number | null;
   status: string;
   temperatureOverride?: "HOT" | "WARM" | "COOL" | null;
   source?: string | null;
@@ -21,9 +22,11 @@ export type Lead = {
   starred?: boolean | null;
   touchCount?: number | null;
   lastTouchedAt?: string | Date | null;
+  qualificationSummary?: string | null;
   createdAt: string;
   assignedToId?: string | null;
   customOutcomeId?: string | null;
+  secondaryOutcomeId?: string | null;
   assignedTo?: {
     id: string;
     name: string | null;
@@ -35,6 +38,15 @@ export type Lead = {
     label: string;
     hint?: string | null;
   } | null;
+  secondaryOutcome?: {
+    id: string;
+    label: string;
+    hint?: string | null;
+  } | null;
+  tags?: Array<{
+    id: string;
+    name: string;
+  }> | null;
   _count?: {
     calls?: number;
     notes?: number;
@@ -51,6 +63,12 @@ export type LeadNote = {
   content: string;
   createdAt: string | Date;
   userId: string;
+  user?: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
 };
 
 export type AssignableUser = {
@@ -86,6 +104,7 @@ export type ScoreBreakdownItem = {
 export const LEAD_VISIBLE_COLUMNS = [
   "Lead",
   "Company",
+  "Location",
   "Owner",
   "Stage",
   "Score",

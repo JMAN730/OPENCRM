@@ -3,6 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { isManagerOrAdmin } from "@/server/authz";
 import { logActivity } from "@/server/activity";
+import { getLeadScope, taskWhereFromScope } from "@/server/teams/scope";
 
 const prioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 const statusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]);
@@ -10,8 +11,8 @@ const statusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]);
 export const tasksRouter = createTRPCRouter({
   create: organizationProcedure
     .input(z.object({
-      title: z.string().min(1),
-      description: z.string().optional(),
+      title: z.string().min(1).max(255),
+      description: z.string().max(5000).optional(),
       leadId: z.string().optional(),
       assignedToId: z.string().optional(),
       dueDate: z.coerce.date().optional(),
@@ -26,6 +27,17 @@ export const tasksRouter = createTRPCRouter({
         });
         if (!lead || lead.organizationId !== ctx.organizationId) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+        }
+      }
+
+      // Validate assignedToId belongs to this org (same guard as tasks.update)
+      if (input.assignedToId != null) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Assigned user not found." });
         }
       }
 
@@ -58,8 +70,8 @@ export const tasksRouter = createTRPCRouter({
   update: organizationProcedure
     .input(z.object({
       taskId: z.string(),
-      title: z.string().min(1).optional(),
-      description: z.string().optional(),
+      title: z.string().min(1).max(255).optional(),
+      description: z.string().max(5000).optional(),
       assignedToId: z.string().nullable().optional(),
       leadId: z.string().nullable().optional(),
       dueDate: z.coerce.date().nullable().optional(),
@@ -86,6 +98,28 @@ export const tasksRouter = createTRPCRouter({
       const callerRole = ctx.session.user.role;
       if (task.userId !== callerId && !isManagerOrAdmin(callerRole)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
+      }
+
+      // Validate leadId belongs to this org (same guard as tasks.create)
+      if (input.leadId != null) {
+        const lead = await ctx.prisma.lead.findUnique({
+          where: { id: input.leadId },
+          select: { organizationId: true },
+        });
+        if (!lead || lead.organizationId !== ctx.organizationId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+        }
+      }
+
+      // Validate assignedToId belongs to this org
+      if (input.assignedToId != null) {
+        const assignee = await ctx.prisma.user.findFirst({
+          where: { id: input.assignedToId, organizationId: ctx.organizationId },
+          select: { id: true },
+        });
+        if (!assignee) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Assigned user not found." });
+        }
       }
 
       // Derive status from the legacy completed boolean if status wasn't provided
@@ -167,9 +201,11 @@ export const tasksRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const limit = input.limit ?? 50;
 
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const where: Record<string, any> = {
-        user: { organizationId: ctx.organizationId },
+        ...taskWhereFromScope(scope),
         deletedAt: null,
       };
 
@@ -207,11 +243,12 @@ export const tasksRouter = createTRPCRouter({
 
   getById: organizationProcedure
     .input(z.object({ taskId: z.string() }))
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       return ctx.prisma.task.findFirst({
         where: {
           id: input.taskId,
-          organizationId: ctx.organizationId,
+          ...taskWhereFromScope(scope),
           deletedAt: null,
         },
         include: {
@@ -228,10 +265,11 @@ export const tasksRouter = createTRPCRouter({
       to: z.coerce.date(),
       assignedToId: z.string().optional(),
     }))
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       return ctx.prisma.task.findMany({
         where: {
-          organizationId: ctx.organizationId,
+          ...taskWhereFromScope(scope),
           deletedAt: null,
           dueDate: { gte: input.from, lte: input.to },
           ...(input.assignedToId ? { assignedToId: input.assignedToId } : {}),
@@ -266,14 +304,15 @@ export const tasksRouter = createTRPCRouter({
       });
     }),
 
-  getDueToday: organizationProcedure.query(({ ctx }) => {
+  getDueToday: organizationProcedure.query(async ({ ctx }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     return ctx.prisma.task.findMany({
       where: {
-        user: { organizationId: ctx.organizationId },
+        ...taskWhereFromScope(scope),
         dueDate: { gte: today, lt: tomorrow },
         status: { not: "COMPLETED" },
         deletedAt: null,
@@ -287,13 +326,14 @@ export const tasksRouter = createTRPCRouter({
     });
   }),
 
-  getOverdue: organizationProcedure.query(({ ctx }) => {
+  getOverdue: organizationProcedure.query(async ({ ctx }) => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     return ctx.prisma.task.findMany({
       where: {
-        user: { organizationId: ctx.organizationId },
+        ...taskWhereFromScope(scope),
         dueDate: { lt: now },
         status: { not: "COMPLETED" },
         deletedAt: null,
@@ -308,17 +348,18 @@ export const tasksRouter = createTRPCRouter({
   }),
 
   // Open tasks scheduled after today, used by the Focus view to detect
-  // whether a hot lead already has a scheduled follow-up. Org-scoped via
-  // the task's owner; only one (earliest) task per lead is returned so
+  // whether a hot lead already has a scheduled follow-up. Team-scoped via
+  // resolveLeadScope; only one (earliest) task per lead is returned so
   // callers can build a leadId -> next-followup map without dedup work.
   getUpcomingFollowUps: organizationProcedure.query(async ({ ctx }) => {
     const tomorrow = new Date();
     tomorrow.setHours(0, 0, 0, 0);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const tasks = await ctx.prisma.task.findMany({
       where: {
-        user: { organizationId: ctx.organizationId },
+        ...taskWhereFromScope(scope),
         leadId: { not: null },
         dueDate: { gte: tomorrow },
         status: { not: "COMPLETED" },

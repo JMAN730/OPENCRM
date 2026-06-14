@@ -15,7 +15,9 @@ import {
   touchesOf,
   type Lead,
   type LeadVisibleColumn,
+  type ScoringRuleConfig,
 } from "./shared";
+import { formatLocation } from "@/features/leads/location";
 
 type LeadCardListProps = {
   canGoPrevious: boolean;
@@ -29,6 +31,7 @@ type LeadCardListProps = {
   onOpenLead: (lead: Lead) => void;
   onToggleRowSelection: (leadId: string) => void;
   onToggleSelectAllRows: () => void;
+  scoringRules?: ScoringRuleConfig[];
   selectedIds: Set<string>;
   visibleColumns: Set<LeadVisibleColumn>;
 };
@@ -45,6 +48,7 @@ export function LeadCardList({
   onOpenLead,
   onToggleRowSelection,
   onToggleSelectAllRows,
+  scoringRules,
   selectedIds,
   visibleColumns,
 }: LeadCardListProps) {
@@ -78,7 +82,7 @@ export function LeadCardList({
             const temp = effectiveTempOf(lead);
             const nextAction = nextActionForLead(lead);
             const scoreSummary = reviewSummary(lead);
-            const leadScore = scoreOf(lead);
+            const leadScore = scoreOf(lead, scoringRules);
 
             return (
               <article
@@ -143,6 +147,12 @@ export function LeadCardList({
                 ) : null}
 
                 <div className="focus-card-metadata">
+                  {show("Location") ? (
+                    <div className="focus-card-stat">
+                      <span className="label">Location</span>
+                      <span className="value">{formatLocation(lead.city, lead.state) ?? "—"}</span>
+                    </div>
+                  ) : null}
                   {show("Owner") ? (
                     <div className="focus-card-stat">
                       <span className="label">Owner</span>
@@ -183,6 +193,31 @@ export function LeadCardList({
                     </div>
                   ) : null}
                 </div>
+
+                {lead.tags && lead.tags.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 6 }}>
+                    {lead.tags.slice(0, 4).map((tag) => (
+                      <span
+                        key={tag.id}
+                        style={{
+                          fontSize: 10.5, fontWeight: 500,
+                          padding: "1px 7px", borderRadius: 999,
+                          background: "var(--crm-surface-2)",
+                          border: "1px solid var(--crm-border)",
+                          color: "var(--crm-fg-muted)",
+                          lineHeight: "18px",
+                        }}
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                    {lead.tags.length > 4 ? (
+                      <span style={{ fontSize: 10.5, color: "var(--crm-fg-faint)", lineHeight: "18px" }}>
+                        +{lead.tags.length - 4}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="focus-card-actions" onClick={(event) => event.stopPropagation()}>
                   {lead.phone ? (
