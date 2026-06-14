@@ -119,4 +119,54 @@ describe("teamsRouter", () => {
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
+
+  describe("promoteRole", () => {
+    it("blocks MANAGER from demoting an ADMIN to USER", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "MANAGER" },
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: "admin-user", role: "ADMIN" });
+
+      await expect(
+        caller.teams.promoteRole({ userId: "admin-user", role: "USER" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("allows ADMIN to demote another ADMIN", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "ADMIN" },
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: "other-admin", role: "ADMIN" });
+      prisma.user.update.mockResolvedValue({ id: "other-admin", role: "USER" });
+
+      await caller.teams.promoteRole({ userId: "other-admin", role: "USER" });
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it("allows MANAGER to demote a USER", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "MANAGER" },
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: "some-user", role: "USER" });
+      prisma.user.update.mockResolvedValue({ id: "some-user", role: "USER" });
+
+      await caller.teams.promoteRole({ userId: "some-user", role: "USER" });
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it("blocks a MANAGER from demoting a peer MANAGER (#187-3)", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "MANAGER" },
+      });
+      prisma.user.findFirst.mockResolvedValue({ id: "peer-manager", role: "MANAGER" });
+
+      await expect(
+        caller.teams.promoteRole({ userId: "peer-manager", role: "USER" })
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+  });
 });

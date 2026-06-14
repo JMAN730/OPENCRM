@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, Columns, Filter, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Columns, Download, Filter, Search, X } from "lucide-react";
 import {
   LEAD_VISIBLE_COLUMNS,
   STAGE_ORDER,
@@ -23,6 +23,8 @@ const SORT_OPTIONS: Array<{ key: LeadSortKey; label: string }> = [
 
 type CustomOutcomeTab = { id: string; label: string };
 
+type OrgTag = { id: string; name: string };
+
 type LeadsManagementBarProps = {
   allLeadsCount: number;
   filteredCount: number;
@@ -30,7 +32,9 @@ type LeadsManagementBarProps = {
   columnsOpen: boolean;
   customOutcomes?: CustomOutcomeTab[];
   importAction: ReactNode;
+  isExporting?: boolean;
   members: AssignableUser[];
+  orgTags?: OrgTag[];
   ownerFilter: Set<string>;
   scoreMin: number | null;
   scoreMax: number | null;
@@ -38,15 +42,18 @@ type LeadsManagementBarProps = {
   sortBy: LeadSort;
   stageCounts: Record<string, number>;
   stageFilter: Set<string>;
+  tagFilter: Set<string>;
   visibleColumns: Set<LeadVisibleColumn>;
   onClearStageFilters: () => void;
   onColumnsOpenChange: (open: boolean) => void;
+  onExport: () => void;
   onFilterOpenChange: (open: boolean) => void;
   onOwnerToggle: (id: string) => void;
   onScoreChange: (min: number | null, max: number | null) => void;
   onSearchChange: (value: string) => void;
   onSortDirectionToggle: () => void;
   onSortKeyChange: (key: LeadSortKey) => void;
+  onTagToggle: (id: string) => void;
   onToggleColumn: (column: LeadVisibleColumn) => void;
   onToggleStage: (stage: string) => void;
 };
@@ -58,7 +65,9 @@ export function LeadsManagementBar({
   columnsOpen,
   customOutcomes,
   importAction,
+  isExporting,
   members,
+  orgTags,
   ownerFilter,
   scoreMin,
   scoreMax,
@@ -66,15 +75,18 @@ export function LeadsManagementBar({
   sortBy,
   stageCounts,
   stageFilter,
+  tagFilter,
   visibleColumns,
   onClearStageFilters,
   onColumnsOpenChange,
+  onExport,
   onFilterOpenChange,
   onOwnerToggle,
   onScoreChange,
   onSearchChange,
   onSortDirectionToggle,
   onSortKeyChange,
+  onTagToggle,
   onToggleColumn,
   onToggleStage,
 }: LeadsManagementBarProps) {
@@ -97,10 +109,13 @@ export function LeadsManagementBar({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [columnsOpen, filterOpen, onColumnsOpenChange, onFilterOpenChange]);
 
+  const totalStageCount = Object.values(stageCounts).reduce((sum, n) => sum + n, 0);
+
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
-    (scoreMax !== null ? 1 : 0);
+    (scoreMax !== null ? 1 : 0) +
+    (tagFilter.size > 0 ? 1 : 0);
 
   const popoverStyle: CSSProperties = {
     position: "absolute",
@@ -125,7 +140,18 @@ export function LeadsManagementBar({
             {filteredCount} of {allLeadsCount} leads in the current view
           </p>
         </div>
-        <div className="focus-management-actions">{importAction}</div>
+        <div className="focus-management-actions">
+          <button
+            className="crm-btn ghost sm"
+            onClick={onExport}
+            disabled={isExporting}
+            title="Download visible leads as CSV"
+          >
+            <Download size={13} />
+            {isExporting ? "Exporting…" : "Export CSV"}
+          </button>
+          {importAction}
+        </div>
       </div>
 
       <div className="focus-toolbar-row">
@@ -203,6 +229,26 @@ export function LeadsManagementBar({
                   </div>
                 ) : null}
 
+                {orgTags && orgTags.length > 0 ? (
+                  <div>
+                    <div className="focus-popover-label">Tags</div>
+                    <div className="focus-popover-list">
+                      {orgTags.map((tag) => (
+                        <label
+                          key={tag.id}
+                          className="focus-popover-option"
+                          onClick={() => onTagToggle(tag.id)}
+                        >
+                          <span className="crm-checkbox" data-checked={tagFilter.has(tag.id)}>
+                            {tagFilter.has(tag.id) ? <Check size={9} strokeWidth={2.6} /> : null}
+                          </span>
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div>
                   <div className="focus-popover-label">Score</div>
                   <div className="focus-score-range">
@@ -239,6 +285,9 @@ export function LeadsManagementBar({
                       onScoreChange(null, null);
                       for (const member of members) {
                         if (ownerFilter.has(member.id)) onOwnerToggle(member.id);
+                      }
+                      for (const tag of (orgTags ?? [])) {
+                        if (tagFilter.has(tag.id)) onTagToggle(tag.id);
                       }
                     }}
                   >
@@ -285,7 +334,7 @@ export function LeadsManagementBar({
       <div className="focus-chip-row">
         <button className="crm-chip" aria-pressed={stageFilter.size === 0} onClick={onClearStageFilters}>
           All
-          <span className="crm-chip-count">{allLeadsCount}</span>
+          <span className="crm-chip-count">{totalStageCount}</span>
         </button>
         {STAGE_ORDER.map((stage) => (
           <button

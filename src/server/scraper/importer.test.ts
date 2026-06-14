@@ -181,18 +181,19 @@ describe("importRowsToLeads", () => {
     expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
   });
 
-  it("does not crash on same-company+phone batch rows that differ only by fingerprint", async () => {
-    // Two rows share company+phone (so the same dedupKey) but have different
-    // Google Maps URLs (so different fingerprints) and fresher review data on
-    // the second. The second must not be turned into an update against the
-    // first row's empty placeholder id.
-    mockPrisma.lead.findMany.mockResolvedValue([]);
+  it("does not enqueue a placeholder-id update when the same business appears under two categories (#187-2)", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]); // brand new business
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     const result = await importRowsToLeads({
       rows: [
-        { Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme-1", Rating: "4.1", ReviewCount: "10" },
-        { Name: "Acme", Phone: "555", "Google Maps URL": "https://maps.example/acme-2", Rating: "4.8", ReviewCount: "99" },
+        // First occurrence — inserted, stored with a placeholder id ("").
+        { Name: "Acme", Phone: "555", Category: "Cleaning", Rating: "4.0" },
+        // Same dedupKey (company + phone) but a different category → different
+        // fingerprint (passes the fingerprint dedup) and a differing rating, so
+        // the importer takes the "existing" branch. The matched key is still the
+        // in-batch placeholder, so no DB update must be enqueued (id === "").
+        { Name: "Acme", Phone: "555", Category: "Plumbing", Rating: "4.8" },
       ],
       organizationId: "org-1",
       assignedToId: "user-1",
@@ -200,11 +201,12 @@ describe("importRowsToLeads", () => {
     });
 
     expect(result).toEqual({ inserted: 1, skipped: 1 });
+    // Crucially: never call update with the placeholder id (would throw
+    // RecordNotFound against a real DB and reject the whole import).
+    expect(mockPrisma.lead.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "" } }),
+    );
     expect(mockPrisma.lead.createMany.mock.calls[0][0].data).toHaveLength(1);
-    // The in-batch duplicate must never produce an update with an empty id.
-    for (const call of mockPrisma.lead.update.mock.calls) {
-      expect(call[0].where.id).not.toBe("");
-    }
   });
 
   it("builds source string from category and location when present", async () => {
@@ -391,7 +393,7 @@ describe("importRowsToLeads", () => {
     mockPrisma.lead.createMany.mockResolvedValue({ count: 1 });
 
     await importRowsToLeads({
-      rows: [{ Name: "Acme", Rating: "4.6", ReviewCount: "128" }],
+      rows: [{ Name: "Acme", Rating: "4.6", Reviews: "128" }],
       organizationId: "org-1",
       assignedToId: "user-1",
       jobId: "job-1",
@@ -408,7 +410,7 @@ describe("importRowsToLeads", () => {
     ]);
 
     const result = await importRowsToLeads({
-      rows: [{ Name: "Acme", Phone: "555", Rating: "4.7", ReviewCount: "18" }],
+      rows: [{ Name: "Acme", Phone: "555", Rating: "4.7", Reviews: "18" }],
       organizationId: "org-1",
       assignedToId: "user-1",
       jobId: "job-1",

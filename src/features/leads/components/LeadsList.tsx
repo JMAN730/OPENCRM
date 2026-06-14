@@ -30,6 +30,7 @@ import {
   type Lead,
   type LeadSort,
   type LeadVisibleColumn,
+  type ScoringRuleConfig,
 } from "./lead-list/shared";
 
 type LeadsViewMode = "focus" | "classic";
@@ -82,6 +83,7 @@ export function LeadsList() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState(new Set<string>());
   const [ownerFilter, setOwnerFilter] = useState(new Set<string>());
+  const [tagFilter, setTagFilter] = useState(new Set<string>());
   const [scoreMin, setScoreMin] = useState<number | null>(null);
   const [scoreMax, setScoreMax] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<LeadSort>({ key: "createdAt", dir: "desc" });
@@ -89,6 +91,7 @@ export function LeadsList() {
   const [showAdd, setShowAdd] = useState(showAddFromQuery);
   const [showAssign, setShowAssign] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [quickFilter, setQuickFilter] = useState<FocusQuickFilter>("ALL");
@@ -128,11 +131,34 @@ export function LeadsList() {
 
   const utils = trpc.useUtils();
 
+  // Built-in stage chips and custom-outcome chips are both filtered server-side so each
+  // paginated page is fully filtered (otherwise leads only surface after clicking Next Page).
+  const serverStageFilter = Array.from(stageFilter).filter((s) =>
+    STAGE_ORDER.includes(s as (typeof STAGE_ORDER)[number]),
+  ) as ("NOT_CONTACTED" | "CONNECTED" | "AI_VOICEMAIL" | "NO_ANSWER" | "HUNG_UP")[];
+  const customOutcomeFilter = Array.from(stageFilter)
+    .filter((s) => s.startsWith("CUSTOM:"))
+    .map((s) => s.slice("CUSTOM:".length));
+
   const {
     data: leadsPage,
     isLoading,
     isFetching,
-  } = trpc.leads.getAll.useQuery({ search: debouncedSearch, limit: 100, cursor: pageCursor });
+  } = trpc.leads.getAll.useQuery({
+    search: debouncedSearch,
+    limit: 100,
+    cursor: pageCursor,
+    ...(serverStageFilter.length > 0 ? { stages: serverStageFilter } : {}),
+    ...(customOutcomeFilter.length > 0 ? { customOutcomeIds: customOutcomeFilter } : {}),
+    ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+    ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+  });
+
+  const { data: serverStageCounts } = trpc.leads.getStatusCounts.useQuery({
+    search: debouncedSearch,
+    ...(quickFilter === "MINE" ? { scope: "mine" as const } : {}),
+    ...(ownerFilter.size > 0 ? { assignedToIds: Array.from(ownerFilter) } : {}),
+  }, { staleTime: 30_000 });
   const dueTodayQuery = trpc.tasks.getDueToday.useQuery();
   const overdueQuery = trpc.tasks.getOverdue.useQuery();
   const upcomingFollowUpsQuery = trpc.tasks.getUpcomingFollowUps.useQuery();
@@ -144,6 +170,9 @@ export function LeadsList() {
     enabled: isAdminOrManager,
     staleTime: 60_000,
   });
+  const { data: rawScoringRules } = trpc.scoring.getRules.useQuery(undefined, { staleTime: 300_000 });
+  const scoringRules = rawScoringRules as ScoringRuleConfig[] | undefined;
+  const { data: orgTags } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 120_000 });
 
   const assignableUsers: AssignableUser[] = (isAdminOrManager
     ? (orgMembers ?? [])
@@ -155,6 +184,7 @@ export function LeadsList() {
       toast.success("Lead created");
       setShowAdd(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -171,6 +201,7 @@ export function LeadsList() {
         closeSelectedLead();
       }
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
       void utils.tasks.getDueToday.invalidate();
       void utils.tasks.getOverdue.invalidate();
       void utils.tasks.getUpcomingFollowUps.invalidate();
@@ -184,11 +215,30 @@ export function LeadsList() {
       setSelected(new Set());
       setShowAssign(false);
       void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
     },
     onError: (error) => toast.error(error.message),
   });
 
   const bulkDelete = trpc.leads.bulkDelete.useMutation();
+  const exportMutation = trpc.leads.export.useMutation();
+  const bulkAddTag = trpc.leads.bulkAddTag.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Tagged ${data.count} lead${data.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      void utils.leads.getAll.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const bulkSetTemperature = trpc.leads.bulkSetTemperature.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Updated temperature for ${data.count} lead${data.count === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      void utils.leads.getAll.invalidate();
+      void utils.leads.getStatusCounts.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const allLeads = useMemo<Lead[]>(() => (leadsPage?.items as Lead[]) ?? [], [leadsPage]);
   const dueTodayTasks = useMemo(() => dueTodayQuery.data ?? [], [dueTodayQuery.data]);
@@ -222,38 +272,39 @@ export function LeadsList() {
   };
 
   const stageCounts = useMemo(() => {
+    if (serverStageCounts) return serverStageCounts;
+    // Fallback to page-local counts while server counts load
     const counts: Record<string, number> = {};
     for (const stage of STAGE_ORDER) counts[stage] = 0;
     for (const co of customOutcomes ?? []) counts[`CUSTOM:${co.id}`] = 0;
     for (const lead of allLeads) {
       if (lead.callOutcome === "CUSTOM" && lead.customOutcomeId) {
         counts[`CUSTOM:${lead.customOutcomeId}`] = (counts[`CUSTOM:${lead.customOutcomeId}`] ?? 0) + 1;
+      } else if (!lead.callOutcome || lead.callOutcome === "NOT_CONTACTED") {
+        counts["NOT_CONTACTED"] = (counts["NOT_CONTACTED"] ?? 0) + 1;
       } else {
         counts[lead.status] = (counts[lead.status] ?? 0) + 1;
       }
     }
     return counts;
-  }, [allLeads, customOutcomes]);
+  }, [serverStageCounts, allLeads, customOutcomes]);
 
   const scopedLeads = useMemo(() => {
+    // Stage / custom-outcome chips are filtered server-side (see getAll query above).
     const rows = allLeads
-      .filter((lead) => {
-        if (!stageFilter.size) return true;
-        const matchesCustom =
-          lead.callOutcome === "CUSTOM" &&
-          lead.customOutcomeId != null &&
-          stageFilter.has(`CUSTOM:${lead.customOutcomeId}`);
-        const matchesStatus = lead.callOutcome !== "CUSTOM" && stageFilter.has(lead.status);
-        return matchesStatus || matchesCustom;
-      })
       .filter((lead) => (ownerFilter.size ? ownerFilter.has(lead.assignedToId ?? "") : true))
-      .filter((lead) => (scoreMin !== null ? scoreOf(lead) >= scoreMin : true))
-      .filter((lead) => (scoreMax !== null ? scoreOf(lead) <= scoreMax : true))
+      .filter((lead) =>
+        tagFilter.size
+          ? (lead.tags ?? []).some((t) => tagFilter.has(t.id))
+          : true,
+      )
+      .filter((lead) => (scoreMin !== null ? scoreOf(lead, scoringRules) >= scoreMin : true))
+      .filter((lead) => (scoreMax !== null ? scoreOf(lead, scoringRules) <= scoreMax : true))
       .filter((lead) => (sortBy.key === "starred" ? lead.starred === true : true));
 
     rows.sort((left, right) => {
       const getValue = (lead: Lead) => {
-        if (sortBy.key === "score") return scoreOf(lead);
+        if (sortBy.key === "score") return scoreOf(lead, scoringRules);
         if (sortBy.key === "owner") return lead.assignedTo?.name || lead.assignedTo?.email || "";
         if (sortBy.key === "starred") return lead.createdAt;
         return lead[sortBy.key as keyof Lead] ?? "";
@@ -271,7 +322,7 @@ export function LeadsList() {
     });
 
     return rows;
-  }, [allLeads, ownerFilter, scoreMax, scoreMin, sortBy, stageFilter]);
+  }, [allLeads, ownerFilter, scoreMax, scoreMin, scoringRules, sortBy, tagFilter]);
 
   const focusFilteredLeads = useMemo(
     () =>
@@ -294,8 +345,9 @@ export function LeadsList() {
         overdueTasks,
         dueTodayTasks,
         upcomingFollowUpTasks,
+        scoringRules,
       }),
-    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks],
+    [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks, scoringRules],
   );
 
   const toggleStage = (stage: string) => {
@@ -305,10 +357,23 @@ export function LeadsList() {
       else next.add(stage);
       return next;
     });
+    setPageCursor(undefined);
+    setCursorHistory([]);
   };
 
   const toggleOwner = (id: string) => {
     setOwnerFilter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setPageCursor(undefined);
+    setCursorHistory([]);
+  };
+
+  const toggleTag = (id: string) => {
+    setTagFilter((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -416,6 +481,7 @@ export function LeadsList() {
         setShowAssign(false);
         toast.success(`Deleted ${total} lead${total === 1 ? "" : "s"}`);
         await utils.leads.getAll.invalidate();
+        await utils.leads.getStatusCounts.invalidate();
         await utils.tasks.getDueToday.invalidate();
         await utils.tasks.getOverdue.invalidate();
         await utils.tasks.getUpcomingFollowUps.invalidate();
@@ -425,6 +491,27 @@ export function LeadsList() {
         setIsBulkDeleting(false);
       }
     })();
+  };
+
+  const handleExport = () => {
+    setIsExporting(true);
+    exportMutation.mutate(
+      { search: debouncedSearch || undefined },
+      {
+        onSuccess: (data) => {
+          const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `leads-${new Date().toISOString().split("T")[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success(`Exported ${data.count} leads`);
+        },
+        onError: (error) => toast.error(error.message),
+        onSettled: () => setIsExporting(false),
+      },
+    );
   };
 
   const greeting = useMemo(() => {
@@ -522,7 +609,11 @@ export function LeadsList() {
                 setColumnsOpen(false);
               }}
               onOpenLead={(lead) => setSelectedLeadId(lead.id)}
-              onQuickFilterChange={setQuickFilter}
+              onQuickFilterChange={(value) => {
+                setQuickFilter(value);
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onShowNewLead={() => setShowAdd(true)}
             />
 
@@ -532,8 +623,10 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />}
+              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
+              isExporting={isExporting}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
@@ -541,9 +634,15 @@ export function LeadsList() {
               sortBy={sortBy}
               stageCounts={stageCounts}
               stageFilter={stageFilter}
+              tagFilter={tagFilter}
               visibleColumns={visibleColumns}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              onClearStageFilters={() => {
+                setStageFilter(new Set());
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onColumnsOpenChange={setColumnsOpen}
+              onExport={handleExport}
               onFilterOpenChange={setFilterOpen}
               onOwnerToggle={toggleOwner}
               onScoreChange={(min, max) => {
@@ -567,6 +666,7 @@ export function LeadsList() {
                   key,
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleColumn={toggleVisibleColumn}
               onToggleStage={toggleStage}
             />
@@ -587,6 +687,7 @@ export function LeadsList() {
               onOpenLead={(lead) => setSelectedLeadId(lead.id)}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
+              scoringRules={scoringRules}
               selectedIds={selected}
               visibleColumns={visibleColumns}
             />
@@ -599,7 +700,7 @@ export function LeadsList() {
                 <div className="crm-page-sub">{classicSubtitle}</div>
               </div>
               <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => void utils.leads.getAll.invalidate()} />
+                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
                 <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
                   New lead
                 </button>
@@ -615,10 +716,16 @@ export function LeadsList() {
               isLoading={isLoading}
               canGoPrevious={cursorHistory.length > 0}
               members={assignableUsers}
+              orgTags={orgTags}
               ownerFilter={ownerFilter}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
-              onClearStageFilters={() => setStageFilter(new Set())}
+              tagFilter={tagFilter}
+              onClearStageFilters={() => {
+                setStageFilter(new Set());
+                setPageCursor(undefined);
+                setCursorHistory([]);
+              }}
               onDeleteLead={(leadId) => {
                 if (confirm("Delete this lead?")) {
                   deleteLead.mutate({ id: leadId });
@@ -643,9 +750,11 @@ export function LeadsList() {
                   dir: current.key === key && current.dir === "desc" ? "asc" : "desc",
                 }))
               }
+              onTagToggle={toggleTag}
               onToggleRowSelection={toggleSelection}
               onToggleSelectAllRows={toggleAllSelections}
               onToggleStage={toggleStage}
+              scoringRules={scoringRules}
               search={search}
               selectedIds={selected}
               sortBy={sortBy}
@@ -664,11 +773,18 @@ export function LeadsList() {
               assignMutation.mutate({ leadIds: Array.from(selected), assigneeId })
             }
             onBulkDelete={handleBulkDelete}
+            onBulkTag={(tagId) =>
+              bulkAddTag.mutate({ leadIds: Array.from(selected), tagId })
+            }
             onClear={() => {
               setSelected(new Set());
               setShowAssign(false);
             }}
+            onSetTemperature={(temperature) =>
+              bulkSetTemperature.mutate({ leadIds: Array.from(selected), temperature })
+            }
             onToggleAssignMenu={() => setShowAssign((current) => !current)}
+            orgTags={orgTags ?? []}
             selectedCount={selected.size}
             showAssignMenu={showAssign}
           />

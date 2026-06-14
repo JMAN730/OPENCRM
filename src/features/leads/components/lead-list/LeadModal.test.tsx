@@ -15,8 +15,10 @@ const createTaskMutate = vi.fn();
 const deleteNoteMutate = vi.fn();
 const toggleStarMutate = vi.fn();
 const deleteLeadMutate = vi.fn();
+const replaceScriptsMutate = vi.fn();
 let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => void } | undefined;
 let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
+let scriptsMock: Array<{ id: string; category: string; title: string; body: string }> = [];
 
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
@@ -38,11 +40,22 @@ vi.mock("@/app/_trpc/client", () => ({
         getAll: { invalidate: invalidateLeads },
         getNotes: { invalidate: invalidateNotes },
         getActivities: { invalidate: invalidateActivities },
+        listOrgTags: { invalidate: vi.fn() },
+        getStatusCounts: { invalidate: vi.fn() },
         customOutcomes: { list: { invalidate: vi.fn() } },
       },
       tasks: {
         getAll: { invalidate: invalidateTasks },
         getAllForLead: { invalidate: invalidateLeadTasks },
+      },
+      websites: {
+        getForLead: { invalidate: vi.fn() },
+      },
+      emails: {
+        getDraftForLead: { invalidate: vi.fn() },
+      },
+      scripts: {
+        getAll: { invalidate: vi.fn() },
       },
     }),
     leads: {
@@ -55,8 +68,29 @@ vi.mock("@/app/_trpc/client", () => ({
       updateCallOutcome: {
         useMutation: vi.fn(() => ({ mutate: outcomeMutate, isPending: false })),
       },
+      setDisposition: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       updateTemperatureOverride: {
         useMutation: vi.fn(() => ({ mutate: tempMutate, isPending: false })),
+      },
+      updateValue: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      listOrgTags: {
+        useQuery: vi.fn(() => ({ data: [] })),
+      },
+      qualify: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, data: undefined })),
+      },
+      addTagToLead: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      removeTagFromLead: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      createTag: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       assign: {
         useMutation: vi.fn(() => ({ mutate: assignMutate, isPending: false })),
@@ -73,9 +107,14 @@ vi.mock("@/app/_trpc/client", () => ({
       delete: {
         useMutation: vi.fn(() => ({ mutate: deleteLeadMutate, isPending: false })),
       },
+      generateQualification: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },
         create: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+        update: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+        delete: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       },
     },
     tasks: {
@@ -103,11 +142,42 @@ vi.mock("@/app/_trpc/client", () => ({
       },
     },
     websites: {
+      getForLead: {
+        useQuery: vi.fn(() => ({ data: null })),
+      },
       generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      generateAi: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       update: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    emails: {
+      getDraftForLead: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: false })),
+      },
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      updateDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      send: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      deleteDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    scripts: {
+      getAll: {
+        useQuery: vi.fn(() => ({ data: scriptsMock, isLoading: false })),
+      },
+      replaceAll: {
+        useMutation: vi.fn(() => ({ mutate: replaceScriptsMutate, isPending: false })),
       },
     },
   },
@@ -148,6 +218,7 @@ describe("LeadModal", () => {
     vi.clearAllMocks();
     createTaskOptions = undefined;
     leadTasksMock = [];
+    scriptsMock = [];
   });
 
   it("renders website as a clickable external link", () => {
@@ -198,6 +269,25 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("opens scripts from the shared scripts data source", () => {
+    scriptsMock = [
+      {
+        id: "script-1",
+        category: "Discovery",
+        title: "Modal-only mocked script",
+        body: "Ask about the customer's current workflow.",
+      },
+    ];
+
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /scripts/i }));
+
+    expect(screen.getByDisplayValue("Discovery")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Modal-only mocked script")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Ask about the customer's current workflow.")).toBeInTheDocument();
   });
 
   it("shows the earliest open task due date as a task page link", () => {

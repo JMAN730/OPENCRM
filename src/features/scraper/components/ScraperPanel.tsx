@@ -5,6 +5,7 @@ import { trpc } from "@/app/_trpc/client";
 import { StartJobForm } from "./StartJobForm";
 import { JobsTable } from "./JobsTable";
 import { JobDetailDialog } from "./JobDetailDialog";
+import { ScheduledScrapePanel } from "./ScheduledScrapePanel";
 
 export function ScraperPanel() {
   const [openJobId, setOpenJobId] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function ScraperPanel() {
         config={config.data!}
         onStarted={refresh}
       />
+      <ScheduledScrapePanel />
       <JobsTable
         jobs={jobs.data ?? []}
         isLoading={jobs.isLoading}

@@ -1,5 +1,15 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
+import { cached } from "@/lib/cache";
+import { getLeadScope } from "@/server/teams/scope";
+import { scopeCacheKey } from "@/features/ai/server/context";
+import {
+  getTopCallers,
+  getLeadQuality,
+  getRepPerformance,
+} from "./salesAnalytics";
+
+const SALES_TTL_SECONDS = 60;
 
 function buildDayArray(
   rows: Array<{ day: Date; count: bigint }>,
@@ -117,5 +127,32 @@ export const analyticsRouter = createTRPCRouter({
         .map((r) => ({ temperature: r.temperatureOverride ?? "Auto", count: r._count.id }))
         .sort((a, b) => b.count - a.count),
     };
+  }),
+
+  topCallers: organizationProcedure.query(async ({ ctx }) => {
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
+    return cached(
+      { key: `analytics:topCallers:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getTopCallers(ctx.prisma, scope),
+    );
+  }),
+
+  leadQuality: organizationProcedure.query(async ({ ctx }) => {
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
+    return cached(
+      { key: `analytics:leadQuality:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getLeadQuality(ctx.prisma, scope),
+    );
+  }),
+
+  repPerformance: organizationProcedure.query(async ({ ctx }) => {
+    const user = ctx.session.user as { id: string; role: string };
+    const scope = await getLeadScope(ctx, user.id, user.role);
+    return cached(
+      { key: `analytics:repPerformance:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
+      () => getRepPerformance(ctx.prisma, scope),
+    );
   }),
 });

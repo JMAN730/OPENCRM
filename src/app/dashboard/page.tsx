@@ -11,12 +11,15 @@ import {
   Flame,
   TrendingUp,
   Activity,
-  CheckCircle2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import Link from "next/link";
+import { formatPhone } from "@/lib/phone";
 
 function formatDueDate(date: string | Date | null | undefined): string {
   if (!date) return "";
@@ -27,58 +30,177 @@ function formatDueDate(date: string | Date | null | undefined): string {
   return format(d, "MMM d");
 }
 
-/* ── KPI Card ── */
+/* ── Inline SVG Sparkline ── */
+function Sparkline({
+  data,
+  color = "var(--crm-accent)",
+  width = 80,
+  height = 32,
+}: {
+  data: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - (v / max) * (height - 4) - 2;
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(" ");
+  // Area fill: close path to bottom
+  const area = `M ${pts[0]} L ${pts.join(" L ")} L ${width},${height} L 0,${height} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id={`sg-${color.replace(/[^a-z0-9]/gi, "")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, "")})`} />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── Delta badge ── */
+function Delta({ current, previous, suffix = "" }: { current: number; previous: number; suffix?: string }) {
+  if (previous === 0 && current === 0) {
+    return <span className="crm-delta flat"><Minus size={10} /> 0{suffix}</span>;
+  }
+  if (previous === 0) {
+    return <span className="crm-delta pos"><ArrowUpRight size={10} /> new{suffix}</span>;
+  }
+  const pct = ((current - previous) / previous) * 100;
+  const abs = Math.abs(pct).toFixed(1);
+  if (pct >= 0) {
+    return <span className="crm-delta pos"><ArrowUpRight size={10} /> +{abs}%{suffix}</span>;
+  }
+  return <span className="crm-delta neg"><ArrowDownRight size={10} /> -{abs}%{suffix}</span>;
+}
+
+/* ── KPI Card with sparkline ── */
 function KPICard({
-  label, icon: Icon, value,
+  label,
+  icon: Icon,
+  value,
+  sparkData,
+  current,
+  previous,
+  deltaSuffix,
+  accentColor,
 }: {
   label: string;
   icon: React.ElementType;
   value: string | number;
+  sparkData?: number[];
+  current?: number;
+  previous?: number;
+  deltaSuffix?: string;
+  accentColor?: string;
 }) {
+  const color = accentColor ?? "var(--crm-accent)";
   return (
-    <div className="crm-card crm-kpi">
+    <div className="crm-card crm-kpi" style={{
+      background: "var(--crm-surface)",
+      borderColor: "var(--crm-border-soft)",
+      overflow: "hidden",
+    }}>
       <div className="crm-kpi-label">
-        <span className="crm-kpi-icon"><Icon size={13} /></span>
+        <span className="crm-kpi-icon" style={{ background: "var(--crm-accent-soft)", color }}>
+          <Icon size={13} />
+        </span>
         {label}
       </div>
       <div className="crm-kpi-value">{value}</div>
+      <div className="crm-kpi-foot">
+        {current !== undefined && previous !== undefined ? (
+          <Delta current={current} previous={previous} suffix={deltaSuffix} />
+        ) : (
+          <span className="crm-delta flat" style={{ visibility: "hidden" }}>—</span>
+        )}
+        {sparkData && sparkData.length > 1 && (
+          <Sparkline data={sparkData} color={color} width={72} height={28} />
+        )}
+      </div>
     </div>
   );
 }
 
 /* ── Phone Reach Card ── */
-const STATUS_DISPLAY: Record<string, { label: string; color: string }> = {
-  CONNECTED: { label: "Connected",  color: "var(--crm-accent)" },
-  BUSY:      { label: "Busy",       color: "oklch(74% 0.14 70)" },
-  NO_ANSWER: { label: "No answer",  color: "oklch(72% 0.06 80)" },
-  FAILED:    { label: "Failed",     color: "oklch(64% 0.18 25)" },
-  CANCELED:  { label: "Canceled",   color: "oklch(70% 0.04 80)" },
+const OUTCOME_DISPLAY: Record<string, { label: string; color: string }> = {
+  ANSWERED:     { label: "Answered",     color: "var(--crm-accent)" },
+  HUNG_UP:      { label: "Hung up",      color: "oklch(64% 0.20 25)" },
+  NO_ANSWER:    { label: "No answer",    color: "oklch(72% 0.06 80)" },
+  AI_VOICEMAIL: { label: "AI voicemail", color: "oklch(72% 0.12 270)" },
 };
 
-function PhoneReachCard({ data, isLoading }: { data: { status: string; count: number }[]; isLoading: boolean }) {
-  const total = data.reduce((s, d) => s + d.count, 0);
+const CUSTOM_COLORS = [
+  "oklch(70% 0.14 150)",
+  "oklch(70% 0.14 200)",
+  "oklch(70% 0.14 310)",
+  "oklch(70% 0.14 50)",
+  "oklch(70% 0.14 260)",
+  "oklch(70% 0.04 80)",
+];
 
-  if (total === 0) {
+type PhoneReachEntry = { outcome: string; count: number; customOutcomeId?: string | null; label?: string | null };
+
+function entryKey(d: PhoneReachEntry): string {
+  return d.outcome === "CUSTOM" ? (d.customOutcomeId ?? "CUSTOM_NULL") : d.outcome;
+}
+
+function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoading: boolean }) {
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+
+  const grandTotal = data.reduce((s, d) => s + d.count, 0);
+
+  if (grandTotal === 0) {
     return (
       <div className="crm-card flush">
-        <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· 30 days</span></div>
+        <div className="crm-card-head"><h3>Phone reach</h3><span className="crm-sub">· outcomes</span></div>
         <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
-          {isLoading ? "Loading…" : "No calls logged yet"}
+          {isLoading ? "Loading…" : "No outcomes logged yet"}
         </div>
       </div>
     );
   }
 
-  const connected = data.find((d) => d.status === "CONNECTED")?.count ?? 0;
-  const connectRate = ((connected / total) * 100).toFixed(1);
+  const toggle = (key: string) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  let customIdx = 0;
+  const enriched = data.map((d) => {
+    const key = entryKey(d);
+    if (d.outcome !== "CUSTOM") {
+      const cfg = OUTCOME_DISPLAY[d.outcome] ?? { label: d.outcome, color: "var(--crm-fg-faint)" };
+      return { ...d, key, label: cfg.label, color: cfg.color };
+    }
+    const color = CUSTOM_COLORS[customIdx % CUSTOM_COLORS.length];
+    customIdx++;
+    return { ...d, key, label: d.label ?? "Custom", color };
+  });
+
+  const visibleData = enriched.filter((d) => !excluded.has(d.key));
+  const visibleTotal = visibleData.reduce((s, d) => s + d.count, 0);
+  const answered = visibleData.find((d) => d.outcome === "ANSWERED")?.count ?? 0;
+  const answerRate = visibleTotal > 0 ? ((answered / visibleTotal) * 100).toFixed(1) : "0.0";
+
   const size = 140, stroke = 20, r = (size - stroke) / 2 - 2, cx = size / 2, cy = size / 2;
   const C = 2 * Math.PI * r;
-  const segments = data.map((d, i) => {
-    const previous = data.slice(0, i).reduce((sum, item) => sum + item.count, 0);
+  const segments = visibleData.map((d, i) => {
+    const previous = visibleData.slice(0, i).reduce((sum, item) => sum + item.count, 0);
     return {
       ...d,
-      len: (d.count / total) * C,
-      off: C - (previous / total) * C,
+      len: (d.count / visibleTotal) * C,
+      off: C - (previous / visibleTotal) * C,
     };
   });
 
@@ -86,38 +208,48 @@ function PhoneReachCard({ data, isLoading }: { data: { status: string; count: nu
     <div className="crm-card flush">
       <div className="crm-card-head">
         <h3>Phone reach</h3>
-        <span className="crm-sub">· last 30 days · {total} dials</span>
+        <span className="crm-sub">· {grandTotal} leads with outcomes</span>
       </div>
       <div className="crm-donut-wrap">
         <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--crm-surface-hover)" strokeWidth={stroke} />
-            {segments.map((d, i) => {
-              const cfg = STATUS_DISPLAY[d.status];
-              return (
-                <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-                  stroke={cfg?.color ?? "var(--crm-fg-faint)"} strokeWidth={stroke}
-                  strokeDasharray={`${d.len - 1} ${C - d.len + 1}`}
-                  strokeDashoffset={d.off}
-                  transform={`rotate(-90 ${cx} ${cy})`}
-                  strokeLinecap="butt"
-                />
-              );
-            })}
+            {visibleTotal === 0 ? null : segments.map((d, i) => (
+              <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                stroke={d.color} strokeWidth={stroke}
+                strokeDasharray={`${d.len - 1} ${C - d.len + 1}`}
+                strokeDashoffset={d.off}
+                transform={`rotate(-90 ${cx} ${cy})`}
+                strokeLinecap="butt"
+              />
+            ))}
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{connectRate}%</div>
-            <div style={{ fontSize: 10, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>connect</div>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--crm-fg)" }}>{answerRate}%</div>
+            <div style={{ fontSize: 10, color: "var(--crm-fg-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>answered</div>
           </div>
         </div>
         <div className="crm-legend">
-          {data.map((d, i) => {
-            const cfg = STATUS_DISPLAY[d.status];
+          {enriched.map((d, i) => {
+            const isExcluded = excluded.has(d.key);
+            const pct = visibleTotal > 0 && !isExcluded
+              ? ((d.count / visibleTotal) * 100).toFixed(1)
+              : "—";
             return (
-              <div key={i} className="crm-legend-row">
-                <span className="crm-swatch" style={{ background: cfg?.color ?? "var(--crm-fg-faint)", width: 10, height: 10, borderRadius: 3 }} />
-                <span>{cfg?.label ?? d.status}</span>
-                <span className="crm-pct">{((d.count / total) * 100).toFixed(1)}%</span>
+              <div
+                key={i}
+                className="crm-legend-row"
+                onClick={() => toggle(d.key)}
+                title={isExcluded ? "Click to include" : "Click to exclude"}
+                style={{ cursor: "pointer", opacity: isExcluded ? 0.38 : 1, transition: "opacity 0.15s" }}
+              >
+                <span className="crm-swatch" style={{
+                  background: isExcluded ? "var(--crm-fg-faint)" : d.color,
+                  width: 10, height: 10, borderRadius: 3,
+                  transition: "background 0.15s",
+                }} />
+                <span style={{ textDecoration: isExcluded ? "line-through" : "none" }}>{d.label}</span>
+                <span className="crm-pct">{pct}</span>
                 <span className="crm-count">{d.count}</span>
               </div>
             );
@@ -139,6 +271,14 @@ const LEAD_STATUS_LABEL: Record<string, string> = {
 
 const LEAD_STATUS_ORDER = ["NOT_CONTACTED", "NO_ANSWER", "AI_VOICEMAIL", "HUNG_UP", "CONNECTED"];
 
+const PIPELINE_COLORS = [
+  "var(--crm-accent)",
+  "oklch(56% 0.18 200)",
+  "oklch(60% 0.16 160)",
+  "oklch(64% 0.20 25)",
+  "var(--crm-pos)",
+];
+
 function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: string; count: number }[]; isLoading: boolean }) {
   const total = leadsByStatus.reduce((s, d) => s + d.count, 0);
   const max = Math.max(...leadsByStatus.map((p) => p.count), 1);
@@ -155,8 +295,8 @@ function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: s
   }
 
   const orderedData = LEAD_STATUS_ORDER
-    .map((s) => leadsByStatus.find((l) => l.status === s))
-    .filter((l): l is { status: string; count: number } => !!l && l.count > 0);
+    .map((s, idx) => ({ item: leadsByStatus.find((l) => l.status === s), color: PIPELINE_COLORS[idx] ?? "var(--crm-accent)" }))
+    .filter((l): l is { item: { status: string; count: number }; color: string } => !!l.item && l.item.count > 0);
 
   return (
     <div className="crm-card flush">
@@ -165,11 +305,11 @@ function PipelineCard({ leadsByStatus, isLoading }: { leadsByStatus: { status: s
         <span className="crm-sub">· {total.toLocaleString()} leads</span>
       </div>
       <div className="crm-funnel">
-        {orderedData.map((s) => (
+        {orderedData.map(({ item: s, color }) => (
           <div key={s.status} className="crm-funnel-row">
             <div className="crm-lbl">{LEAD_STATUS_LABEL[s.status] ?? s.status}</div>
-            <div className="crm-bar">
-              <span style={{ width: (s.count / max * 100) + "%" }}>
+            <div className="crm-bar" style={{ background: "var(--crm-surface-hover)" }}>
+              <span style={{ width: (s.count / max * 100) + "%", background: color }}>
                 {s.count.toLocaleString()}
               </span>
             </div>
@@ -234,6 +374,15 @@ function TasksCard() {
 }
 
 /* ── Recent Calls Card ── */
+const CALL_OUTCOME_MAP: Record<string, { label: string; cls: string }> = {
+  ANSWERED:      { label: "answered",     cls: "pos"  },
+  HUNG_UP:       { label: "hung up",      cls: "neg"  },
+  NO_ANSWER:     { label: "no answer",    cls: "neg"  },
+  AI_VOICEMAIL:  { label: "AI voicemail", cls: "warn" },
+  CUSTOM:        { label: "custom",       cls: ""     },
+  NOT_CONTACTED: { label: "not contacted", cls: ""    },
+};
+
 const CALL_STATUS_MAP: Record<string, { label: string; cls: string }> = {
   CONNECTED: { label: "connected", cls: "pos"  },
   NO_ANSWER: { label: "no answer", cls: "neg"  },
@@ -247,7 +396,7 @@ function CallsCard({
   callsToday,
   isLoading,
 }: {
-  recentCalls: { id: string; phone: string; status: string; duration?: number | null; createdAt: string }[];
+  recentCalls: { id: string; phone: string; status: string; callOutcome?: string | null; duration?: number | null; createdAt: string }[];
   callsToday: number;
   isLoading: boolean;
 }) {
@@ -272,7 +421,10 @@ function CallsCard({
           </thead>
           <tbody>
             {recentCalls.map((call) => {
-              const cfg = CALL_STATUS_MAP[call.status] ?? { label: call.status, cls: "" };
+              const outcomeCfg = call.callOutcome && call.callOutcome !== "NOT_CONTACTED"
+                ? (CALL_OUTCOME_MAP[call.callOutcome] ?? { label: call.callOutcome, cls: "" })
+                : null;
+              const statusCfg = CALL_STATUS_MAP[call.status] ?? { label: call.status, cls: "" };
               const duration = call.duration
                 ? `${Math.floor(call.duration / 60)}:${String(call.duration % 60).padStart(2, "0")}`
                 : "0:00";
@@ -284,10 +436,14 @@ function CallsCard({
                   <td>
                     <div className="crm-contact-cell">
                       <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>{call.phone.slice(-2)}</div>
-                      <div className="crm-meta"><span className="crm-n">{call.phone}</span></div>
+                      <div className="crm-meta"><span className="crm-n">{formatPhone(call.phone)}</span></div>
                     </div>
                   </td>
-                  <td><span className={`crm-tag ${cfg.cls}`}>{cfg.label}</span></td>
+                  <td>
+                    {outcomeCfg
+                      ? <span className={`crm-tag ${outcomeCfg.cls}`}>{outcomeCfg.label}</span>
+                      : <span className={`crm-tag ${statusCfg.cls}`}>{statusCfg.label}</span>}
+                  </td>
                   <td className="mono">{duration}</td>
                   <td className="mono right">
                     {formatDistanceToNow(new Date(call.createdAt), { addSuffix: true })}
@@ -392,8 +548,12 @@ const ACTIVITY_LABEL: Record<string, string> = {
 
 function MyStatsTab() {
   const { data: myStats, isLoading } = trpc.dashboard.getMyStats.useQuery();
+  const { data: phoneReachData, isLoading: phoneReachLoading } =
+    trpc.dashboard.getMyPhoneReach.useQuery();
+  const { data: teamStats, isLoading: teamStatsLoading } =
+    trpc.dashboard.getTeamStats.useQuery();
 
-  if (isLoading) return <div className="crm-empty">Loading your stats…</div>;
+  if (!myStats && isLoading) return <div className="crm-empty">Loading your stats…</div>;
   if (!myStats) return <div className="crm-empty">No data yet.</div>;
 
   return (
@@ -403,6 +563,13 @@ function MyStatsTab() {
         <KPICard label="Calls this week" icon={PhoneOutgoing} value={myStats.callsThisWeek} />
         <KPICard label="Leads assigned" icon={Users} value={myStats.leadsAssigned} />
         <KPICard label="Open tasks" icon={CheckCheck} value={myStats.openTasks} />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <PhoneReachCard
+          data={phoneReachData ?? []}
+          isLoading={phoneReachLoading}
+        />
       </div>
 
       <div className="crm-card flush" style={{ marginTop: 20 }}>
@@ -447,6 +614,62 @@ function MyStatsTab() {
           </div>
         )}
       </div>
+
+      <div className="crm-card flush" style={{ marginTop: 20 }}>
+        <div className="crm-card-head">
+          <h3>Team activity</h3>
+          <span className="crm-sub">
+            · {teamStats ? `${teamStats.memberStats.length} members` : ""}
+          </span>
+        </div>
+        {teamStatsLoading ? (
+          <div className="crm-empty">Loading…</div>
+        ) : !teamStats || teamStats.memberStats.length === 0 ? (
+          <div className="crm-empty">No activity yet.</div>
+        ) : (
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th className="right">Calls</th>
+                <th className="right">Leads assigned</th>
+                <th className="right">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teamStats.memberStats
+                .sort((a, b) => (b.callCount ?? 0) - (a.callCount ?? 0))
+                .map((m) => (
+                  <tr key={m.userId}>
+                    <td>
+                      <div className="crm-contact-cell">
+                        <div className="crm-avatar sm c2" style={{ fontSize: 11 }}>
+                          {(m.name ?? m.email ?? "?")
+                            .split(" ")
+                            .map((p: string) => p[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
+                        </div>
+                        <div className="crm-meta">
+                          <span className="crm-n">{m.name || "—"}</span>
+                          <span style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>{m.email}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="right mono">{m.callCount}</td>
+                    <td className="right mono">{m.leadsAssigned}</td>
+                    <td className="right mono" style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>
+                      {m.lastActive
+                        ? formatDistanceToNow(new Date(m.lastActive), { addSuffix: true })
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -463,19 +686,33 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const placeholder = statsLoading ? "—" : null;
-  const connected30d = stats?.connectedLast30d != null
-    ? stats.connectedLast30d.toLocaleString()
-    : (placeholder ?? "0");
-  const totalLeads = stats?.totalLeads != null
-    ? stats.totalLeads.toLocaleString()
-    : (placeholder ?? "0");
-
   const followupsDue = stats?.followupsDue ?? 0;
   const callsToday = stats?.callsToday ?? 0;
   const leadsByStatus = stats?.leadsByStatus ?? [];
   const recentCalls = stats?.recentCalls ?? [];
-  const statusDist = stats?.charts.statusDistribution ?? [];
+  const outcomeDist = stats?.charts.outcomeDistribution ?? [];
+  const callsPerDay = (stats?.charts.callsPerDay ?? []).map((d) => d.count);
+  const connectedCallsPerDay = (stats?.charts.connectedCallsPerDay ?? []).map((d) => d.count);
+
+  // Call-outcome KPI display values
+  const connectedCallsLast7d = stats?.connectedCallsLast7d ?? 0;
+  const connectedCallsPrev7d = stats?.connectedCallsPrev7d ?? 0;
+  const answerRateLast7d = stats?.answerRateLast7d;
+  const answerRatePrev7d = stats?.answerRatePrev7d;
+  const callsYesterday = stats?.callsYesterday ?? 0;
+
+  // Answer rate delta: percentage-point change (e.g. "+3.2pp vs last week")
+  const answerRateDeltaInfo = (() => {
+    if (answerRateLast7d == null || answerRatePrev7d == null) return null;
+    const diff = parseFloat(answerRateLast7d) - parseFloat(answerRatePrev7d);
+    const label = diff === 0
+      ? `0.0pp vs last week`
+      : diff > 0
+        ? `+${diff.toFixed(1)}pp vs last week`
+        : `${diff.toFixed(1)}pp vs last week`;
+    const cls = diff > 0 ? "pos" : diff < 0 ? "neg" : "flat";
+    return { label, cls, diff };
+  })();
 
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -532,15 +769,55 @@ export default function DashboardPage() {
 
         {activeTab === "overview" && (
           <>
+            {/* KPI row — all metrics derived from call outcomes */}
             <div className="crm-kpi-grid">
-              <KPICard label="Connected · 30d" icon={CheckCircle2} value={connected30d} />
-              <KPICard label="Total leads" icon={Users} value={totalLeads} />
-              <KPICard label="Calls today" icon={Phone} value={!stats && statsLoading ? "—" : callsToday} />
+              <KPICard
+                label="Calls today"
+                icon={Phone}
+                value={statsLoading && !stats ? "—" : callsToday}
+                sparkData={callsPerDay}
+                current={callsToday}
+                previous={callsYesterday}
+                deltaSuffix=" vs yesterday"
+                accentColor="var(--crm-accent)"
+              />
+              <KPICard
+                label="Connected calls · 7d"
+                icon={PhoneOutgoing}
+                value={statsLoading && !stats ? "—" : connectedCallsLast7d.toLocaleString()}
+                sparkData={connectedCallsPerDay}
+                current={connectedCallsLast7d}
+                previous={connectedCallsPrev7d}
+                deltaSuffix=" vs last week"
+                accentColor="oklch(68% 0.16 150)"
+              />
+              <div className="crm-card crm-kpi" style={{ background: "var(--crm-surface)", borderColor: "var(--crm-border-soft)", overflow: "hidden" }}>
+                <div className="crm-kpi-label">
+                  <span className="crm-kpi-icon" style={{ background: "var(--crm-accent-soft)", color: "oklch(72% 0.12 270)" }}>
+                    <TrendingUp size={13} />
+                  </span>
+                  Answer rate · 7d
+                </div>
+                <div className="crm-kpi-value">
+                  {statsLoading && !stats ? "—" : answerRateLast7d != null ? `${answerRateLast7d}%` : "—"}
+                </div>
+                <div className="crm-kpi-foot">
+                  {answerRateDeltaInfo != null ? (
+                    <span className={`crm-delta ${answerRateDeltaInfo.cls}`}>
+                      {answerRateDeltaInfo.diff > 0 ? <ArrowUpRight size={10} /> : answerRateDeltaInfo.diff < 0 ? <ArrowDownRight size={10} /> : <Minus size={10} />}
+                      {answerRateDeltaInfo.label}
+                    </span>
+                  ) : (
+                    <span className="crm-delta flat" style={{ visibility: "hidden" }}>—</span>
+                  )}
+                  <Sparkline data={callsPerDay} color="oklch(72% 0.12 270)" width={72} height={28} />
+                </div>
+              </div>
             </div>
 
             <div className="crm-grid-row">
               <CallsCard recentCalls={recentCalls} callsToday={callsToday} isLoading={statsLoading} />
-              <PhoneReachCard data={statusDist} isLoading={statsLoading} />
+              <PhoneReachCard data={outcomeDist} isLoading={statsLoading} />
             </div>
 
             <div className="crm-grid-row">

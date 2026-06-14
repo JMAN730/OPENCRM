@@ -196,7 +196,7 @@ export const teamsRouter = createTRPCRouter({
           include: { lead: { select: { id: true, firstName: true, lastName: true, company: true } } },
         }),
         ctx.prisma.task.findMany({
-          where: { userId: target.id, status: { not: "COMPLETED" } },
+          where: { organizationId: ctx.organizationId, userId: target.id, status: { not: "COMPLETED" } },
           orderBy: { dueDate: "asc" },
           take: 20,
         }),
@@ -212,6 +212,44 @@ export const teamsRouter = createTRPCRouter({
     }),
 
   // ── Admin/leader management ────────────────────────────────────────────────
+
+  /**
+   * Change a user's role. Only ADMINs can promote to MANAGER/ADMIN.
+   * Uses assertCanGrantRole from authz.ts for escalation checks.
+   */
+  promoteRole: organizationProcedure
+    .input(z.object({ userId: z.string(), role: z.enum(ROLE_VALUES) }))
+    .mutation(async ({ ctx, input }) => {
+      assertCanGrantRole(ctx.session.user.role, input.role);
+      const target = await ctx.prisma.user.findFirst({
+        where: { id: input.userId, organizationId: ctx.organizationId },
+        select: { id: true, role: true },
+      });
+      if (!target) throw new TRPCError({ code: "NOT_FOUND" });
+      // Non-admin callers must strictly outrank the target's current role so a
+      // MANAGER can't demote a peer MANAGER (#187-3 — commit 0ece87c shipped
+      // `>` instead of `>=`). ADMINs remain able to act on other ADMINs (their
+      // grant is still bounded by assertCanGrantRole above), and the
+      // self-exception preserves changing one's own role.
+      // ROLE_VALUES: ADMIN=0 (highest), MANAGER=1, USER=2 (lowest).
+      const callerIdx = ROLE_VALUES.indexOf(ctx.session.user.role as typeof ROLE_VALUES[number]);
+      const targetIdx = ROLE_VALUES.indexOf(target.role as typeof ROLE_VALUES[number]);
+      if (
+        !isAdmin(ctx.session.user.role) &&
+        callerIdx >= targetIdx &&
+        target.id !== ctx.session.user.id
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot modify a user of equal or higher rank.",
+        });
+      }
+      return ctx.prisma.user.update({
+        where: { id: input.userId },
+        data: { role: input.role },
+        select: { id: true, role: true },
+      });
+    }),
 
   create: organizationProcedure
     .input(z.object({ name: z.string().min(1).max(80), leaderId: z.string().optional() }))

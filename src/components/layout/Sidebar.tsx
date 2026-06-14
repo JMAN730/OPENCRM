@@ -15,6 +15,8 @@ import {
   LogOut,
   User,
   Kanban,
+  PhoneCall,
+  ScrollText,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
@@ -33,6 +35,8 @@ const NAV_GROUPS = [
       { id: "leads",    label: "Leads",    href: "/leads",    icon: Users },
       { id: "pipeline", label: "Pipeline", href: "/pipeline", icon: Kanban },
       { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
+      { id: "dialer",   label: "Dialer",   href: "/dialer",   icon: PhoneCall },
+      { id: "scripts",  label: "Scripts",  href: "/scripts",  icon: ScrollText },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
       { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },
       { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },

@@ -4,6 +4,7 @@ node_modules
 .env
 .env.local
 .claude
+.recovery
 prisma/dev.db
 src-tauri
 .expo

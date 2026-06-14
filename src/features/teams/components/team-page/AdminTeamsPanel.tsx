@@ -80,6 +80,15 @@ export function AdminTeamsPanel({
     onError: (error) => toast.error(error.message),
   });
 
+  const promoteRole = trpc.teams.promoteRole.useMutation({
+    onSuccess: () => {
+      toast.success("Role updated");
+      void utils.teams.list.invalidate();
+      void utils.teams.organizationMembers.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const inviteByEmail = trpc.teams.inviteByEmail.useMutation({
     onSuccess: () => {
       toast.success("Invitation email sent");
@@ -330,6 +339,29 @@ export function AdminTeamsPanel({
                     {initials(user.name || user.email)}
                   </div>
                   {user.name || user.email}
+                  <select
+                    value={user.role}
+                    onChange={(e) =>
+                      promoteRole.mutate({
+                        userId: user.id,
+                        role: e.target.value as "ADMIN" | "MANAGER" | "USER",
+                      })
+                    }
+                    disabled={promoteRole.isPending}
+                    style={{
+                      padding: "2px 4px",
+                      background: "var(--crm-surface)",
+                      border: "1px solid var(--crm-border)",
+                      borderRadius: "var(--crm-radius-sm)",
+                      color: "var(--crm-fg-faint)",
+                      fontSize: 11,
+                    }}
+                    title="Change role"
+                  >
+                    <option value="USER">User</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
                   <button
                     className="crm-btn ghost icon"
                     onClick={() => setMembership.mutate({ userId: user.id, teamId: null })}

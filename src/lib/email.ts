@@ -1,5 +1,16 @@
 import nodemailer from "nodemailer";
 
+// Escape user-controlled values before interpolating them into HTML email
+// bodies so an attacker-chosen org/inviter name can't inject markup.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function createTransport() {
   const host = process.env.SMTP_HOST;
   if (!host) return null;
@@ -31,12 +42,15 @@ export async function sendInvitationEmail(args: {
     return;
   }
 
+  const safeInviter = escapeHtml(inviterName);
+  const safeOrg = escapeHtml(organizationName);
+
   await transport.sendMail({
     from,
     to,
     subject: `${inviterName} invited you to join ${organizationName} on OpenCRM`,
     html: `
-      <p>${inviterName} invited you to join <strong>${organizationName}</strong> on OpenCRM.</p>
+      <p>${safeInviter} invited you to join <strong>${safeOrg}</strong> on OpenCRM.</p>
       <p><a href="${acceptUrl}">Accept the invitation and set your password</a></p>
       <p>This link expires in 7 days.</p>
     `,

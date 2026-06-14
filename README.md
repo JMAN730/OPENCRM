@@ -16,18 +16,27 @@ OpenCRM is a self-hosted CRM for sales teams with lead management, team-aware pe
 ## What is implemented
 
 - Dashboard KPIs, recent calls, and due tasks
-- Lead CRUD, search, pagination, assignment, notes, and bulk import/delete
-- Team management with org-scoped membership controls
-- Task list with real edit, complete, and delete actions
+- Lead CRUD, search, pagination, assignment, notes, bulk import/delete, and CSV export
+- Bulk lead temperature override (HOT / WARM / COOL) from the multi-select bar
+- AI lead qualification summary (DeepSeek-backed with heuristic fallback) on lead detail
+- Team management with org-scoped membership controls and email-token invite flow
+- Task list with edit, complete, delete, calendar view, and per-lead task widget
 - Password reset, auth rate limiting, and deleted-user session invalidation
+- Role-based lead scope (ADMIN sees all; MANAGER sees team; USER sees own)
+- Lead-scoring rules engine with configurable per-factor weights
 - Scraper jobs with filtered import back into leads
+- Scheduled weekly scraper runs (day-of-week + hour, per-org, manager/admin only)
+- Custom scraper categories per org (up to 50)
+- Pipeline board with drag-and-drop, inline deal value editing, forecast view, and table view
+- Per-lead website generator from configurable templates
+- Analytics dashboard with 30-day trends and team performance breakdown
+- Google OAuth and credentials auth (NextAuth)
 
 ## What is not implemented yet
 
 - Outreach sequences and delivery automation
-- External Twilio, OpenAI, or AWS-backed integrations
-- Interactive dialer calling; the dialer route is disabled until Twilio is funded and configured
-- Email-token invite onboarding flow
+- Interactive dialer calling (Twilio integration stub — disabled until funded)
+- Two-way email threading
 
 ## Local development
 
@@ -74,7 +83,13 @@ Run the app and PostgreSQL together:
 docker compose up --build
 ```
 
-The application container runs `prisma db push` on startup so the schema stays aligned with the current Prisma model.
+The default Compose stack does not bind ports 80/443, which keeps it compatible with hosted platforms that provide their own reverse proxy. For a bare-server deployment that needs the bundled Traefik proxy and Let's Encrypt, set `APP_DOMAIN` and `ACME_EMAIL`, then run:
+
+```bash
+docker compose --profile proxy up --build -d
+```
+
+The migration container runs `prisma db push` before the app starts so the schema stays aligned with the current Prisma model.
 
 ## Project structure
 
