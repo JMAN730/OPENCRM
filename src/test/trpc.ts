@@ -160,9 +160,33 @@ export function createMockPrisma() {
     generatedWebsite: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+    },
+    emailDraft: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+    emailEvent: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    emailOptOut: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    outreachJob: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      groupBy: vi.fn().mockResolvedValue([]),
     },
     pipeline: {
       findFirst: vi.fn(),

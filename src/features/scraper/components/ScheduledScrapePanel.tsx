@@ -25,6 +25,7 @@ export function ScheduledScrapePanel() {
   const [locations, setLocations] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [hourOfDay, setHourOfDay] = useState(8);
+  const [autoOutreach, setAutoOutreach] = useState(false);
 
   const createSchedule = trpc.scraperSchedules.create.useMutation({
     onSuccess: () => {
@@ -58,7 +59,7 @@ export function ScheduledScrapePanel() {
       toast.error("Enter at least one location.");
       return;
     }
-    createSchedule.mutate({ locations: locs, dayOfWeek, hourOfDay });
+    createSchedule.mutate({ locations: locs, dayOfWeek, hourOfDay, autoOutreach });
   };
 
   return (
@@ -169,6 +170,14 @@ export function ScheduledScrapePanel() {
                 />
               </div>
             </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={autoOutreach}
+                onChange={(e) => setAutoOutreach(e.target.checked)}
+              />
+              Auto-generate a demo site + outreach email draft for each imported lead
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

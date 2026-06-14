@@ -17,6 +17,7 @@ import {
   importRowsToLeads,
   readScrapedCsv,
 } from "@/server/scraper/importer";
+import { enqueueOutreachForLeads } from "@/features/outreach/server/enqueue";
 import { parseStringArray as parseArray } from "@/server/scraper/utils";
 function deserializeJob<T extends { locations: unknown; categories: unknown }>(
   job: T
@@ -45,6 +46,7 @@ const startInput = z.object({
     .default(1),
   categories: z.array(z.string()).optional(),
   autoImport: z.boolean().default(true),
+  autoOutreach: z.boolean().default(false),
 });
 
 export const scraperRouter = createTRPCRouter({
@@ -201,6 +203,8 @@ export const scraperRouter = createTRPCRouter({
           limit: input.limit,
           concurrency: input.concurrency,
           autoImport: input.autoImport,
+          // Outreach generation needs imported leads to work from.
+          autoOutreach: input.autoImport && input.autoOutreach,
           status: "PENDING",
         },
       });
@@ -286,13 +290,20 @@ export const scraperRouter = createTRPCRouter({
       }
       const rows = await readScrapedCsv(job.outputDir);
       const filtered = applyFilter(rows, input.filter);
-      const result = await importRowsToLeads({
+      const { createdLeads, ...counts } = await importRowsToLeads({
         rows: filtered,
         organizationId: ctx.organizationId,
         assignedToId: ctx.session.user.id,
         jobId: job.id,
       });
-      return { ...result, considered: filtered.length, total: rows.length };
+      if (job.autoOutreach && createdLeads.length > 0) {
+        await enqueueOutreachForLeads(ctx.prisma, {
+          leadIds: createdLeads.map((lead) => lead.id),
+          organizationId: ctx.organizationId,
+          createdById: ctx.session.user.id,
+        });
+      }
+      return { ...counts, considered: filtered.length, total: rows.length };
     }),
 
   // Preview the produced CSV without importing — used for filter UI

@@ -14,7 +14,7 @@ vi.mock("@/server/scraper/importer", () => ({
   applyFilter: vi.fn((rows: unknown[]) => rows),
   importRowsToLeads: vi
     .fn()
-    .mockResolvedValue({ inserted: 0, skipped: 0 }),
+    .mockResolvedValue({ inserted: 0, skipped: 0, createdLeads: [] }),
 }));
 
 // Stub the config so tests run independently of env vars.
@@ -253,6 +253,10 @@ describe("scraperRouter", () => {
       vi.mocked(importer.importRowsToLeads).mockResolvedValue({
         inserted: 2,
         skipped: 0,
+        createdLeads: [
+          { id: "lead-1", email: "a@example.com" },
+          { id: "lead-2", email: null },
+        ],
       });
 
       const result = await caller.scraper.importResults({ id: "j1" });

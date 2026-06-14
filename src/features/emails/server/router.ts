@@ -1,16 +1,32 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { Resend } from "resend";
-import { nanoid } from "nanoid";
 import { EmailDraftStatus } from "@prisma/client";
-import { generateEmailCopy } from "@/lib/ai";
-import { trackedDemoUrl, unsubscribeUrl, validateCanSpam } from "@/lib/can-spam";
-import { logActivity, ActivityType } from "@/server/activity";
+import {
+  OutreachEmailError,
+  type OutreachErrorCode,
+  generateDraftForLead,
+  sendDraft,
+} from "@/features/emails/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 
-function resendClient() {
-  return new Resend(process.env.RESEND_API_KEY);
+const TRPC_CODE_BY_OUTREACH_CODE: Record<OutreachErrorCode, "BAD_REQUEST" | "CONFLICT" | "NOT_FOUND" | "INTERNAL_SERVER_ERROR"> = {
+  NO_EMAIL: "BAD_REQUEST",
+  OPTED_OUT: "CONFLICT",
+  NOT_FOUND: "NOT_FOUND",
+  ALREADY_SENT: "BAD_REQUEST",
+  CAN_SPAM: "BAD_REQUEST",
+  SEND_FAILED: "INTERNAL_SERVER_ERROR",
+};
+
+function toTRPCError(err: unknown, fallbackMessage: string): TRPCError {
+  if (err instanceof OutreachEmailError) {
+    return new TRPCError({ code: TRPC_CODE_BY_OUTREACH_CODE[err.code], message: err.message });
+  }
+  return new TRPCError({
+    code: "INTERNAL_SERVER_ERROR",
+    message: err instanceof Error ? err.message : fallbackMessage,
+  });
 }
 
 export const emailsRouter = createTRPCRouter({
@@ -43,97 +59,15 @@ export const emailsRouter = createTRPCRouter({
         where: { id: input.leadId, organizationId: ctx.organizationId },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      if (!lead.email) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Lead has no email address." });
-      }
 
-      const optOut = await ctx.prisma.emailOptOut.findUnique({
-        where: { email_organizationId: { email: lead.email, organizationId: ctx.organizationId } },
-        select: { id: true },
-      });
-      if (optOut) {
-        throw new TRPCError({ code: "CONFLICT", message: "This email address has opted out." });
-      }
-
-      const website = await ctx.prisma.generatedWebsite.findFirst({
-        where: { leadId: input.leadId, slug: { not: null } },
-        orderBy: { createdAt: "desc" },
-        select: { id: true, slug: true },
-      });
-
-      const existing = await ctx.prisma.emailDraft.findFirst({
-        where: { leadId: input.leadId, organizationId: ctx.organizationId, status: EmailDraftStatus.DRAFT },
-        orderBy: { createdAt: "desc" },
-        select: { id: true, unsubscribeToken: true },
-      });
-
-      let copy: { subject: string; observation: string };
       try {
-        copy = await generateEmailCopy(lead);
-      } catch (err) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: err instanceof Error ? err.message : "Failed to generate email copy.",
-        });
-      }
-
-      const unsubToken = existing?.unsubscribeToken ?? nanoid(32);
-      const unsub = unsubscribeUrl(unsubToken);
-      const ownerName = lead.firstName ? `${lead.firstName}` : "there";
-      const niche = lead.source ?? "local business";
-      const city = lead.city ?? "your area";
-      const physicalAddress = process.env.SENDER_PHYSICAL_ADDRESS ?? "";
-      const senderName = process.env.SENDER_NAME ?? "OpenCRM";
-
-      const demoLine = website?.slug
-        ? `Here's the demo:\n${trackedDemoUrl(unsubToken)}\n\nNo pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?`
-        : "No pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?";
-
-      const body = `Hey ${ownerName},
-
-I came across ${lead.company ?? "your business"} while looking at ${niche} businesses in ${city}.
-
-I noticed ${copy.observation}, so I put together a quick demo website showing how you could look online and potentially turn more Google visitors into calls.
-
-${demoLine}
-
-${senderName}
-
-${physicalAddress}
-Unsubscribe: ${unsub}`;
-
-      if (existing) {
-        const updated = await ctx.prisma.emailDraft.update({
-          where: { id: existing.id },
-          data: {
-            subject: copy.subject,
-            body,
-            websiteId: website?.id ?? null,
-          },
-        });
-        return { draftId: updated.id };
-      }
-
-      const created = await ctx.prisma.emailDraft.create({
-        data: {
-          leadId: input.leadId,
+        return await generateDraftForLead(ctx.prisma, lead, {
           organizationId: ctx.organizationId,
-          websiteId: website?.id ?? null,
-          subject: copy.subject,
-          body,
-          unsubscribeToken: unsubToken,
-        },
-      });
-
-      void logActivity(ctx.prisma, {
-        leadId: input.leadId,
-        userId: ctx.session.user.id,
-        type: ActivityType.EMAIL_DRAFT_CREATED,
-        description: `Email draft generated`,
-        organizationId: ctx.organizationId,
-      });
-
-      return { draftId: created.id };
+          userId: ctx.session.user.id,
+        });
+      } catch (err) {
+        throw toTRPCError(err, "Failed to generate email copy.");
+      }
     }),
 
   updateDraft: organizationProcedure
@@ -167,75 +101,15 @@ Unsubscribe: ${unsub}`;
         windowSeconds: 60,
       });
 
-      const draft = await ctx.prisma.emailDraft.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
-        include: { lead: { select: { id: true, email: true, company: true, firstName: true } } },
-      });
-      if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
-      if (draft.status !== EmailDraftStatus.DRAFT) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent." });
-      }
-
-      const toEmail = draft.lead.email;
-      if (!toEmail) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Lead has no email address." });
-      }
-
-      const optOut = await ctx.prisma.emailOptOut.findUnique({
-        where: { email_organizationId: { email: toEmail, organizationId: ctx.organizationId } },
-        select: { id: true },
-      });
-      if (optOut) {
-        throw new TRPCError({ code: "CONFLICT", message: "This email address has opted out." });
-      }
-
-      const physicalAddress = process.env.SENDER_PHYSICAL_ADDRESS ?? "";
-      const canSpamErrors = validateCanSpam({
-        subject: draft.subject,
-        body: draft.body,
-        physicalAddress,
-        unsubscribeUrl: unsubscribeUrl(draft.unsubscribeToken),
-      });
-      if (canSpamErrors.length > 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: canSpamErrors.join(" ") });
-      }
-
-      const senderName = process.env.SENDER_NAME ?? "OpenCRM";
-      const fromEmail = process.env.RESEND_FROM_EMAIL ?? "";
-
-      const r = resendClient();
-      const { data: sent, error: sendError } = await r.emails.send({
-        from: `${senderName} <${fromEmail}>`,
-        to: [toEmail],
-        subject: draft.subject,
-        text: draft.body,
-      });
-
-      if (sendError || !sent?.id) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: (sendError as { message?: string } | null)?.message ?? "Failed to send email.",
+      try {
+        return await sendDraft(ctx.prisma, {
+          draftId: input.id,
+          organizationId: ctx.organizationId,
+          userId: ctx.session.user.id,
         });
+      } catch (err) {
+        throw toTRPCError(err, "Failed to send email.");
       }
-
-      await ctx.prisma.emailDraft.update({
-        where: { id: input.id },
-        data: { status: EmailDraftStatus.SENT, resendMessageId: sent.id, sentAt: new Date() },
-      });
-
-      await ctx.prisma.emailEvent.create({
-        data: { draftId: input.id, event: "sent", data: { resend_id: sent.id } },
-      });
-
-      void logActivity(ctx.prisma, {
-        leadId: draft.leadId,
-        userId: ctx.session.user.id,
-        type: ActivityType.EMAIL_SENT,
-        description: `Outreach email sent to ${toEmail}`,
-        organizationId: ctx.organizationId,
-      });
-
-      return { messageId: sent.id };
     }),
 
   deleteDraft: organizationProcedure
