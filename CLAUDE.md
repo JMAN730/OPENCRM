@@ -65,6 +65,32 @@ SCRAPER_SCRIPT_PATH="scraper/scraper.py"
 
 # Optional – Trusted proxy (for X-Forwarded-For IP extraction)
 TRUSTED_PROXY="true"
+
+# Optional – Public base URL (used to build email tracking / unsubscribe links)
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Optional – Outreach email via Resend (CAN-SPAM outreach + delivery webhooks)
+RESEND_API_KEY="..."
+RESEND_FROM_EMAIL="noreply@example.com"
+RESEND_WEBHOOK_SECRET="..."          # svix signing secret for /api/webhooks/resend
+SENDER_NAME="Your Company"
+SENDER_PHYSICAL_ADDRESS="123 Main St, City, ST 00000"  # required for CAN-SPAM compliance
+
+# Optional – Cron auth (shared secret for /api/cron/* endpoints)
+CRON_SECRET="..."
+
+# Optional – Twilio (browser dialer)
+TWILIO_ACCOUNT_SID="..."
+TWILIO_AUTH_TOKEN="..."
+TWILIO_API_KEY="..."
+TWILIO_API_SECRET="..."
+TWILIO_TWIML_APP_SID="..."
+TWILIO_PHONE_NUMBER="+15555555555"
+
+# Optional – AI provider (lead qualification + email copy; OpenAI-compatible)
+DEEPSEEK_API_KEY="..."
+DEEPSEEK_BASE_URL="https://api.deepseek.com"
+AI_MODEL="deepseek-chat"
 ```
 
 ## Architecture
@@ -227,7 +253,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 
 ## Database
 
-Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Uses `prisma db push` (no migration history). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. The `docker-entrypoint.sh` runs `prisma db push --skip-generate` on container start so the schema is always synced.
+Prisma schema at `prisma/schema.prisma` (`provider = "postgresql"`). Both dev and prod use PostgreSQL — locally easiest via `docker compose up`. There is a committed migration history under `prisma/migrations/`; `prisma db push` is still convenient for fast local iteration. Under `docker compose`, a dedicated `migrate` sidecar service syncs the schema before the `app` service starts (`depends_on: migrate: { condition: service_completed_successfully }`); `docker-entrypoint.sh` itself just runs `exec node server.js`.
 
 FK relations use `onDelete: Cascade` for owned rows (e.g. deleting a `Lead` removes its `CallLog`/`Note`/`Activity`/`Task`) and `onDelete: SetNull` where the parent is optional context (e.g. `assignedTo` on `Lead`).
 
@@ -407,7 +433,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 2. **Use `organizationProcedure`** for org-scoped operations; `protectedProcedure` only when org context is not needed; `publicProcedure` only for auth endpoints.
 3. **Validate all inputs with Zod** before business logic in every procedure.
 4. **Register new routers** in `src/server/api/root.ts` — the root router is the single source of truth.
-5. **Use `prisma db push`**, not `prisma migrate` — there is no migration history.
+5. **Schema changes**: add a migration under `prisma/migrations/` (the committed history is the source of truth for `docker compose`'s `migrate` sidecar); `prisma db push` is fine for quick local iteration.
 6. **Add pages** under `src/app/<section>/page.tsx` and mark them `"use client"` if they use tRPC hooks or browser APIs.
 7. **Use the existing `src/components/ui/` primitives** (`@base-ui/react` wrappers) before writing new ones — the convention is shared even if the underlying library isn't shadcn.
 8. **Session user fields** (`id`, `role`, `organizationId`, `teamId`) require a cast: `(ctx.session.user as any).organizationId`. Use `ctx.organizationId` in `organizationProcedure` context directly.
