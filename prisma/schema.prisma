@@ -70,6 +70,7 @@ model User {
   scraperJobs    ScraperJob[]
   scraperRows    ScraperImportedRow[]
   invitationsSent Invitation[] @relation("InvitationInviter")
+  trainingSessions TrainingSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -109,6 +110,9 @@ model Organization {
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
   salesScripts      SalesScript[]
+
+  trainingPersonas TrainingPersona[]
+  trainingSessions TrainingSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,6 +183,7 @@ model Lead {
   tags         LeadTag[]
   websites     GeneratedWebsite[]
   emailDrafts  EmailDraft[]
+  trainingSessions TrainingSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -673,4 +678,45 @@ model SalesScript {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice call trainer feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TrainingPersona {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String
+  systemPrompt   String       @db.Text
+  firstMessage   String
+  voiceId        String
+  voiceName      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  sessions       TrainingSession[]
+
+  @@index([organizationId])
+}
+
+model TrainingSession {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId          String
+  lead            Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  personaId       String?
+  persona         TrainingPersona? @relation(fields: [personaId], references: [id], onDelete: SetNull)
+  transcript      Json
+  scorecard       Json?
+  durationSeconds Int?
+  createdAt       DateTime         @default(now())
+
+  @@index([organizationId, userId])
+  @@index([organizationId, createdAt])
+  @@index([leadId])
 }
