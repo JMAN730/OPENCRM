@@ -179,16 +179,6 @@ export function createMockPrisma() {
       delete: vi.fn(),
       count: vi.fn(),
     },
-    scoringRule: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findFirst: vi.fn(),
-      create: vi.fn(),
-      createMany: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      deleteMany: vi.fn(),
-      count: vi.fn().mockResolvedValue(0),
-    },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $executeRaw: vi.fn().mockResolvedValue(0),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {

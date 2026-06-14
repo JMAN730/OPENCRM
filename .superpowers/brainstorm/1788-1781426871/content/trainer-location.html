@@ -1,0 +1,40 @@
+<h2>Where does the trainer live?</h2>
+<p class="subtitle">Where should reps access the voice call trainer from?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Standalone sidebar page — <code>/trainer</code></h3>
+      <p>A dedicated nav item. Rep picks a lead + persona from a list, then starts a session. Lives alongside Dialer, Tasks, etc.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Full-screen space for hints panel + call UI</li><li>Easy to discover</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Rep has to navigate away from the lead they were looking at</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Launched from LeadModal — "Practice Call" button</h3>
+      <p>A button inside the lead detail modal opens the trainer in a dialog/drawer with that lead pre-loaded. No new nav item.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Lead context is already there — zero extra clicks</li><li>Natural pre-call workflow</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Cramped inside a modal</li><li>Harder to discover</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — "Practice Call" in LeadModal opens <code>/trainer?leadId=…</code></h3>
+      <p>The LeadModal has a "Practice Call" button that deep-links to the standalone trainer page with that lead pre-selected.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Best of both — discoverable + contextual entry point</li><li>Full screen space for the trainer UI</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Slightly more to build</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

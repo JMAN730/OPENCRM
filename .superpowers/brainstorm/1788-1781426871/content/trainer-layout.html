@@ -1,0 +1,99 @@
+<h2>Trainer page layout</h2>
+<p class="subtitle">Three states: setup → in-call → post-call scorecard. Which layout feels right?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;font-family:monospace;font-size:11px;color:#94a3b8;min-height:220px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;height:100%">
+        <!-- Left: Setup -->
+        <div style="background:#1e293b;border-radius:6px;padding:10px">
+          <div style="color:#f8fafc;font-size:12px;font-weight:600;margin-bottom:8px">Practice Setup</div>
+          <div style="background:#334155;border-radius:4px;padding:6px;margin-bottom:6px;color:#cbd5e1;font-size:10px">Lead: John Smith — Acme Landscaping</div>
+          <div style="background:#334155;border-radius:4px;padding:6px;margin-bottom:6px;color:#cbd5e1;font-size:10px">Persona: Skeptical Business Owner</div>
+          <div style="background:#22c55e;border-radius:4px;padding:6px;text-align:center;color:#fff;font-size:10px;font-weight:600;margin-top:12px">Start Practice Call</div>
+        </div>
+        <!-- Right: In-call preview -->
+        <div style="background:#1e293b;border-radius:6px;padding:10px">
+          <div style="color:#f8fafc;font-size:12px;font-weight:600;margin-bottom:8px">During Call</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <div style="width:8px;height:8px;background:#22c55e;border-radius:50%"></div>
+            <span style="color:#22c55e;font-size:10px">Connected — 0:42</span>
+          </div>
+          <div style="background:#334155;border-radius:4px;padding:6px;margin-bottom:4px;font-size:9px;color:#fbbf24">Hint: Prospect mentioned price — pivot to ROI</div>
+          <div style="background:#0f172a;border-radius:4px;padding:6px;font-size:9px;color:#64748b;max-height:60px;overflow:hidden">
+            <span style="color:#94a3b8">Prospect: </span>We've had vendors call before and it never works out...<br>
+            <span style="color:#60a5fa">You: </span>I understand, what specifically didn't work?
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Two-panel split</h3>
+      <p>Setup on the left, call UI on the right. Panels swap content as state changes (setup → in-call → scorecard).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;font-family:monospace;font-size:11px;color:#94a3b8;min-height:220px">
+      <!-- Single centered column -->
+      <div style="max-width:280px;margin:0 auto">
+        <div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px">
+          <div style="color:#f8fafc;font-size:11px;font-weight:600;margin-bottom:6px">Lead + Persona</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <div style="flex:1;background:#334155;border-radius:4px;padding:5px;font-size:9px;color:#cbd5e1">John Smith<br><span style="color:#64748b">Acme Landscaping</span></div>
+            <div style="flex:1;background:#334155;border-radius:4px;padding:5px;font-size:9px;color:#cbd5e1">Skeptical Owner<br><span style="color:#64748b">Defensive tone</span></div>
+          </div>
+          <div style="background:#22c55e;border-radius:4px;padding:6px;text-align:center;color:#fff;font-size:10px;font-weight:600">Start Practice Call</div>
+        </div>
+        <div style="background:#1e293b;border-radius:6px;padding:10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="color:#22c55e;font-size:10px">● Live</span>
+            <span style="color:#64748b;font-size:9px">0:42</span>
+          </div>
+          <div style="background:#fbbf24;border-radius:4px;padding:5px;font-size:9px;color:#0f172a;margin-bottom:6px">Hint: Pivot to ROI when price is raised</div>
+          <div style="background:#0f172a;border-radius:4px;padding:6px;font-size:9px;color:#64748b">Transcript scrolls here...</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Single centered column</h3>
+      <p>Stacked cards: lead/persona picker → call status → hints → transcript. Simpler, mobile-friendly.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;font-family:monospace;font-size:11px;color:#94a3b8;min-height:220px">
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:8px;height:100%">
+        <!-- Main: call -->
+        <div style="background:#1e293b;border-radius:6px;padding:10px">
+          <div style="color:#f8fafc;font-size:12px;font-weight:600;margin-bottom:6px">Practice Call</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <div style="width:8px;height:8px;background:#22c55e;border-radius:50%"></div>
+            <span style="color:#22c55e;font-size:10px">John Smith (Skeptical Owner) — 0:42</span>
+          </div>
+          <div style="background:#0f172a;border-radius:4px;padding:8px;font-size:9px;color:#64748b;min-height:80px">
+            <span style="color:#94a3b8">Prospect: </span>I've heard that before...<br>
+            <span style="color:#60a5fa">You: </span>What specifically didn't work?<br>
+            <span style="color:#94a3b8">Prospect: </span>The price was too high and...
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <div style="background:#ef4444;border-radius:4px;padding:5px 10px;font-size:9px;color:#fff">End Call</div>
+          </div>
+        </div>
+        <!-- Right: hints rail -->
+        <div style="background:#1e293b;border-radius:6px;padding:10px">
+          <div style="color:#f8fafc;font-size:11px;font-weight:600;margin-bottom:8px">Live Coaching</div>
+          <div style="background:#fbbf24;border-radius:4px;padding:6px;margin-bottom:5px;font-size:9px;color:#0f172a">Price objection — pivot to ROI</div>
+          <div style="background:#334155;border-radius:4px;padding:6px;margin-bottom:5px;font-size:9px;color:#94a3b8">Use their name more often</div>
+          <div style="background:#334155;border-radius:4px;padding:6px;font-size:9px;color:#94a3b8">Ask an open question next</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Wide call area + persistent hints rail</h3>
+      <p>Transcript fills the main area; coaching tips live in a fixed right rail that persists throughout the call. Scorecard replaces main area post-call.</p>
+    </div>
+  </div>
+
+</div>
