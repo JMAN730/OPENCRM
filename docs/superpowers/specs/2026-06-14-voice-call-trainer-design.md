@@ -22,28 +22,37 @@ A voice call trainer that lets sales reps practice cold calls against an AI pros
 
 ---
 
-## Architecture — Approach A (Dynamic signed-URL)
+## Architecture — Approach A (signed-URL + per-call overrides)
+
+One shared ElevenLabs **agent** exists in the ElevenLabs dashboard (created once, manually). Each per-org persona lives in **our** DB; its prompt/voice/first-message are injected into that shared agent at call time via the SDK's `overrides` mechanism. The signed URL only authenticates the connection to the agent.
 
 ```
-Rep browser
+Rep browser (client-only, "use client")
   │
   ├─ trpc.trainer.startSession(leadId, personaId)
-  │     → loads lead + persona from DB
-  │     → injects {{leadName}}, {{company}}, {{industry}} into system prompt
-  │     → POST /v1/convai/conversations/signed-url (ElevenLabs REST API)
-  │     → returns { signedUrl }
+  │     → loads lead + persona from DB (both org-checked)
+  │     → interpolates {{leadName}}, {{company}}, {{industry}} into
+  │       persona.systemPrompt + persona.firstMessage
+  │       (industry ← lead.source; leadName ← leadDisplayName(lead))
+  │     → GET https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=…
+  │       (xi-api-key header, server-side only)
+  │     → returns { signedUrl, overrides }
   │
-  ├─ new WebSocket(signedUrl)   ← direct browser ↔ ElevenLabs connection
-  │     handles: mic capture, playback, STT, LLM responses, TTS
-  │     emits: transcript events (used for live hints)
+  ├─ Conversation.startSession({ signedUrl, overrides, ...callbacks })
+  │     SDK handles: mic capture, playback, STT, LLM responses, TTS
+  │     onMessage({ source, message }) → live transcript + hint engine
   │
-  └─ trpc.trainer.scoreSession(transcript, leadId, personaId, durationSeconds)
-        → POST to DeepSeek with scoring prompt
+  └─ trpc.trainer.scoreSession({ leadId, personaId, transcript, durationSeconds })
+        → DeepSeek (OpenAI SDK) with scoring prompt → JSON scorecard
         → saves TrainingSession row to DB
         → returns scorecard JSON
 ```
 
-**New env var required:** `ELEVENLABS_API_KEY`
+**New env vars required (server-side only — never `NEXT_PUBLIC_*`):**
+- `ELEVENLABS_API_KEY` — secret API key, used only in the tRPC procedure to mint the signed URL.
+- `ELEVENLABS_AGENT_ID` — the shared dashboard agent's id (`agent_…`).
+
+**One-time manual ElevenLabs setup (documented in README/`.env.example`):** create one Conversational AI agent in the ElevenLabs dashboard, then in its **Security → Overrides** settings enable overrides for *system prompt*, *first message*, *voice*, and *language*. Overrides are silently ignored unless enabled. The signed URL **expires 15 minutes** after minting, so it is generated fresh per session immediately before `startSession`.
 
 ---
 
@@ -57,7 +66,7 @@ model TrainingPersona {
   organizationId String
   name           String
   description    String
-  systemPrompt   String   // template; supports {{leadName}}, {{company}}, {{industry}}
+  systemPrompt   String   // template; supports {{leadName}}, {{company}}, {{industry}} (industry ← lead.source)
   firstMessage   String   // prospect's opening line, e.g. "Hello?"
   voiceId        String   // ElevenLabs voice ID
   voiceName      String   // human-readable label for the UI dropdown
@@ -113,16 +122,16 @@ Registered as `trainer` in `src/server/api/root.ts`
 Input: `{ leadId: string, personaId: string }`  
 1. Load lead — assert `lead.organizationId === ctx.organizationId`  
 2. Load persona — assert `persona.organizationId === ctx.organizationId`  
-3. Build system prompt by replacing `{{leadName}}`, `{{company}}`, `{{industry}}` in `persona.systemPrompt`. Null lead fields fall back to generic labels: `"the company"`, `"your industry"`.
-4. `POST https://api.elevenlabs.io/v1/convai/conversations/signed-url` with assembled `agent_config` (`voiceId`, `systemPrompt`, `firstMessage`)  
-5. Return `{ signedUrl: string }`  
+3. Interpolate `{{leadName}}`, `{{company}}`, `{{industry}}` in `persona.systemPrompt` **and** `persona.firstMessage`. `leadName ← leadDisplayName(lead)` (reuse helper in `src/lib/ai.ts`); `company ← lead.company ?? "the company"`; `industry ← lead.source ?? "your industry"`.
+4. `GET https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}` with header `xi-api-key: ${ELEVENLABS_API_KEY}`; read `signed_url` from the JSON response.
+5. Return `{ signedUrl, overrides }` where `overrides = { agent: { prompt: { prompt: interpolatedSystemPrompt }, firstMessage: interpolatedFirstMessage, language: "en" }, tts: { voiceId: persona.voiceId } }`. The browser passes `overrides` straight into `Conversation.startSession`.
 
 **`scoreSession`** — `organizationProcedure`  
 Input: `{ leadId, personaId, transcript: TranscriptEntry[], durationSeconds?: number }`  
-1. Call DeepSeek with transcript + scoring prompt requesting JSON scorecard  
-2. Scorecard shape: `{ overallScore, opening, objectionHandling, valueProposition, callToAction, highlights[], improvements[] }`  
-3. Save `TrainingSession` row  
-4. Return scorecard  
+1. Org-check lead + persona. Rate-limit per user (`assertWithinRateLimit`, mirroring `aiRouter`).  
+2. If `DEEPSEEK_API_KEY` is set, call DeepSeek via the OpenAI SDK (`response_format: { type: "json_object" }`, schema-as-system-prompt — mirror `generateEmailCopy` in `src/lib/ai.ts`) to produce the scorecard. If the key is absent, persist with `scorecard: null` (graceful, fail-open).  
+3. Save `TrainingSession` row (transcript always persisted; scorecard may be null).  
+4. Return `{ scorecard }`.  
 
 **`getSessions`** — `organizationProcedure`  
 - ADMIN/MANAGER: all sessions for org  
@@ -160,14 +169,14 @@ Matches existing app theme — white cards (`bg-white`), light borders (`border-
 
 "Manage Personas" button at top-right of `/trainer`, hidden from non-admins. Opens a dialog with:
 - List of existing personas (name + description + voice name)
-- "New Persona" button → form: name, description, voiceId (dropdown), systemPrompt (textarea with `{{leadName}}`, `{{company}}`, `{{industry}}` shown as helper tokens)
+- "New Persona" button → form: name, description, voice (native `<select>` over a curated `ELEVENLABS_VOICES` constant of `{ id, name }`; stores both `voiceId` + `voiceName`), `firstMessage`, and `systemPrompt` (textarea with `{{leadName}}`, `{{company}}`, `{{industry}}` shown as helper tokens; `{{industry}}` resolves to the lead's `source`)
 - Edit / delete per persona
 
 ---
 
 ## Real-time Hints
 
-Client-side pattern matching on `transcript` events from the ElevenLabs WebSocket. No extra API calls.
+Client-side pattern matching on the SDK's `onMessage({ source, message })` callback. No extra API calls. The prospect (the AI) is `source === "ai"`; the rep is `source === "user"`.
 
 ```ts
 const HINT_PATTERNS = [
@@ -180,7 +189,7 @@ const HINT_PATTERNS = [
 ]
 ```
 
-Up to 3 hints displayed; newest is highlighted, older are muted. Hints fire only on prospect (agent) transcript turns.
+Up to 3 hints displayed; newest is highlighted, older are muted. Hints fire only on prospect turns (`source === "ai"`).
 
 ---
 
@@ -206,7 +215,8 @@ Stored in `TrainingSession.scorecard` (JSON column). Color-coded in UI: ≥75 gr
 
 ## New Dependencies
 
-- `@11labs/client` — ElevenLabs browser SDK for Conversational AI WebSocket
+- `@elevenlabs/client` — ElevenLabs browser SDK for Conversational AI (the `@11labs/*` scope is deprecated). The component must be client-only (`"use client"`, loaded with `next/dynamic` `{ ssr: false }`) since the SDK uses `WebSocket`/`getUserMedia`/`AudioContext`.
+- `openai` — already a dependency; reused server-side for DeepSeek scoring.
 
 ---
 
