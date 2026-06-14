@@ -97,3 +97,25 @@ export function leadWhereFromScope(scope: LeadScope) {
     assignedToId: { in: scope.userIds },
   };
 }
+
+/**
+ * Prisma `where` fragment restricting which tasks a user may see, mirroring
+ * the lead-scope rules. A task is visible when its owner (`userId`) or its
+ * assignee (`assignedToId`) is in scope:
+ *
+ *  - ADMIN: every task in the organization.
+ *  - Team leader: tasks owned by or assigned to any team member (plus their own).
+ *  - Everyone else: only tasks they own or are assigned.
+ */
+export function taskWhereFromScope(scope: LeadScope) {
+  if (scope.kind === "all") {
+    return { organizationId: scope.organizationId };
+  }
+  return {
+    organizationId: scope.organizationId,
+    OR: [
+      { userId: { in: scope.userIds } },
+      { assignedToId: { in: scope.userIds } },
+    ],
+  };
+}
