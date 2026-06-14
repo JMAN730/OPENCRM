@@ -179,6 +179,20 @@ export function createMockPrisma() {
       delete: vi.fn(),
       count: vi.fn(),
     },
+    trainingPersona: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
+    trainingSession: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      count: vi.fn(),
+    },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
       // Support both the array form (used by the auth router's reset
