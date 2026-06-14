@@ -86,7 +86,9 @@ export const authRouter = createTRPCRouter({
       await ctx.prisma.$transaction([
         ctx.prisma.user.update({
           where: { id: resetToken.userId },
-          data: { password: hashed },
+          // Bump sessionVersion so any JWT minted before this reset is
+          // rejected on its next refresh (CWE-613 session revocation).
+          data: { password: hashed, sessionVersion: { increment: 1 } },
         }),
         ctx.prisma.passwordResetToken.delete({ where: { tokenHash } }),
       ]);
@@ -205,6 +207,9 @@ export const authRouter = createTRPCRouter({
           ...(input.name !== undefined && { name: input.name.trim() }),
           ...(input.email !== undefined && { email: input.email }),
           ...(input.loadingAnimationMode !== undefined && { loadingAnimationMode: input.loadingAnimationMode }),
+          // An email change is a credential change — revoke existing sessions
+          // by bumping sessionVersion (CWE-613).
+          ...(input.email !== undefined && { sessionVersion: { increment: 1 } }),
         },
       });
 
