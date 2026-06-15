@@ -41,6 +41,7 @@ import {
   X,
   ExternalLink,
   Download,
+  Dumbbell,
 } from "lucide-react";
 import {
   avatarClass,
@@ -879,6 +880,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 <Mail size={13} /> Email
               </a>
             ) : null}
+            <Link className="crm-btn" href={`/trainer?leadId=${lead.id}`}>
+              <Dumbbell size={13} /> Practice Call
+            </Link>
             <button className="crm-btn" onClick={() => setNoteOpen(true)}>
               <NotebookPen size={13} /> Log note
             </button>
