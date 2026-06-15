@@ -11,6 +11,7 @@ const scheduleInput = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   hourOfDay: z.number().int().min(0).max(23),
   autoImport: z.boolean().default(true),
+  autoOutreach: z.boolean().default(false),
   enabled: z.boolean().default(true),
 });
 
@@ -23,6 +24,7 @@ const updateInput = z.object({
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   hourOfDay: z.number().int().min(0).max(23).optional(),
   autoImport: z.boolean().optional(),
+  autoOutreach: z.boolean().optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -36,6 +38,7 @@ type ScheduleRow = {
   dayOfWeek: number;
   hourOfDay: number;
   autoImport: boolean;
+  autoOutreach: boolean;
   enabled: boolean;
   lastRunAt: Date | null;
   nextRunAt: Date | null;
@@ -53,6 +56,7 @@ function toRow(raw: {
   dayOfWeek: number;
   hourOfDay: number;
   autoImport: boolean;
+  autoOutreach: boolean;
   enabled: boolean;
   lastRunAt: Date | null;
   nextRunAt: Date | null;
@@ -99,6 +103,7 @@ export const scheduledScraperRouter = createTRPCRouter({
           dayOfWeek: input.dayOfWeek,
           hourOfDay: input.hourOfDay,
           autoImport: input.autoImport,
+          autoOutreach: input.autoImport && input.autoOutreach,
           enabled: input.enabled,
           nextRunAt: next,
         },

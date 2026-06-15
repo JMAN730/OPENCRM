@@ -18,6 +18,7 @@ import {
   PhoneCall,
   ScrollText,
   Dumbbell,
+  Send,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
@@ -40,6 +41,7 @@ const NAV_GROUPS = [
       { id: "trainer",  label: "Trainer",  href: "/trainer",  icon: Dumbbell },
       { id: "scripts",  label: "Scripts",  href: "/scripts",  icon: ScrollText },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
+      { id: "outreach", label: "Outreach", href: "/outreach", icon: Send },
       { id: "tasks",    label: "Tasks",    href: "/tasks",    icon: Calendar },
       { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
     ],

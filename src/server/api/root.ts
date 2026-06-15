@@ -15,6 +15,7 @@ import { pipelineRouter } from "@/features/pipeline/server/router";
 import { analyticsRouter } from "@/features/analytics/server/router";
 import { scheduledScraperRouter } from "@/features/scraper/server/scheduledRouter";
 import { trainerRouter } from "@/features/trainer/server/router";
+import { outreachRouter } from "@/features/outreach/server/router";
 
 export const appRouter = createTRPCRouter({
   ai: aiRouter,
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   pipeline: pipelineRouter,
   analytics: analyticsRouter,
   trainer: trainerRouter,
+  outreach: outreachRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -10,7 +10,7 @@ import json
 import math
 from json import JSONDecodeError
 from datetime import datetime
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 
 # List of popular chains to exclude
 EXCLUDED_CHAINS = [
@@ -36,6 +36,10 @@ CATEGORIES = [
 ]
 
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+EMAIL_JUNK_SUBSTRINGS = ("example.", "sentry", "wixpress", "godaddy", "no-reply", "noreply", "@2x")
+EMAIL_JUNK_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")
+CONTACT_PAGE_PATHS = ("contact", "contact-us", "about")
+EMAIL_CRAWL_MAX_BYTES = 500_000
 SOCIAL_DOMAINS = ["facebook.com", "instagram.com", "linkedin.com", "twitter.com", "t.co", "youtube.com", "tiktok.com"]
 VALID_BLOCKED_STATUSES = {401, 403, 405, 429}
 WEBSITE_CHECK_TIMEOUT = 12.0
@@ -112,6 +116,66 @@ def normalize_website_url(url):
 
     return url
 
+def extract_email_from_html(html, preferred_domain=None):
+    """Pull the most plausible contact email out of page HTML.
+
+    Prefers an address whose domain matches the business's own website domain
+    so we don't pick up a web designer's or plugin vendor's email by accident.
+    """
+    if not html:
+        return None
+    haystack = html[:EMAIL_CRAWL_MAX_BYTES]
+    candidates = re.findall(r'mailto:([^"\'>\s?]+)', haystack, re.IGNORECASE)
+    candidates.extend(re.findall(EMAIL_REGEX, haystack))
+    seen = set()
+    cleaned = []
+    for candidate in candidates:
+        email = candidate.strip().strip(".").lower()
+        if not re.fullmatch(EMAIL_REGEX, email):
+            continue
+        if email in seen:
+            continue
+        if any(junk in email for junk in EMAIL_JUNK_SUBSTRINGS):
+            continue
+        if email.endswith(EMAIL_JUNK_SUFFIXES):
+            continue
+        seen.add(email)
+        cleaned.append(email)
+    if not cleaned:
+        return None
+    if preferred_domain:
+        for email in cleaned:
+            domain = email.split("@", 1)[1]
+            if domain == preferred_domain or domain.endswith(f".{preferred_domain}"):
+                return email
+    return cleaned[0]
+
+async def crawl_contact_email(client, base_url, semaphore, preferred_domain=None):
+    """Fetch likely contact pages looking for an email the homepage didn't have."""
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    base = base_url if base_url.endswith("/") else f"{base_url}/"
+    for path in CONTACT_PAGE_PATHS:
+        target = urljoin(base, path)
+        async with semaphore:
+            try:
+                response = await asyncio.wait_for(
+                    client.get(target, timeout=10.0, follow_redirects=True, headers=headers),
+                    timeout=WEBSITE_CHECK_TIMEOUT,
+                )
+            except (httpx.HTTPError, asyncio.TimeoutError):
+                continue
+        if response.status_code >= 400:
+            continue
+        if not response.headers.get("content-type", "").startswith("text/html"):
+            continue
+        try:
+            email = extract_email_from_html(response.text, preferred_domain)
+        except Exception:
+            email = None
+        if email:
+            return email
+    return None
+
 async def check_website(client, url, semaphore):
     """Returns website validation details for a business URL."""
     url = normalize_website_url(url)
@@ -133,11 +197,20 @@ async def check_website(client, url, semaphore):
             )
             is_valid = response.status_code < 400 or response.status_code in VALID_BLOCKED_STATUSES
             reason = "reachable" if response.status_code < 400 else f"http_{response.status_code}"
+            # The homepage body is already in hand — mine it for a contact
+            # email at zero extra request cost.
+            email = None
+            if response.headers.get("content-type", "").startswith("text/html"):
+                try:
+                    email = extract_email_from_html(response.text, normalize_domain(url))
+                except Exception:
+                    email = None
             return {
                 "is_valid": is_valid,
                 "url": str(response.url) if response.url else url,
                 "status_code": response.status_code,
                 "reason": reason,
+                "email": email,
             }
         except httpx.HTTPError as e:
             return {"is_valid": False, "url": url, "status_code": None, "reason": e.__class__.__name__}
@@ -685,6 +758,22 @@ async def process_category(browser_context, http_client, location, category, lim
         if website_check["is_valid"]:
             return {"status": "valid_website"}
 
+        # Email fallback chain: Maps panel → homepage body → contact pages.
+        email = b["Email"] or website_check.get("email")
+        normalized_site = normalize_website_url(b["Website"])
+        if (
+            not email
+            and normalized_site
+            and not is_social_media(normalized_site)
+            and website_check["reason"] not in {"missing_or_invalid_url", "google_url"}
+        ):
+            email = await crawl_contact_email(
+                http_client,
+                website_check["url"] or normalized_site,
+                check_semaphore,
+                normalize_domain(b["Website"]),
+            )
+
         facebook_url = b.get("Facebook URL") or (b.get("Website") if is_facebook_url(b.get("Website")) else None)
         return {
             "status": "lead",
@@ -692,7 +781,7 @@ async def process_category(browser_context, http_client, location, category, lim
                 "Name": b["Name"],
                 "Phone": b["Phone"],
                 "Normalized Phone": normalize_phone(b["Phone"]),
-                "Email": b["Email"],
+                "Email": email,
                 "Website": b["Website"],
                 "Website Domain": normalize_domain(b["Website"]),
                 "Website Checked URL": website_check["url"],
