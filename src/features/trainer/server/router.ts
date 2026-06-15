@@ -69,9 +69,13 @@ export const trainerRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const lead = await ctx.prisma.lead.findUnique({
         where: { id: input.leadId },
-        select: { organizationId: true, company: true, firstName: true, lastName: true, source: true },
+        select: { organizationId: true, assignedToId: true, company: true, firstName: true, lastName: true, source: true },
       });
       if (!lead || lead.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      }
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 
@@ -125,9 +129,13 @@ export const trainerRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const lead = await ctx.prisma.lead.findUnique({
         where: { id: input.leadId },
-        select: { organizationId: true, company: true, firstName: true, lastName: true, source: true },
+        select: { organizationId: true, assignedToId: true, company: true, firstName: true, lastName: true, source: true },
       });
       if (!lead || lead.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      }
+      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
 

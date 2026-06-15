@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { z } from "zod";
 import type { Scorecard, TranscriptEntry } from "../types";
 
 function client() {
@@ -27,6 +28,17 @@ const SCORECARD_SCHEMA = {
 
 const SYSTEM = `You are a cold-calling coach. Score the rep (role "user") on a practice call against an AI prospect (role "agent"). All scores are integers 0-100. Be specific and constructive. Return only valid JSON matching this JSON schema: `;
 
+const scoreCategory = z.object({ score: z.number(), feedback: z.string() });
+const scorecardValidator = z.object({
+  overallScore: z.number(),
+  opening: scoreCategory,
+  objectionHandling: scoreCategory,
+  valueProposition: scoreCategory,
+  callToAction: scoreCategory,
+  highlights: z.array(z.string()),
+  improvements: z.array(z.string()),
+});
+
 export async function scoreCall(args: {
   transcript: TranscriptEntry[];
   personaName: string;
@@ -45,5 +57,13 @@ export async function scoreCall(args: {
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) return null;
-  return JSON.parse(raw) as Scorecard;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const result = scorecardValidator.safeParse(parsed);
+  return result.success ? (result.data as Scorecard) : null;
 }

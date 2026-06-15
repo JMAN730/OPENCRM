@@ -39,4 +39,18 @@ describe("scoreCall", () => {
     expect(result).toEqual(sample);
     expect(create).toHaveBeenCalledOnce();
   });
+
+  it("returns null when the model response fails schema validation", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "key");
+    create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ overallScore: 50 }) } }] });
+    const result = await scoreCall({ transcript: [], personaName: "P", leadName: "L" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the model returns non-JSON", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "key");
+    create.mockResolvedValue({ choices: [{ message: { content: "not json" } }] });
+    const result = await scoreCall({ transcript: [], personaName: "P", leadName: "L" });
+    expect(result).toBeNull();
+  });
 });
