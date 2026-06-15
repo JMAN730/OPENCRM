@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>THE MARGIN — A Quarterly of Slow Journalism</title>
+  <meta name="description" content="THE MARGIN is a subscription quarterly of slow journalism: long-form essays and reporting, in print and digital, for readers who would rather linger than skim." />
+
+  <!-- Fonts: network only; a serif fallback keeps the page readable offline -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      /* Palette — warm deckled paper, warm-black ink, one vermilion accent */
+      --paper:      #f4eee2;
+      --paper-deep: #ece4d3;
+      --ink:        #1a1714;
+      --ink-soft:   #3a342d;
+      --muted:      #756c5e;
+      --rule:       #d8cdb6;
+      --accent:     #c5391f;  /* vermilion — used sparingly */
+      --plate:      #1c3a5e;  /* deep cobalt — the single vivid plate */
+      --plate-ink:  #f4eee2;
+
+      --serif-display: "Fraunces", "Hoefler Text", "Georgia", "Times New Roman", serif;
+      --serif-body:    "Newsreader", "Iowan Old Style", "Georgia", "Times New Roman", serif;
+
+      --measure: 62ch;
+      --pad-x: clamp(1.25rem, 5vw, 5.5rem);
+      --section-y: clamp(4rem, 9vw, 8.5rem);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--serif-body);
+      font-size: clamp(1.0625rem, 0.55vw + 0.95rem, 1.25rem);
+      line-height: 1.7;
+      font-weight: 380;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      /* faint paper grain via layered gradients — no image assets */
+      background-image:
+        radial-gradient(transparent 0, transparent 1px, rgba(120,108,90,0.020) 1px, transparent 2px),
+        linear-gradient(180deg, #f6f0e6 0%, var(--paper) 38%, var(--paper) 100%);
+      background-size: 3px 3px, 100% 100%;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    h1, h2, h3 {
+      font-family: var(--serif-display);
+      font-weight: 460;
+      line-height: 1.02;
+      letter-spacing: -0.012em;
+      margin: 0;
+      font-optical-sizing: auto;
+    }
+
+    a { color: inherit; }
+
+    p { margin: 0 0 1.15em; }
+
+    ::selection { background: var(--accent); color: var(--paper); }
+
+    /* ——— shared building blocks ——— */
+    .wrap { max-width: 1180px; margin: 0 auto; padding-inline: var(--pad-x); }
+
+    .kicker {
+      font-family: var(--serif-body);
+      font-size: 0.72rem;
+      font-weight: 560;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 1.4rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .kicker::before {
+      content: "";
+      width: 1.9rem;
+      height: 1px;
+      background: var(--accent);
+      display: inline-block;
+    }
+
+    .label {
+      font-size: 0.7rem;
+      font-weight: 560;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    section { padding-block: var(--section-y); }
+
+    .rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
+
+    /* ——— reveal-on-scroll ——— */
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: opacity, transform;
+    }
+    .reveal.is-in { opacity: 1; transform: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1 !important; transform: none !important; transition: none; }
+    }
+
+    a:focus-visible, button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 1px;
+    }
+
+    /* ——— 1. Masthead ——— */
+    .masthead {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: color-mix(in srgb, var(--paper) 88%, transparent);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.4s ease;
+    }
+    .masthead.is-scrolled { border-bottom-color: var(--rule); }
+    .masthead .wrap {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-block: 1.05rem;
+    }
+    .nameplate {
+      font-family: var(--serif-display);
+      font-weight: 600;
+      font-size: 1.18rem;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      text-indent: 0.34em;
+      white-space: nowrap;
+    }
+    .masthead-meta { display: none; }
+    .mast-nav { display: none; }
+    .mast-nav a {
+      text-decoration: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      position: relative;
+      padding-bottom: 2px;
+    }
+    .mast-nav a::after {
+      content: "";
+      position: absolute; left: 0; bottom: 0;
+      width: 100%; height: 1px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1);
+    }
+    .mast-nav a:hover::after { transform: scaleX(1); }
+    @media (min-width: 720px) {
+      .masthead-meta { display: block; font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+      .mast-nav { display: flex; gap: 2.2rem; }
+    }
+
+    /* ——— 2. Cover / hero ——— */
+    .cover { padding-top: clamp(3rem, 7vw, 6.5rem); padding-bottom: var(--section-y); }
+    .cover .issue-line {
+      display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem;
+      align-items: baseline;
+      margin-bottom: clamp(2.5rem, 6vw, 4.5rem);
+    }
+    .cover h1 {
+      font-size: clamp(2.9rem, 9.5vw, 7.6rem);
+      font-weight: 420;
+      letter-spacing: -0.022em;
+      max-width: 18ch;
+    }
+    .cover h1 em {
+      font-style: italic;
+      font-weight: 360;
+      color: var(--accent);
+    }
+    .cover .standfirst {
+      margin-top: clamp(1.8rem, 4vw, 2.8rem);
+      max-width: 46ch;
+      font-size: clamp(1.2rem, 1.1vw + 1rem, 1.6rem);
+      line-height: 1.5;
+      color: var(--ink-soft);
+      font-weight: 360;
+    }
+    .cover .standfirst .lead-in { font-variant: small-caps; letter-spacing: 0.04em; color: var(--ink); font-weight: 500; }
+    .scroll-cue {
+      margin-top: clamp(3rem, 7vw, 5rem);
+      display: inline-flex; align-items: center; gap: 0.85rem;
+      font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+      text-decoration: none;
+    }
+    .scroll-cue .arrow { display: inline-block; animation: drift 2.6s ease-in-out infinite; }
+    @keyframes drift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+    @media (prefers-reduced-motion: reduce) { .scroll-cue .arrow { animation: none; } }
+
+    /* ——— 3. Editor's note ——— */
+    .note { background: linear-gradient(180deg, var(--paper-deep), var(--paper) 90%); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+    .note .col { max-width: var(--measure); margin-inline: auto; }
+    .note .label { display: block; text-align: center; margin-bottom: 2.4rem; }
+    .dropcap::first-letter {
+      font-family: var(--serif-display);
+      float: left;
+      font-size: 5.1rem;
+      line-height: 0.74;
+      padding: 0.2rem 0.7rem 0 0;
+      color: var(--accent);
+      font-weight: 460;
+    }
+    .signoff { margin-top: 2.4rem; font-style: italic; color: var(--ink-soft); }
+    .signoff strong { font-style: normal; font-family: var(--serif-display); font-weight: 500; display: block; letter-spacing: 0.01em; }
+
+    /* ——— 4. Contents ——— */
+    .contents .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: clamp(2.5rem, 5vw, 3.8rem); }
+    .contents h2 { font-size: clamp(2.1rem, 4.5vw, 3.5rem); }
+    .toc { list-style: none; margin: 0; padding: 0; }
+    .toc li { border-top: 1px solid var(--rule); }
+    .toc li:last-child { border-bottom: 1px solid var(--rule); }
+    .toc a {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: baseline;
+      gap: 0.5rem 1.4rem;
+      text-decoration: none;
+      padding: clamp(1.3rem, 2.6vw, 2.1rem) 0;
+      transition: background 0.4s ease, padding-left 0.4s cubic-bezier(0.22,1,0.36,1);
+    }
+    .toc a:hover, .toc a:focus-visible { background: var(--paper-deep); padding-left: 0.9rem; outline: none; }
+    .toc .no { font-family: var(--serif-display); font-size: 0.85rem; color: var(--accent); letter-spacing: 0.04em; padding-top: 0.4em; }
+    .toc .body { min-width: 0; }
+    .toc .ttl { font-family: var(--serif-display); font-size: clamp(1.35rem, 2.6vw, 2.05rem); font-weight: 420; letter-spacing: -0.01em; }
+    .toc .ttl em { font-style: italic; }
+    .toc .by { display: block; margin-top: 0.5rem; color: var(--muted); font-size: 0.92rem; }
+    .toc .by .sep { color: var(--rule); margin: 0 0.55rem; }
+    .toc .time { white-space: nowrap; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding-top: 0.5em; }
+    @media (max-width: 620px) {
+      .toc a { grid-template-columns: auto 1fr; }
+      .toc .time { grid-column: 2; padding-top: 0.6rem; }
+    }
+
+    /* ——— 5. Pull quote ——— */
+    .pull { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--paper-deep); }
+    .pull blockquote { margin: 0; max-width: 22ch; }
+    .pull .mark { font-family: var(--serif-display); color: var(--accent); font-size: 4rem; line-height: 0.4; display: block; height: 1.4rem; }
+    .pull p {
+      font-family: var(--serif-display);
+      font-style: italic;
+      font-weight: 360;
+      font-size: clamp(1.9rem, 4.6vw, 3.6rem);
+      line-height: 1.12;
+      letter-spacing: -0.015em;
+      margin: 0 0 1.6rem;
+    }
+    .pull cite { font-style: normal; font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+
+    /* ——— 6. Contributors ——— */
+    .contrib h2 { font-size: clamp(2.1rem, 4.5vw, 3.5rem); margin-bottom: clamp(2.5rem, 5vw, 3.5rem); }
+    .contrib-grid { display: grid; grid-template-columns: 1fr; gap: clamp(1.8rem, 4vw, 3rem) clamp(2rem, 4vw, 4rem); }
+    @media (min-width: 600px) { .contrib-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 940px) { .contrib-grid { grid-template-columns: 1fr 1fr 1fr; } }
+    .contrib { border-top: 1px solid var(--rule); padding-top: 1.3rem; }
+    .contrib h3 { font-size: 1.32rem; font-weight: 440; }
+    .contrib .role { display: block; margin: 0.5rem 0 0.9rem; font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+    .contrib p { font-size: 0.96rem; line-height: 1.6; color: var(--ink-soft); margin: 0; }
+
+    /* ——— 7. Manifesto ——— */
+    .manifesto { background: var(--paper-deep); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+    .manifesto .col { max-width: 58ch; margin-inline: auto; text-align: center; }
+    .manifesto h2 { font-size: clamp(1.9rem, 4vw, 3rem); margin-bottom: 1.8rem; }
+    .manifesto h2 em { font-style: italic; color: var(--accent); }
+    .manifesto p { font-size: clamp(1.1rem, 0.7vw + 1rem, 1.35rem); color: var(--ink-soft); }
+    .manifesto p:last-child { margin-bottom: 0; }
+
+    /* ——— 8. Vivid plate ——— */
+    .plate {
+      background: var(--plate);
+      color: var(--plate-ink);
+      position: relative;
+      overflow: hidden;
+    }
+    .plate::before {
+      content: "";
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(60% 90% at 88% 8%, rgba(197,57,31,0.34), transparent 60%),
+        radial-gradient(50% 80% at 6% 100%, rgba(255,255,255,0.06), transparent 55%);
+      pointer-events: none;
+    }
+    .plate .wrap { position: relative; }
+    .plate .kicker { color: #e7a08e; }
+    .plate .kicker::before { background: #e7a08e; }
+    .plate .excerpt {
+      max-width: 30ch;
+      font-family: var(--serif-display);
+      font-weight: 340;
+      font-size: clamp(1.7rem, 3.6vw, 3rem);
+      line-height: 1.18;
+      letter-spacing: -0.01em;
+      margin: 0 0 2rem;
+    }
+    .plate .excerpt em { font-style: italic; color: #f3c9bd; }
+    .plate .attribution { font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(244,238,226,0.7); }
+
+    /* ——— 9. Subscribe ——— */
+    .subscribe .wrap { max-width: 940px; }
+    .subscribe .intro { max-width: 40ch; }
+    .subscribe h2 { font-size: clamp(2.3rem, 5.5vw, 4.2rem); }
+    .subscribe h2 em { font-style: italic; color: var(--accent); }
+    .subscribe .intro p { margin-top: 1.4rem; color: var(--ink-soft); font-size: 1.15rem; }
+
+    .tiers { display: grid; grid-template-columns: 1fr; gap: 1.1rem; margin: clamp(2.6rem, 5vw, 3.6rem) 0; }
+    @media (min-width: 680px) { .tiers { grid-template-columns: 1fr 1fr; } }
+    .tier { border: 1px solid var(--rule); padding: 1.7rem 1.6rem 1.5rem; background: var(--paper); position: relative; }
+    .tier.is-featured { border-color: var(--ink); }
+    .tier .flag { position: absolute; top: -0.7rem; left: 1.4rem; background: var(--accent); color: var(--paper); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; padding: 0.28rem 0.6rem; }
+    .tier h3 { font-size: 1.5rem; font-weight: 460; }
+    .tier .price { font-family: var(--serif-display); font-size: 2.4rem; margin: 0.6rem 0 0.2rem; font-weight: 380; }
+    .tier .price span { font-family: var(--serif-body); font-size: 0.92rem; color: var(--muted); letter-spacing: 0.02em; }
+    .tier ul { list-style: none; margin: 1.1rem 0 0; padding: 0; }
+    .tier li { font-size: 0.96rem; color: var(--ink-soft); padding: 0.42rem 0 0.42rem 1.4rem; position: relative; }
+    .tier li::before { content: "—"; position: absolute; left: 0; color: var(--accent); }
+
+    form.signup { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: stretch; max-width: 540px; }
+    form.signup label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    form.signup input[type="email"] {
+      flex: 1 1 16rem;
+      min-width: 0;
+      font-family: var(--serif-body);
+      font-size: 1.05rem;
+      padding: 0.95rem 1.1rem;
+      background: var(--paper);
+      border: 1px solid var(--ink-soft);
+      color: var(--ink);
+      border-radius: 0;
+    }
+    form.signup input::placeholder { color: var(--muted); }
+    form.signup button {
+      flex: 0 0 auto;
+      font-family: var(--serif-body);
+      font-size: 0.82rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 540;
+      padding: 0.95rem 1.8rem;
+      background: var(--ink);
+      color: var(--paper);
+      border: 1px solid var(--ink);
+      cursor: pointer;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+    form.signup button:hover { background: var(--accent); border-color: var(--accent); }
+    .form-note { margin-top: 1rem; font-size: 0.85rem; color: var(--muted); }
+    .form-confirm {
+      margin-top: 1.3rem;
+      font-family: var(--serif-display);
+      font-style: italic;
+      font-size: 1.25rem;
+      color: var(--accent);
+      max-width: 44ch;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .form-confirm.is-shown { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { .form-confirm { transition: none; } }
+
+    /* ——— 10. Colophon / footer ——— */
+    footer.colophon { background: var(--ink); color: var(--paper); padding-block: clamp(3rem, 6vw, 5rem); }
+    footer.colophon .wrap { display: grid; gap: 2.2rem; }
+    footer .top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1.5rem; align-items: baseline; }
+    footer .nameplate { color: var(--paper); }
+    footer .foot-links { display: flex; flex-wrap: wrap; gap: 1.6rem; }
+    footer .foot-links a { text-decoration: none; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(244,238,226,0.72); transition: color 0.3s ease; }
+    footer .foot-links a:hover { color: var(--paper); }
+    footer .fine { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; border-top: 1px solid rgba(244,238,226,0.16); padding-top: 1.8rem; font-size: 0.8rem; color: rgba(244,238,226,0.55); letter-spacing: 0.04em; }
+    footer .fine em { font-style: italic; }
+  </style>
+</head>
+
+<body>
+  <!-- 1 · Masthead -->
+  <header class="masthead" id="top">
+    <div class="wrap">
+      <span class="nameplate">The Margin</span>
+      <span class="masthead-meta">No. 14 · Summer 2026</span>
+      <nav class="mast-nav" aria-label="Sections">
+        <a href="#contents">Contents</a>
+        <a href="#contributors">Contributors</a>
+        <a href="#subscribe">Subscribe</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- 2 · Cover / hero -->
+    <section class="cover" aria-labelledby="cover-title">
+      <div class="wrap">
+        <div class="issue-line reveal">
+          <span class="kicker">Issue No. 14 — Summer</span>
+          <span class="label">A Quarterly of Slow Journalism</span>
+        </div>
+        <h1 id="cover-title" class="reveal">Read the world<br />at the speed<br />it <em>deserves.</em></h1>
+        <p class="standfirst reveal">
+          <span class="lead-in">The Margin</span> is a printed quarterly for people who would
+          rather understand one thing deeply than skim a hundred. Long-form reporting, unhurried
+          essays, and the kind of writing that asks for an afternoon — and earns it.
+        </p>
+        <a class="scroll-cue reveal" href="#editors-note">
+          <span class="arrow" aria-hidden="true">↓</span> Begin reading
+        </a>
+      </div>
+    </section>
+
+    <!-- 3 · Editor's note -->
+    <section class="note" id="editors-note" aria-labelledby="note-label">
+      <div class="wrap">
+        <div class="col">
+          <span class="label" id="note-label">Editor's Note</span>
+          <p class="dropcap reveal">
+            Somewhere along the way, reading became a thing we did between other things — a
+            headline glimpsed in a queue, a paragraph abandoned at the lights. We built The Margin
+            as a quiet rebellion against that. Four times a year, on heavy uncoated paper, we
+            publish stories that could not be told quickly, by writers who were given the rarest
+            luxury in this trade: time.
+          </p>
+          <p class="reveal">
+            This issue lingers at the edges of things — a harbour town learning to live with the
+            tide, a clockmaker who measures grief in escapements, an economy run entirely on favours.
+            None of it is breaking. All of it, we think, is worth knowing. Pour something. Sit down.
+            The margin is where you do your best thinking; we simply gave it a magazine.
+          </p>
+          <p class="signoff reveal">
+            With our compliments,
+            <strong>Iris Calloway</strong>
+            <span class="label">Founding Editor</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 · Contents -->
+    <section class="contents" id="contents" aria-labelledby="contents-title">
+      <div class="wrap">
+        <div class="head reveal">
+          <h2 id="contents-title">In This Issue</h2>
+          <span class="label">Six features · Summer 2026</span>
+        </div>
+        <ul class="toc">
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">01</span>
+              <span class="body">
+                <span class="ttl">The Town That Lives <em>by the Tide</em></span>
+                <span class="by">Reporting from Fennwick Harbour<span class="sep">·</span>Marisol Devereaux</span>
+              </span>
+              <span class="time">28 min</span>
+            </a>
+          </li>
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">02</span>
+              <span class="body">
+                <span class="ttl">An Hour Borrowed, <em>Never Returned</em></span>
+                <span class="by">On the last hand-bound clockmaker in the north<span class="sep">·</span>Theo Ashworth</span>
+              </span>
+              <span class="time">22 min</span>
+            </a>
+          </li>
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">03</span>
+              <span class="body">
+                <span class="ttl">The Economy of <em>Small Favours</em></span>
+                <span class="by">A village that abolished money for a year<span class="sep">·</span>Priya Nandakumar</span>
+              </span>
+              <span class="time">31 min</span>
+            </a>
+          </li>
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">04</span>
+              <span class="body">
+                <span class="ttl">Letters to a <em>Lighthouse</em></span>
+                <span class="by">Fifty years of a keeper's unanswered correspondence<span class="sep">·</span>Soren Valk</span>
+              </span>
+              <span class="time">18 min</span>
+            </a>
+          </li>
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">05</span>
+              <span class="body">
+                <span class="ttl">The Cartographers of <em>Forgotten Roads</em></span>
+                <span class="by">Walking the paths that maps left behind<span class="sep">·</span>Adaeze Okoro</span>
+              </span>
+              <span class="time">26 min</span>
+            </a>
+          </li>
+          <li class="reveal">
+            <a href="#subscribe">
+              <span class="no">06</span>
+              <span class="body">
+                <span class="ttl">A Field Guide to <em>Doing Nothing</em></span>
+                <span class="by">In defence of the unproductive afternoon<span class="sep">·</span>Iris Calloway</span>
+              </span>
+              <span class="time">14 min</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 5 · Pull quote -->
+    <section class="pull" aria-label="Featured quotation">
+      <div class="wrap">
+        <blockquote class="reveal">
+          <span class="mark" aria-hidden="true">“</span>
+          <p>The fastest way to miss a story is to be in a hurry to tell it.</p>
+          <cite>— Marisol Devereaux, “The Town That Lives by the Tide”</cite>
+        </blockquote>
+      </div>
+    </section>
+
+    <!-- 6 · Contributors -->
+    <section class="contrib" id="contributors" aria-labelledby="contrib-title">
+      <div class="wrap">
+        <h2 id="contrib-title" class="reveal">This Issue's Hands</h2>
+        <div class="contrib-grid">
+          <article class="contrib reveal">
+            <h3>Marisol Devereaux</h3>
+            <span class="role">Reporter-at-Large</span>
+            <p>Spent four months in a town of nine hundred, learning the tide tables by heart and the people by name.</p>
+          </article>
+          <article class="contrib reveal">
+            <h3>Theo Ashworth</h3>
+            <span class="role">Contributing Writer</span>
+            <p>Writes about craft, patience, and the people who keep obsolete arts stubbornly alive.</p>
+          </article>
+          <article class="contrib reveal">
+            <h3>Priya Nandakumar</h3>
+            <span class="role">Economics, Unhurried</span>
+            <p>An economist by training who would rather tell you a story than show you a chart.</p>
+          </article>
+          <article class="contrib reveal">
+            <h3>Soren Valk</h3>
+            <span class="role">Essayist</span>
+            <p>Collects letters that were never sent and turns them into the things people meant to say.</p>
+          </article>
+          <article class="contrib reveal">
+            <h3>Adaeze Okoro</h3>
+            <span class="role">Roving Correspondent</span>
+            <p>Walks the routes that progress abandoned, notebook in hand, in no particular hurry.</p>
+          </article>
+          <article class="contrib reveal">
+            <h3>Iris Calloway</h3>
+            <span class="role">Founding Editor</span>
+            <p>Founded The Margin on the radical premise that a reader's attention is worth deserving.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 · Manifesto -->
+    <section class="manifesto" aria-labelledby="manifesto-title">
+      <div class="wrap">
+        <div class="col">
+          <span class="label">Why Slow</span>
+          <h2 id="manifesto-title" class="reveal">We are not in the business of <em>now.</em></h2>
+          <p class="reveal">
+            The news will always be faster than us, and we have made our peace with that. What we
+            offer instead is depth: stories reported over seasons, not afternoons, and given room to
+            breathe on the page. No autoplay. No infinite scroll. No urgency manufactured to keep
+            you here a moment longer than the writing earns.
+          </p>
+          <p class="reveal">
+            A quarterly arrives, you read it, and then it is yours to keep on a shelf. That is the
+            whole promise. We think it is a generous one.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 · Vivid plate -->
+    <section class="plate" aria-label="Excerpt">
+      <div class="wrap">
+        <span class="kicker reveal">From Issue No. 14</span>
+        <p class="excerpt reveal">
+          “She wound the clock the way you might <em>wake a sleeping child</em> — gently, and only
+          because it was time.”
+        </p>
+        <span class="attribution reveal">Theo Ashworth · “An Hour Borrowed, Never Returned”</span>
+      </div>
+    </section>
+
+    <!-- 9 · Subscribe -->
+    <section class="subscribe" id="subscribe" aria-labelledby="subscribe-title">
+      <div class="wrap">
+        <div class="intro reveal">
+          <span class="kicker">Join the readers</span>
+          <h2 id="subscribe-title">Subscribe to <em>The Margin.</em></h2>
+          <p>Four issues a year. Choose print for the shelf, or digital for the road — or both, and never miss a word.</p>
+        </div>
+
+        <div class="tiers">
+          <div class="tier reveal">
+            <h3>Digital</h3>
+            <p class="price">$48<span> / year</span></p>
+            <ul>
+              <li>Four issues, beautifully set for the screen</li>
+              <li>The full archive, back to Issue No. 1</li>
+              <li>Read offline, anywhere</li>
+            </ul>
+          </div>
+          <div class="tier is-featured reveal">
+            <span class="flag">Most chosen</span>
+            <h3>Print &amp; Digital</h3>
+            <p class="price">$96<span> / year</span></p>
+            <ul>
+              <li>The quarterly, printed on heavy uncoated stock</li>
+              <li>Everything in Digital, included</li>
+              <li>Posted to your door, anywhere in the world</li>
+            </ul>
+          </div>
+        </div>
+
+        <form class="signup reveal" id="signup" novalidate>
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          <button type="submit">Start Reading</button>
+        </form>
+        <p class="form-note reveal">No spam, ever. Just a note when the next issue is bound. Unsubscribe in one click.</p>
+        <p class="form-confirm" id="confirm" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- 10 · Colophon / footer -->
+  <footer class="colophon">
+    <div class="wrap">
+      <div class="top">
+        <span class="nameplate">The Margin</span>
+        <nav class="foot-links" aria-label="Footer">
+          <a href="#contents">Contents</a>
+          <a href="#contributors">Contributors</a>
+          <a href="#subscribe">Subscribe</a>
+          <a href="#top">Back to top</a>
+        </nav>
+      </div>
+      <div class="fine">
+        <span>© 2026 The Margin Quarterly. Printed slowly, on purpose.</span>
+        <span><em>Set in Fraunces &amp; Newsreader.</em></span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var reduceMotion = window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // Reveal-on-scroll — gentle, fires once, lightly staggered per section
+      var reveals = document.querySelectorAll(".reveal");
+      if (reduceMotion || !("IntersectionObserver" in window)) {
+        reveals.forEach(function (el) { el.classList.add("is-in"); });
+      } else {
+        var io = new IntersectionObserver(function (entries, obs) {
+          entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            var el = entry.target;
+            // stagger siblings that share a parent for a "settling" cadence
+            var siblings = el.parentElement
+              ? Array.prototype.filter.call(el.parentElement.children, function (c) {
+                  return c.classList.contains("reveal");
+                })
+              : [el];
+            var delay = Math.min(siblings.indexOf(el), 5) * 90;
+            el.style.transitionDelay = delay + "ms";
+            el.classList.add("is-in");
+            obs.unobserve(el);
+          });
+        }, { rootMargin: "0px 0px -10% 0px", threshold: 0.12 });
+        reveals.forEach(function (el) { io.observe(el); });
+      }
+
+      // Masthead hairline appears once the cover has scrolled away
+      var mast = document.querySelector(".masthead");
+      var onScroll = function () {
+        if (window.scrollY > 24) mast.classList.add("is-scrolled");
+        else mast.classList.remove("is-scrolled");
+      };
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+
+      // Smooth in-page anchors (honours reduced-motion via CSS scroll-behavior)
+      document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          var id = link.getAttribute("href");
+          if (id === "#" || id.length < 2) return;
+          var target = document.querySelector(id);
+          if (!target) return;
+          e.preventDefault();
+          target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+          history.replaceState(null, "", id);
+        });
+      });
+
+      // Subscribe — no backend; show an earned, in-place confirmation
+      var form = document.getElementById("signup");
+      var confirm = document.getElementById("confirm");
+      if (form) {
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var input = document.getElementById("email");
+          var value = (input.value || "").trim();
+          var valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+          if (!valid) {
+            confirm.textContent = "A real email, if you would — that's where the first issue goes.";
+            confirm.classList.add("is-shown");
+            input.focus();
+            return;
+          }
+          confirm.textContent = "Welcome to the margin. Issue No. 14 is on its way to " + value + ".";
+          confirm.classList.add("is-shown");
+          form.reset();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
