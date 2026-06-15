@@ -2,6 +2,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { assertAdmin } from "@/server/authz";
+import { buildLeadContext, interpolate } from "../leadContext";
 
 const personaInput = z.object({
   name: z.string().min(1),
@@ -57,5 +58,52 @@ export const trainerRouter = createTRPCRouter({
       }
       await ctx.prisma.trainingPersona.delete({ where: { id: input.id } });
       return { success: true };
+    }),
+
+  startSession: organizationProcedure
+    .input(z.object({ leadId: z.string(), personaId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const lead = await ctx.prisma.lead.findUnique({
+        where: { id: input.leadId },
+        select: { organizationId: true, company: true, firstName: true, lastName: true, source: true },
+      });
+      if (!lead || lead.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      }
+
+      const persona = await ctx.prisma.trainingPersona.findUnique({
+        where: { id: input.personaId },
+        select: { organizationId: true, systemPrompt: true, firstMessage: true, voiceId: true },
+      });
+      if (!persona || persona.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Persona not found." });
+      }
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const agentId = process.env.ELEVENLABS_AGENT_ID;
+      if (!apiKey || !agentId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Voice trainer is not configured." });
+      }
+
+      const leadCtx = buildLeadContext(lead);
+      const systemPrompt = interpolate(persona.systemPrompt, leadCtx);
+      const firstMessage = interpolate(persona.firstMessage, leadCtx);
+
+      const res = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+        { headers: { "xi-api-key": apiKey }, cache: "no-store" },
+      );
+      if (!res.ok) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to start voice session." });
+      }
+      const { signed_url } = (await res.json()) as { signed_url: string };
+
+      return {
+        signedUrl: signed_url,
+        overrides: {
+          agent: { prompt: { prompt: systemPrompt }, firstMessage, language: "en" },
+          tts: { voiceId: persona.voiceId },
+        },
+      };
     }),
 });
