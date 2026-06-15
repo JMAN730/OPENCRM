@@ -110,3 +110,46 @@ describe("trainerRouter — startSession", () => {
       .rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
+
+describe("trainerRouter — sessions", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => { ({ caller, prisma } = createTestCaller()); });
+  afterEach(() => { vi.unstubAllEnvs(); openaiCreate.mockReset(); });
+
+  it("scores and persists a session (no key → null scorecard)", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
+    prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1", company: "Acme", firstName: null, lastName: null, source: null });
+    prisma.trainingPersona.findUnique.mockResolvedValue({ organizationId: "org-1", name: "Owner" });
+    prisma.trainingSession.create.mockResolvedValue({ id: "s1" });
+
+    const result = await caller.trainer.scoreSession({
+      leadId: "lead-1", personaId: "p1",
+      transcript: [{ role: "user", text: "Hi", at: 1 }], durationSeconds: 30,
+    });
+
+    expect(result).toEqual({ sessionId: "s1", scorecard: null });
+    expect(prisma.trainingSession.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ organizationId: "org-1", userId: "user-1", leadId: "lead-1" }) }),
+    );
+  });
+
+  it("lists sessions scoped to the user for non-managers", async () => {
+    ({ caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } }));
+    prisma.trainingSession.findMany.mockResolvedValue([{ id: "s1" }]);
+    await caller.trainer.getSessions();
+    expect(prisma.trainingSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: "org-1", userId: "user-1" }) }),
+    );
+  });
+
+  it("returns scope-limited pickable leads (ADMIN sees all org leads)", async () => {
+    prisma.lead.findMany.mockResolvedValue([{ id: "lead-1", company: "Acme" }]);
+    const leads = await caller.trainer.pickableLeads();
+    expect(leads).toEqual([{ id: "lead-1", company: "Acme" }]);
+    expect(prisma.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: "org-1" } }),
+    );
+  });
+});
