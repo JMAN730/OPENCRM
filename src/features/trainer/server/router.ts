@@ -1,8 +1,12 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { assertAdmin } from "@/server/authz";
+import { Prisma } from "@prisma/client";
+import { assertAdmin, isManagerOrAdmin } from "@/server/authz";
+import { assertWithinRateLimit } from "@/lib/rateLimit";
+import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
 import { buildLeadContext, interpolate } from "../leadContext";
+import { scoreCall } from "./scoring";
 
 const personaInput = z.object({
   name: z.string().min(1),
@@ -106,4 +110,88 @@ export const trainerRouter = createTRPCRouter({
         },
       };
     }),
+
+  scoreSession: organizationProcedure
+    .input(z.object({
+      leadId: z.string(),
+      personaId: z.string().nullable().optional(),
+      transcript: z.array(z.object({
+        role: z.enum(["user", "agent"]),
+        text: z.string(),
+        at: z.number(),
+      })),
+      durationSeconds: z.number().int().nonnegative().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const lead = await ctx.prisma.lead.findUnique({
+        where: { id: input.leadId },
+        select: { organizationId: true, company: true, firstName: true, lastName: true, source: true },
+      });
+      if (!lead || lead.organizationId !== ctx.organizationId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      }
+
+      let personaName = "Prospect";
+      if (input.personaId) {
+        const persona = await ctx.prisma.trainingPersona.findUnique({
+          where: { id: input.personaId },
+          select: { organizationId: true, name: true },
+        });
+        if (!persona || persona.organizationId !== ctx.organizationId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Persona not found." });
+        }
+        personaName = persona.name;
+      }
+
+      await assertWithinRateLimit({
+        key: `trainer:score:${ctx.session.user.id}`,
+        limit: 20,
+        windowSeconds: 60,
+        message: "Too many scoring requests. Try again shortly.",
+      });
+
+      const leadName = buildLeadContext(lead).leadName;
+      const scorecard = await scoreCall({ transcript: input.transcript, personaName, leadName });
+
+      const session = await ctx.prisma.trainingSession.create({
+        data: {
+          organizationId: ctx.organizationId,
+          userId: ctx.session.user.id,
+          leadId: input.leadId,
+          personaId: input.personaId ?? null,
+          transcript: input.transcript as unknown as Prisma.InputJsonValue,
+          scorecard: (scorecard ?? undefined) as Prisma.InputJsonValue | undefined,
+          durationSeconds: input.durationSeconds,
+        },
+      });
+
+      return { sessionId: session.id, scorecard };
+    }),
+
+  getSessions: organizationProcedure.query(({ ctx }) => {
+    const where = isManagerOrAdmin(ctx.session.user.role)
+      ? { organizationId: ctx.organizationId }
+      : { organizationId: ctx.organizationId, userId: ctx.session.user.id };
+    return ctx.prisma.trainingSession.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        persona: { select: { name: true } },
+        lead: { select: { firstName: true, lastName: true, company: true } },
+        user: { select: { name: true } },
+      },
+    });
+  }),
+
+  pickableLeads: organizationProcedure.query(async ({ ctx }) => {
+    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+    const where = leadWhereFromScope(scope);
+    return ctx.prisma.lead.findMany({
+      where,
+      orderBy: [{ company: "asc" }, { createdAt: "desc" }],
+      take: 100,
+      select: { id: true, firstName: true, lastName: true, company: true, source: true },
+    });
+  }),
 });
