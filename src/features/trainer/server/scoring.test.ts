@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 const { create } = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock("openai", () => ({
