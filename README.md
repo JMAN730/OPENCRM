@@ -112,3 +112,16 @@ scripts/
 - `src/proxy.ts` is the request auth boundary for Next.js 16.
 - The app is PostgreSQL-only. Old SQLite/libsql packaging hooks have been removed.
 - Password-reset email delivery is optional; without SMTP configured, reset links are logged to the server output.
+
+### Voice Call Trainer
+
+Reps practice cold calls against an ElevenLabs-voiced AI prospect at `/trainer`.
+
+Setup (one-time):
+1. Create a Conversational AI **agent** in the ElevenLabs dashboard.
+2. In the agent's **Security → Overrides**, enable overrides for *System prompt*, *First message*, *Voice*, and *Language* (overrides are ignored unless enabled).
+3. Set `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` in `.env`.
+4. An ADMIN creates personas at `/trainer` → "Manage Personas".
+
+Without these env vars the page loads but starting a call returns a "not configured" error.
+Scoring uses the same `DEEPSEEK_API_KEY` as other AI features; without it, sessions are saved without a scorecard.
