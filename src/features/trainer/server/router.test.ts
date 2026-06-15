@@ -109,6 +109,18 @@ describe("trainerRouter — startSession", () => {
     await expect(caller.trainer.startSession({ leadId: "lead-1", personaId: "p1" }))
       .rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  it("throws NOT_FOUND when a USER targets a lead outside their scope", async () => {
+    ({ caller, prisma } = createTestCaller({ sessionOverrides: { role: "USER" } }));
+    prisma.lead.findUnique.mockResolvedValue({
+      organizationId: "org-1", assignedToId: "other-user", company: "Acme", firstName: null, lastName: null, source: null,
+    });
+    prisma.team.findMany.mockResolvedValue([]); // user leads no teams → scope is self only
+    vi.stubEnv("ELEVENLABS_API_KEY", "k");
+    vi.stubEnv("ELEVENLABS_AGENT_ID", "agent_1");
+    await expect(caller.trainer.startSession({ leadId: "lead-1", personaId: "p1" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
 });
 
 describe("trainerRouter — sessions", () => {
@@ -141,6 +153,14 @@ describe("trainerRouter — sessions", () => {
     await caller.trainer.getSessions();
     expect(prisma.trainingSession.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ organizationId: "org-1", userId: "user-1" }) }),
+    );
+  });
+
+  it("lists all org sessions for admins/managers (no user filter)", async () => {
+    prisma.trainingSession.findMany.mockResolvedValue([{ id: "s1" }]);
+    await caller.trainer.getSessions();
+    expect(prisma.trainingSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: "org-1" } }),
     );
   });
 
