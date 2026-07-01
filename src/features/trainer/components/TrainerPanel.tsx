@@ -14,7 +14,7 @@ const selectClass =
   "w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm h-9 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function leadLabel(l: { firstName: string | null; lastName: string | null; company: string | null }) {
-  return l.company ?? [l.firstName, l.lastName].filter(Boolean).join(" ") ?? "Unnamed lead";
+  return l.company ?? ([l.firstName, l.lastName].filter(Boolean).join(" ") || "Unnamed lead");
 }
 
 export function TrainerPanel() {

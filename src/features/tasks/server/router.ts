@@ -87,16 +87,19 @@ export const tasksRouter = createTRPCRouter({
           organizationId: ctx.organizationId,
           deletedAt: null,
         },
-        select: { id: true, userId: true, leadId: true, title: true },
+        select: { id: true, userId: true, assignedToId: true, leadId: true, title: true },
       });
 
       if (!task) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found." });
       }
 
+      // The assignee may update the task too (e.g. mark it complete) — it
+      // shows up in their list via taskWhereFromScope, so the checkbox in the
+      // UI must not 403 on tasks a manager created for them.
       const callerId = ctx.session.user.id;
       const callerRole = ctx.session.user.role;
-      if (task.userId !== callerId && !isManagerOrAdmin(callerRole)) {
+      if (task.userId !== callerId && task.assignedToId !== callerId && !isManagerOrAdmin(callerRole)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit another user's task." });
       }
 

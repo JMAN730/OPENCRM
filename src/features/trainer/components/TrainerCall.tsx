@@ -35,9 +35,20 @@ export function TrainerCall({ leadId, personaId, onReset }: { leadId: string; pe
   const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
 
   const handleStart = useCallback(async () => {
+    // Clear leftovers from a previous errored attempt so the retry starts fresh.
+    stopTimer();
+    void convRef.current?.endSession().catch(() => undefined);
+    convRef.current = null;
+    setTranscript([]);
+    setHints([]);
+    setSeconds(0);
     setPhase("connecting");
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Permission pre-check only — release the tracks immediately, otherwise
+      // this stray stream keeps the browser's mic indicator on forever (the
+      // ElevenLabs SDK opens its own stream for the actual call).
+      const micProbe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micProbe.getTracks().forEach((t) => t.stop());
       const cfg = await startSession.mutateAsync({ leadId, personaId });
       const { Conversation } = await import("@elevenlabs/client");
       const conv = await Conversation.startSession({
@@ -81,18 +92,24 @@ export function TrainerCall({ leadId, personaId, onReset }: { leadId: string; pe
 
   useEffect(() => () => { stopTimer(); void convRef.current?.endSession(); }, []);
 
-  if (phase === "idle" || phase === "connecting") {
+  if (phase === "idle" || phase === "connecting" || phase === "error") {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-border bg-card p-10 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
           <Mic size={26} className="text-primary" />
         </div>
         <div>
-          <p className="font-medium">Ready to practice</p>
-          <p className="text-sm text-muted-foreground">Your microphone will be used for this call.</p>
+          <p className="font-medium">{phase === "error" ? "Something went wrong" : "Ready to practice"}</p>
+          <p className="text-sm text-muted-foreground">
+            {phase === "error"
+              ? "The call could not be started or was interrupted."
+              : "Your microphone will be used for this call."}
+          </p>
         </div>
         <Button onClick={handleStart} disabled={phase === "connecting"} className="bg-green-600 hover:bg-green-700">
-          {phase === "connecting" ? <><Loader2 size={16} className="animate-spin" /> Connecting…</> : "Start Practice Call"}
+          {phase === "connecting"
+            ? <><Loader2 size={16} className="animate-spin" /> Connecting…</>
+            : phase === "error" ? <><RotateCcw size={16} /> Try again</> : "Start Practice Call"}
         </Button>
       </div>
     );

@@ -30,7 +30,7 @@ beforeEach(async () => {
 
 function programPipeline(count: number, pttlMs: number) {
   const pipeline = {
-    incr: vi.fn().mockReturnThis(),
+    incrby: vi.fn().mockReturnThis(),
     expire: vi.fn().mockReturnThis(),
     pttl: vi.fn().mockReturnThis(),
     exec: vi.fn().mockResolvedValue([
@@ -64,7 +64,7 @@ describe("rateLimit", () => {
 
   it("fails open when Redis throws (don't lock everyone out on outage)", async () => {
     mockRedis.multi.mockReturnValue({
-      incr: vi.fn().mockReturnThis(),
+      incrby: vi.fn().mockReturnThis(),
       expire: vi.fn().mockReturnThis(),
       pttl: vi.fn().mockReturnThis(),
       exec: vi.fn().mockRejectedValue(new Error("redis down")),
@@ -82,7 +82,25 @@ describe("rateLimit", () => {
 
     await rateLimit({ key: "auth:signin:x@y.com", limit: 5, windowSeconds: 60 });
 
-    expect(pipeline.incr).toHaveBeenCalledWith("ratelimit:auth:signin:x@y.com");
+    expect(pipeline.incrby).toHaveBeenCalledWith("ratelimit:auth:signin:x@y.com", 1);
+  });
+
+  it("consumes `cost` units from the bucket for batch calls", async () => {
+    const pipeline = programPipeline(20, 60_000);
+
+    const r = await rateLimit({ key: "email-send:org-1", limit: 20, windowSeconds: 60, cost: 20 });
+
+    expect(pipeline.incrby).toHaveBeenCalledWith("ratelimit:email-send:org-1", 20);
+    expect(r.ok).toBe(true);
+    expect(r.remaining).toBe(0);
+  });
+
+  it("rejects a batch whose cost pushes the count past the limit", async () => {
+    programPipeline(25, 60_000);
+
+    const r = await rateLimit({ key: "email-send:org-1", limit: 20, windowSeconds: 60, cost: 20 });
+
+    expect(r.ok).toBe(false);
   });
 });
 

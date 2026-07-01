@@ -133,11 +133,14 @@ export const outreachRouter = createTRPCRouter({
     .input(z.object({ draftIds: z.array(z.string()).min(1).max(20) }))
     .mutation(async ({ ctx, input }) => {
       // Shares the single-send limiter key so bulk and per-lead sends draw
-      // from the same 20/minute budget.
+      // from the same 20/minute budget. Each draft in the batch consumes one
+      // unit — otherwise a 20-draft bulk send would cost the same as a single
+      // send and the budget would be 400 emails/minute instead of 20.
       await assertWithinRateLimit({
         key: `email-send:${ctx.organizationId}`,
         limit: 20,
         windowSeconds: 60,
+        cost: input.draftIds.length,
       });
 
       const sent: string[] = [];

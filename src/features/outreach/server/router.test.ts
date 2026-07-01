@@ -151,5 +151,16 @@ describe("outreachRouter", () => {
       await expect(caller.outreach.bulkSend({ draftIds })).rejects.toThrow();
       expect(sendDraft).not.toHaveBeenCalled();
     });
+
+    it("consumes one rate-limit unit per draft in the batch", async () => {
+      const { assertWithinRateLimit } = await import("@/lib/rateLimit");
+      vi.mocked(sendDraft).mockResolvedValue({ messageId: "m1" });
+
+      await caller.outreach.bulkSend({ draftIds: ["d1", "d2", "d3"] });
+
+      expect(assertWithinRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "email-send:org-1", limit: 20, cost: 3 }),
+      );
+    });
   });
 });

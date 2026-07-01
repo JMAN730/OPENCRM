@@ -135,7 +135,7 @@ describe("tasksRouter", () => {
           organizationId: "org-1",
           deletedAt: null,
         },
-        select: { id: true, userId: true, leadId: true, title: true },
+        select: { id: true, userId: true, assignedToId: true, leadId: true, title: true },
       });
       expect(prisma.task.update).toHaveBeenCalledWith({
         where: { id: "t1" },
@@ -165,12 +165,27 @@ describe("tasksRouter", () => {
       const { caller, prisma } = createTestCaller({
         sessionOverrides: { role: "USER" },
       });
-      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user", leadId: null, title: "t" });
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "another-user", assignedToId: "someone-else", leadId: null, title: "t" });
 
       await expect(
         caller.tasks.update({ taskId: "t1", completed: true })
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
       expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
+    it("allows the assignee to complete a task a manager created for them", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      prisma.task.findFirst.mockResolvedValue({ id: "t1", userId: "manager-1", assignedToId: "user-1", leadId: null, title: "t" });
+      prisma.task.update.mockResolvedValue({ id: "t1", title: "t" });
+
+      await caller.tasks.update({ taskId: "t1", completed: true });
+
+      expect(prisma.task.update).toHaveBeenCalledWith({
+        where: { id: "t1" },
+        data: expect.objectContaining({ status: "COMPLETED" }),
+      });
     });
 
     it("refuses when the task does not exist", async () => {
