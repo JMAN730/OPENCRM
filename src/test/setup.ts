@@ -58,6 +58,7 @@ vi.mock('@/lib/redis', () => ({
     del: vi.fn().mockResolvedValue(0),
     multi: vi.fn(() => ({
       incr: vi.fn().mockReturnThis(),
+      incrby: vi.fn().mockReturnThis(),
       expire: vi.fn().mockReturnThis(),
       pttl: vi.fn().mockReturnThis(),
       exec: vi.fn().mockResolvedValue(null),

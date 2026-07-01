@@ -41,8 +41,8 @@ export function PersonaManagerDialog({ open, onOpenChange }: { open: boolean; on
   });
 
   const submit = () => {
-    if (!form.name.trim() || !form.systemPrompt.trim() || !form.firstMessage.trim()) {
-      toast.error("Name, first message, and system prompt are required.");
+    if (!form.name.trim() || !form.description.trim() || !form.systemPrompt.trim() || !form.firstMessage.trim()) {
+      toast.error("Name, description, first message, and system prompt are required.");
       return;
     }
     if (editingId) update.mutate({ id: editingId, ...form });

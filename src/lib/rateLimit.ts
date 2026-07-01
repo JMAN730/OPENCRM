@@ -8,6 +8,12 @@ export type RateLimitOptions = {
   limit: number;
   /** Window length in seconds. */
   windowSeconds: number;
+  /**
+   * How many units this call consumes from the bucket (default 1). Batch
+   * endpoints pass their batch size so e.g. a 20-draft bulk send draws 20
+   * from the same budget as 20 single sends.
+   */
+  cost?: number;
 };
 
 export type RateLimitResult = {
@@ -22,11 +28,11 @@ export type RateLimitResult = {
  * doesn't lock everyone out of the product.
  */
 export async function rateLimit(opts: RateLimitOptions): Promise<RateLimitResult> {
-  const { key, limit, windowSeconds } = opts;
+  const { key, limit, windowSeconds, cost = 1 } = opts;
   const bucket = `ratelimit:${key}`;
   try {
     const pipeline = redis.multi();
-    pipeline.incr(bucket);
+    pipeline.incrby(bucket, cost);
     pipeline.expire(bucket, windowSeconds, "NX");
     pipeline.pttl(bucket);
     const results = await pipeline.exec();
