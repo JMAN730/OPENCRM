@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import Papa from "papaparse";
 import { prisma } from "@/lib/prisma";
 import { parseCityState } from "@/features/leads/location";
+import { parseLatLngFromMapsUrl } from "@/features/map/shared/coords";
 
 export type ScrapedRow = {
   Name?: string;
@@ -166,6 +167,8 @@ export async function importRowsToLeads(opts: {
     email: string | null;
     website: string | null;
     mapsUrl: string | null;
+    latitude: number | null;
+    longitude: number | null;
     city: string | null;
     state: string | null;
     rating: number | null;
@@ -192,6 +195,7 @@ export async function importRowsToLeads(opts: {
     const email = sanitizeEmail(row.Email);
     const website = (row.Website ?? "").trim() || null;
     const mapsUrl = (row["Google Maps URL"] ?? "").trim() || null;
+    const coords = parseLatLngFromMapsUrl(mapsUrl);
     const ratingRaw = (row.Rating ?? "").trim();
     const reviewCountRaw = (row.Reviews ?? "").trim();
     const rating = ratingRaw ? Number(ratingRaw) : null;
@@ -241,6 +245,8 @@ export async function importRowsToLeads(opts: {
       email,
       website,
       mapsUrl,
+      latitude: coords?.lat ?? null,
+      longitude: coords?.lng ?? null,
       city: location.city ?? null,
       state: location.state ?? null,
       rating: Number.isFinite(rating) ? rating : null,
@@ -259,6 +265,8 @@ export async function importRowsToLeads(opts: {
           email: row.email,
           website: row.website,
           mapsUrl: row.mapsUrl,
+          latitude: row.latitude,
+          longitude: row.longitude,
           city: row.city,
           state: row.state,
           rating: row.rating,

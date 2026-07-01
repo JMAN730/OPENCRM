@@ -70,3 +70,4 @@ next-env.d.ts
 # Vendored built-in skills (not project-specific; project agents live in .claude/agents/)
 /.agents/skills/neon-postgres/
 /.claude/skills/neon-postgres/
+__pycache__/

@@ -15,6 +15,7 @@ import {
   LogOut,
   User,
   Kanban,
+  Map,
   PhoneCall,
   ScrollText,
   Dumbbell,
@@ -35,6 +36,7 @@ const NAV_GROUPS = [
     title: "Workspace",
     items: [
       { id: "leads",    label: "Leads",    href: "/leads",    icon: Users },
+      { id: "map",      label: "Map",      href: "/map",      icon: Map },
       { id: "pipeline", label: "Pipeline", href: "/pipeline", icon: Kanban },
       { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
       { id: "dialer",   label: "Dialer",   href: "/dialer",   icon: PhoneCall },

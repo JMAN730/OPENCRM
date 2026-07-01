@@ -150,6 +150,8 @@ model Lead {
   title               String?
   website             String?
   mapsUrl             String?
+  latitude            Float?
+  longitude           Float?
   rating              Float?
   reviewCount         Int?
   status              LeadStatus               @default(NOT_CONTACTED)
@@ -200,6 +202,8 @@ model Lead {
   @@index([organizationId, assignedToId])
   @@index([organizationId, state, city])
   @@index([organizationId, lastTouchedAt])
+  // Map viewport queries (leads inside a lat/lng bounding box).
+  @@index([organizationId, latitude, longitude])
 }
 
 enum LeadStatus {
@@ -344,6 +348,7 @@ enum ActivityType {
   EMAIL_DRAFT_CREATED
   EMAIL_SENT
   DEMO_GENERATED
+  LEAD_ENRICHED
 }
 
 model Activity {
@@ -469,6 +474,8 @@ enum InvitationStatus {
 model ScraperJob {
   id     String           @id @default(cuid())
   status ScraperJobStatus @default(PENDING)
+  // "SCRAPE" (location/category scrape) or "ENRICH" (map-selected lead enrichment)
+  jobType String @default("SCRAPE")
 
   locations  Json @default("[]")
   categories Json @default("[]")

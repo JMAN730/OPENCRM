@@ -238,6 +238,30 @@ describe("importRowsToLeads", () => {
     expect(inserted.state).toBe("FL");
   });
 
+  it("fills latitude/longitude from the Google Maps URL column", async () => {
+    mockPrisma.lead.findMany.mockResolvedValue([]);
+
+    await importRowsToLeads({
+      rows: [
+        {
+          Name: "Acme",
+          Phone: "555",
+          "Google Maps URL": "https://www.google.com/maps/place/Acme/data=!3d41.6528!4d-83.5379",
+        },
+        { Name: "Beta", Phone: "777", "Google Maps URL": "https://www.google.com/maps/search/beta" },
+      ],
+      organizationId: "org-1",
+      assignedToId: "user-1",
+      jobId: "job-1",
+    });
+
+    const inserted = mockPrisma.lead.createManyAndReturn.mock.calls[0][0].data;
+    expect(inserted[0].latitude).toBe(41.6528);
+    expect(inserted[0].longitude).toBe(-83.5379);
+    expect(inserted[1].latitude).toBeNull();
+    expect(inserted[1].longitude).toBeNull();
+  });
+
   it("falls back to just 'GoogleMaps' when category and location are missing", async () => {
     mockPrisma.lead.findMany.mockResolvedValue([]);
 

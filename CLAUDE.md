@@ -63,6 +63,10 @@ SMTP_FROM="noreply@example.com"
 SCRAPER_PYTHON_PATH="python3"
 SCRAPER_SCRIPT_PATH="scraper/scraper.py"
 
+# Optional – Lead map (/map): override public OSM endpoints (self-hosted mirrors)
+OVERPASS_URL="https://overpass-api.de/api/interpreter"
+NOMINATIM_URL="https://nominatim.openstreetmap.org/search"
+
 # Optional – Trusted proxy (for X-Forwarded-For IP extraction)
 TRUSTED_PROXY="true"
 
@@ -132,6 +136,7 @@ appRouter = {
   pipeline:         pipelineRouter,         // deal pipeline board (stages + lead placement)
   analytics:        analyticsRouter,        // analytics aggregations for /analytics
   outreach:         outreachRouter,         // automated outreach queue (cron worker + review/bulk-send)
+  map:              mapRouter,              // lead map (OSM viewport queries, discovery, enrichment)
 }
 ```
 
@@ -236,6 +241,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | AI | (in lead modal) | `ai` | lead qualification + email copy | Implemented |
 | Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail`, `leads.*Tag` | Profile + Members + Tags tabs | Implemented |
 | Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
+| Map | `/map` | `map` | `LeadMap` (OSM lead map: discover businesses, select pins, enrich contact details) | Implemented |
 
 ### Key tRPC procedures per namespace
 
