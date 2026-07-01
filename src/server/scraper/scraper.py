@@ -956,6 +956,94 @@ async def run_scraper(locations, limit=20, output_dir=".", concurrency=1, stop_c
         print(f"Summary report: {get_summary_path(output_dir, output_file)}")
     return summary
 
+async def run_enrichment(input_path, output_dir="."):
+    """Contact-detail enrichment for specific businesses (lead map selection).
+
+    Reads a JSON file of businesses ({"businesses": [{leadId, name, website?,
+    mapsUrl?, phone?}]}), re-uses the scrape pipeline's per-business helpers
+    (Maps panel details, homepage email mining, contact-page crawl) and writes
+    enriched.json next to it. Emits {"event": "progress"} JSON lines that the
+    Node runner consumes.
+    """
+    with open(input_path, "r") as f:
+        payload = json.load(f)
+    businesses = payload.get("businesses", []) if isinstance(payload, dict) else payload
+    total = len(businesses)
+    print(json.dumps({"event": "progress", "totalQueries": total, "completedQueries": 0}))
+    if total == 0:
+        write_json_atomic(os.path.join(output_dir, "enriched.json"), [])
+        return
+
+    semaphore = asyncio.Semaphore(5)
+    results = []
+    completed = 0
+    failed = 0
+
+    # Playwright is only needed to re-read the Maps panel; skip the browser
+    # launch entirely when no selected business has a Maps URL.
+    needs_browser = any(b.get("mapsUrl") for b in businesses)
+
+    async def enrich_one(client, context, biz):
+        nonlocal completed, failed
+        result = {
+            "leadId": biz.get("leadId"),
+            "name": biz.get("name"),
+            "phone": None,
+            "website": None,
+            "email": None,
+            "rating": None,
+            "reviews": None,
+        }
+        try:
+            details = {}
+            if context and biz.get("mapsUrl"):
+                details = await get_business_details(context, biz["mapsUrl"], semaphore)
+            website = normalize_website_url(details.get("website") or biz.get("website"))
+            email = details.get("email")
+            if website and not is_social_media(website):
+                site = await check_website(client, website, semaphore)
+                if site.get("is_valid"):
+                    result["website"] = site.get("url") or website
+                    email = email or site.get("email")
+                    if not email:
+                        email = await crawl_contact_email(
+                            client,
+                            result["website"],
+                            semaphore,
+                            normalize_domain(result["website"]),
+                        )
+            result["phone"] = details.get("phone") or biz.get("phone")
+            result["email"] = email
+            result["rating"] = details.get("rating")
+            result["reviews"] = details.get("reviews")
+        except Exception as e:
+            failed += 1
+            warn(f"Enrichment failed for {biz.get('name') or biz.get('leadId')}: {e}")
+        completed += 1
+        print(json.dumps({
+            "event": "progress",
+            "totalQueries": total,
+            "completedQueries": completed,
+            "failedQueries": failed,
+        }))
+        results.append(result)
+
+    async with httpx.AsyncClient() as client:
+        if needs_browser:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context()
+                try:
+                    await asyncio.gather(*(enrich_one(client, context, b) for b in businesses))
+                finally:
+                    await context.close()
+                    await browser.close()
+        else:
+            await asyncio.gather(*(enrich_one(client, None, b) for b in businesses))
+
+    write_json_atomic(os.path.join(output_dir, "enriched.json"), results)
+    print(f"Enrichment complete: {completed} processed, {failed} failed.")
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("location", nargs="?", help="Location to search (e.g., 'Toledo, Ohio')")
@@ -972,7 +1060,12 @@ async def main():
     parser.add_argument("--nearby-radius", type=float, default=None, help="Nearby city/suburb radius in miles (default: 10)")
     parser.add_argument("--preset", help="Load run settings from a JSON preset")
     parser.add_argument("--save-preset", help="Save the resolved run settings to a JSON preset and exit")
+    parser.add_argument("--enrich", help="Path to a JSON file of businesses to enrich (skips the normal scrape run)")
     args = parser.parse_args()
+
+    if args.enrich:
+        await run_enrichment(args.enrich, args.output_dir or ".")
+        return
 
     preset = load_preset(args.preset) if args.preset else {}
     try:

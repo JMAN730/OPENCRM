@@ -397,6 +397,183 @@ export async function startScraperJob(jobId: string): Promise<void> {
   });
 }
 
+/**
+ * Runs scraper.py in --enrich mode for a jobType="ENRICH" ScraperJob. The
+ * enrich-input.json file must already exist in the job's output dir (written
+ * by map.enrich). On success the results in enriched.json are applied to the
+ * selected leads.
+ */
+export async function startEnrichmentJob(jobId: string): Promise<void> {
+  await initializeScraperWorker();
+
+  if (!scraperConfig.enabled) {
+    throw new Error("Scraper feature is disabled (SCRAPER_ENABLED=false).");
+  }
+  if (running.has(jobId)) {
+    throw new Error("Job is already running in this worker.");
+  }
+
+  const job = await prisma.scraperJob.findUnique({ where: { id: jobId } });
+  if (!job) throw new Error("Job not found.");
+  if (job.status === "RUNNING") throw new Error("Job is already running.");
+
+  const outDir = jobOutputDir(jobId);
+  const inputFile = path.join(outDir, "enrich-input.json");
+  try {
+    await fs.access(inputFile);
+  } catch {
+    throw new Error("Enrichment input file not found for this job.");
+  }
+
+  try {
+    await fs.access(scraperConfig.pythonPath);
+  } catch {
+    throw new Error(
+      `Python binary not found at: ${scraperConfig.pythonPath}. Set SCRAPER_PYTHON_PATH in your .env to override.`
+    );
+  }
+  try {
+    await fs.access(scraperConfig.scriptPath);
+  } catch {
+    throw new Error(
+      `Scraper script not found at: ${scraperConfig.scriptPath}. Set SCRAPER_SCRIPT_PATH in your .env to override.`
+    );
+  }
+
+  await prisma.scraperJob.update({
+    where: { id: jobId },
+    data: {
+      status: "RUNNING",
+      outputDir: outDir,
+      startedAt: new Date(),
+      completedAt: null,
+      logs: "",
+      error: null,
+      totalQueries: 0,
+      completedQueries: 0,
+      failedQueries: 0,
+      workerId: WORKER_ID,
+      workerPid: process.pid,
+      lastHeartbeatAt: new Date(),
+      stopRequestedAt: null,
+    },
+  });
+
+  appendLog(jobId, "Starting contact-detail enrichment...", outDir);
+
+  const args = [scraperConfig.scriptPath, "--enrich", inputFile, "--output-dir", outDir];
+  appendLog(jobId, `cmd: "${scraperConfig.pythonPath}" ${args.map((a) => `"${a}"`).join(" ")}`, outDir);
+
+  const child = spawn(scraperConfig.pythonPath, args, {
+    cwd: path.dirname(scraperConfig.scriptPath),
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: "1",
+      PYTHONIOENCODING: "utf-8",
+    },
+    windowsHide: true,
+  });
+
+  running.set(jobId, { child, heartbeat: startHeartbeat(jobId) });
+
+  child.stdout.setEncoding("utf-8");
+  child.stdout.on("data", (data: string) => {
+    for (const line of data.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      appendLog(jobId, line, outDir);
+      const progress = parseProgressEvent(line);
+      if (progress) updateProgress(jobId, progress);
+    }
+  });
+
+  child.stderr.setEncoding("utf-8");
+  child.stderr.on("data", (data: string) => {
+    for (const line of data.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      appendLog(jobId, `[stderr] ${line}`, outDir);
+    }
+  });
+
+  child.on("error", async (err) => {
+    appendLog(jobId, `[spawn-error] ${err.message}`, outDir);
+    await flushLog(jobId, true);
+    const current = running.get(jobId);
+    if (current) clearInterval(current.heartbeat);
+    running.delete(jobId);
+    await prisma.scraperJob
+      .update({
+        where: { id: jobId },
+        data: {
+          status: "FAILED",
+          error: err.message,
+          completedAt: new Date(),
+          workerId: null,
+          workerPid: null,
+        },
+      })
+      .catch(() => {});
+  });
+
+  child.on("close", async (code, signal) => {
+    const current = running.get(jobId);
+    if (current) clearInterval(current.heartbeat);
+    running.delete(jobId);
+    appendLog(jobId, `Process exited (code=${code ?? "?"}, signal=${signal ?? "-"}).`, outDir);
+
+    const freshJob = await prisma.scraperJob
+      .findUnique({
+        where: { id: jobId },
+        select: { organizationId: true, userId: true, stopRequestedAt: true },
+      })
+      .catch(() => null);
+
+    const stoppedByUser =
+      signal === "SIGTERM" || signal === "SIGKILL" || freshJob?.stopRequestedAt != null;
+
+    let applyError: string | null = null;
+
+    if (freshJob && !stoppedByUser && code === 0) {
+      try {
+        const { applyEnrichmentResults } = await import("@/features/map/server/enrich");
+        const { updated } = await applyEnrichmentResults({
+          prisma,
+          organizationId: freshJob.organizationId,
+          userId: freshJob.userId,
+          outputDir: outDir,
+        });
+        appendLog(jobId, `Applied enrichment results to ${updated} lead(s).`, outDir);
+      } catch (e) {
+        applyError = e instanceof Error ? e.message : String(e);
+        appendLog(jobId, `[enrich-apply-error] ${applyError}`, outDir);
+      }
+    }
+
+    await flushLog(jobId, true);
+
+    let finalStatus: "COMPLETED" | "FAILED" | "STOPPED";
+    if (stoppedByUser) finalStatus = "STOPPED";
+    else if (code === 0 && !applyError) finalStatus = "COMPLETED";
+    else finalStatus = "FAILED";
+
+    await prisma.scraperJob
+      .update({
+        where: { id: jobId },
+        data: {
+          status: finalStatus,
+          completedAt: new Date(),
+          error:
+            finalStatus === "FAILED"
+              ? applyError ?? `Process exited with code ${code}`
+              : null,
+          workerId: null,
+          workerPid: null,
+          lastHeartbeatAt: new Date(),
+        },
+      })
+      .catch(() => {});
+  });
+}
+
 export async function stopScraperJob(jobId: string): Promise<void> {
   await prisma.scraperJob
     .updateMany({

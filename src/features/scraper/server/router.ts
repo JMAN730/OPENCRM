@@ -100,7 +100,9 @@ export const scraperRouter = createTRPCRouter({
 
   list: organizationProcedure.query(async ({ ctx }) => {
     const jobs = await ctx.prisma.scraperJob.findMany({
-      where: { organizationId: ctx.organizationId },
+      // Lead-map enrichment runs are ScraperJob rows too (jobType "ENRICH");
+      // keep them off the /scraper jobs table.
+      where: { organizationId: ctx.organizationId, jobType: "SCRAPE" },
       orderBy: { createdAt: "desc" },
       take: 50,
       select: {

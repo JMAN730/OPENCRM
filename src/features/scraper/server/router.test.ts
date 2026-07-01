@@ -70,13 +70,13 @@ describe("scraperRouter", () => {
   });
 
   describe("list", () => {
-    it("scopes to the caller's org", async () => {
+    it("scopes to the caller's org and hides lead-map enrichment jobs", async () => {
       prisma.scraperJob.findMany.mockResolvedValue([]);
 
       await caller.scraper.list();
 
       const args = prisma.scraperJob.findMany.mock.calls[0][0];
-      expect(args.where).toEqual({ organizationId: "org-1" });
+      expect(args.where).toEqual({ organizationId: "org-1", jobType: "SCRAPE" });
       expect(args.take).toBe(50);
     });
 
