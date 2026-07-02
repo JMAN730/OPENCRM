@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
 import { CreditCard, ExternalLink } from "lucide-react";
@@ -21,6 +21,8 @@ type BillingPanelProps = {
 
 export function BillingPanel({ isAdmin }: BillingPanelProps) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const utils = trpc.useUtils();
   const [renderedAt] = useState(() => Date.now());
 
@@ -42,13 +44,20 @@ export function BillingPanel({ isAdmin }: BillingPanelProps) {
 
   useEffect(() => {
     const result = searchParams.get("checkout");
+    if (!result) return;
+
     if (result === "success") {
       toast.success("Subscription updated. It may take a moment to reflect.");
       void utils.billing.getSubscription.invalidate();
     } else if (result === "canceled") {
       toast.message("Checkout canceled");
     }
-  }, [searchParams, utils.billing.getSubscription]);
+
+    // Drop the checkout param so a remount doesn't repeat the toast.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("checkout");
+    router.replace(`${pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
+  }, [searchParams, pathname, router, utils.billing.getSubscription]);
 
   if (isLoading || !data) {
     return <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading billing…</div>;
@@ -136,20 +145,23 @@ export function BillingPanel({ isAdmin }: BillingPanelProps) {
 
       {isAdmin ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
-          {data.availableTiers
-            .filter((tier) => tier.tier !== data.planTier && tier.priceConfigured)
-            .map((tier) => (
-              <button
-                key={tier.tier}
-                className="crm-btn primary"
-                style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
-                disabled={!data.configured || checkout.isPending}
-                onClick={() => checkout.mutate({ planTier: tier.tier })}
-              >
-                <CreditCard size={13} />
-                {checkout.isPending ? "Redirecting…" : `Upgrade to ${tier.label}`}
-              </button>
-            ))}
+          {/* Subscribed orgs change plans via the Stripe portal — a new
+              checkout session would create a second subscription. */}
+          {!data.hasStripeSubscription &&
+            data.availableTiers
+              .filter((tier) => tier.priceConfigured)
+              .map((tier) => (
+                <button
+                  key={tier.tier}
+                  className="crm-btn primary"
+                  style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  disabled={!data.configured || checkout.isPending}
+                  onClick={() => checkout.mutate({ planTier: tier.tier })}
+                >
+                  <CreditCard size={13} />
+                  {checkout.isPending ? "Redirecting…" : `Choose ${tier.label}`}
+                </button>
+              ))}
 
           {data.configured && (
             <button

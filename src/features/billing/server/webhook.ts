@@ -3,7 +3,10 @@ import type Stripe from "stripe";
 import {
   planTierFromPriceId,
 } from "@/features/billing/server/plans";
-import { defaultSeatLimitForTier } from "@/features/billing/server/enforcement";
+import {
+  defaultSeatLimitForTier,
+  invalidateSubscriptionCache,
+} from "@/features/billing/server/enforcement";
 
 function subscriptionPeriodEnd(subscription: Stripe.Subscription): Date | null {
   const item = subscription.items.data[0];
@@ -124,6 +127,7 @@ export async function syncSubscriptionFromStripe(
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
     },
   });
+  await invalidateSubscriptionCache(orgId);
 }
 
 export async function handleCheckoutSessionCompleted(
@@ -158,6 +162,24 @@ export async function handleCheckoutSessionCompleted(
   });
 }
 
+async function setStatusForStripeSubscription(
+  prisma: PrismaClient,
+  stripeSubscriptionId: string,
+  status: SubscriptionStatus,
+): Promise<void> {
+  const row = await prisma.organizationSubscription.findFirst({
+    where: { stripeSubscriptionId },
+    select: { organizationId: true },
+  });
+  if (!row) return;
+
+  await prisma.organizationSubscription.updateMany({
+    where: { stripeSubscriptionId },
+    data: { status },
+  });
+  await invalidateSubscriptionCache(row.organizationId);
+}
+
 export async function markSubscriptionPastDue(
   prisma: PrismaClient,
   invoice: Stripe.Invoice,
@@ -165,10 +187,7 @@ export async function markSubscriptionPastDue(
   const subscriptionId = invoiceSubscriptionId(invoice);
   if (!subscriptionId) return;
 
-  await prisma.organizationSubscription.updateMany({
-    where: { stripeSubscriptionId: subscriptionId },
-    data: { status: "PAST_DUE" },
-  });
+  await setStatusForStripeSubscription(prisma, subscriptionId, "PAST_DUE");
 }
 
 export async function markSubscriptionActiveFromInvoice(
@@ -178,23 +197,25 @@ export async function markSubscriptionActiveFromInvoice(
   const subscriptionId = invoiceSubscriptionId(invoice);
   if (!subscriptionId) return;
 
-  await prisma.organizationSubscription.updateMany({
-    where: { stripeSubscriptionId: subscriptionId },
-    data: { status: "ACTIVE" },
-  });
+  await setStatusForStripeSubscription(prisma, subscriptionId, "ACTIVE");
 }
 
 export async function markSubscriptionCanceled(
   prisma: PrismaClient,
   subscription: Stripe.Subscription,
 ): Promise<void> {
-  const orgId = subscription.metadata?.organizationId;
-  const where = orgId
-    ? { organizationId: orgId }
-    : { stripeSubscriptionId: subscription.id };
+  // Match on the Stripe subscription id, never the org id: a late-arriving
+  // deleted event for an org's previous subscription must not cancel the
+  // subscription that replaced it. If the id no longer matches the org's row,
+  // this event is about a superseded subscription and is safely a no-op.
+  const row = await prisma.organizationSubscription.findFirst({
+    where: { stripeSubscriptionId: subscription.id },
+    select: { organizationId: true },
+  });
+  if (!row) return;
 
   await prisma.organizationSubscription.updateMany({
-    where,
+    where: { stripeSubscriptionId: subscription.id },
     data: {
       status: "CANCELED",
       stripeSubscriptionId: null,
@@ -204,6 +225,7 @@ export async function markSubscriptionCanceled(
         : null,
     },
   });
+  await invalidateSubscriptionCache(row.organizationId);
 }
 
 export async function processStripeWebhookEvent(
@@ -249,7 +271,13 @@ export async function processStripeWebhookEvent(
       break;
   }
 
-  await prisma.stripeWebhookEvent.create({
-    data: { eventId: event.id, type: event.type },
-  });
+  // Concurrent Stripe retries of the same event can race past the findUnique
+  // check above; the handlers are idempotent, so swallow the duplicate-key
+  // error instead of returning a 500 (which would trigger another retry).
+  await prisma.stripeWebhookEvent
+    .create({ data: { eventId: event.id, type: event.type } })
+    .catch((err: unknown) => {
+      if ((err as { code?: string })?.code === "P2002") return;
+      throw err;
+    });
 }

@@ -10,6 +10,10 @@ import {
   TRIAL_DAYS,
 } from "@/features/billing/server/plans";
 import { createStripeCustomer, isStripeConfigured, requireStripe } from "@/features/billing/server/stripe";
+import {
+  defaultSeatLimitForTier,
+  invalidateSubscriptionCache,
+} from "@/features/billing/server/enforcement";
 
 const planTierSchema = z.enum(["STARTER", "PRO", "BUSINESS"]);
 
@@ -34,11 +38,12 @@ export const billingRouter = createTRPCRouter({
         planTier: "STARTER" as const,
         planLabel: formatPlanTier("STARTER"),
         status: "NONE" as const,
-        seatLimit: 3,
+        seatLimit: limits.seatLimit,
         seatsUsed,
         trialEndsAt: null,
         currentPeriodEnd: null,
         cancelAtPeriodEnd: false,
+        hasStripeSubscription: false,
         limits,
         availableTiers: PLAN_TIERS.map((tier) => ({
           tier,
@@ -58,6 +63,8 @@ export const billingRouter = createTRPCRouter({
       trialEndsAt: subscription.trialEndsAt,
       currentPeriodEnd: subscription.currentPeriodEnd,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      hasStripeSubscription:
+        Boolean(subscription.stripeSubscriptionId) && subscription.status !== "CANCELED",
       limits: getPlanLimits(subscription.planTier),
       availableTiers: PLAN_TIERS.map((tier) => ({
         tier,
@@ -94,16 +101,28 @@ export const billingRouter = createTRPCRouter({
         where: { organizationId: ctx.organizationId },
       });
 
+      // A checkout session would create a second Stripe subscription and
+      // double-bill the org. Plan changes for subscribed orgs go through the
+      // Stripe billing portal instead.
+      if (subscription?.stripeSubscriptionId && subscription.status !== "CANCELED") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "This organization already has a subscription. Use “Manage billing” to change plans.",
+        });
+      }
+
       if (!subscription) {
         subscription = await ctx.prisma.organizationSubscription.create({
           data: {
             organizationId: ctx.organizationId,
             planTier: input.planTier,
             status: "TRIALING",
-            seatLimit: 3,
+            seatLimit: defaultSeatLimitForTier(input.planTier),
             trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
           },
         });
+        await invalidateSubscriptionCache(ctx.organizationId);
       }
 
       let customerId = subscription.stripeCustomerId;
@@ -143,8 +162,11 @@ export const billingRouter = createTRPCRouter({
         customer: customerId,
         line_items: [
           {
+            // Seat count for the plan being purchased — the webhook derives
+            // the org's seatLimit from this quantity, so using the current
+            // (e.g. trial) seatLimit here would understate the new plan.
             price: priceId,
-            quantity: subscription.seatLimit,
+            quantity: defaultSeatLimitForTier(input.planTier),
           },
         ],
         success_url: `${baseUrl}/settings?tab=Billing&checkout=success`,

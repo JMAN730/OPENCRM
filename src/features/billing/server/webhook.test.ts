@@ -60,6 +60,10 @@ describe("processStripeWebhookEvent", () => {
   });
 
   it("marks subscriptions past due on failed invoice payment", async () => {
+    prisma.organizationSubscription.findFirst.mockResolvedValue({
+      organizationId: "org-1",
+    });
+
     await processStripeWebhookEvent(prisma as never, {
       id: "evt_3",
       type: "invoice.payment_failed",
@@ -76,5 +80,45 @@ describe("processStripeWebhookEvent", () => {
       where: { stripeSubscriptionId: "sub_123" },
       data: { status: "PAST_DUE" },
     });
+  });
+
+  it("cancels by Stripe subscription id, not org id", async () => {
+    prisma.organizationSubscription.findFirst.mockResolvedValue({
+      organizationId: "org-1",
+    });
+
+    await processStripeWebhookEvent(prisma as never, {
+      id: "evt_4",
+      type: "customer.subscription.deleted",
+      data: {
+        object: {
+          id: "sub_old",
+          metadata: { organizationId: "org-1" },
+          ended_at: 1893456000,
+        },
+      },
+    } as never);
+
+    expect(prisma.organizationSubscription.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { stripeSubscriptionId: "sub_old" } }),
+    );
+  });
+
+  it("ignores a deleted event for a superseded subscription", async () => {
+    prisma.organizationSubscription.findFirst.mockResolvedValue(null);
+
+    await processStripeWebhookEvent(prisma as never, {
+      id: "evt_5",
+      type: "customer.subscription.deleted",
+      data: {
+        object: {
+          id: "sub_old",
+          metadata: { organizationId: "org-1" },
+          ended_at: 1893456000,
+        },
+      },
+    } as never);
+
+    expect(prisma.organizationSubscription.updateMany).not.toHaveBeenCalled();
   });
 });

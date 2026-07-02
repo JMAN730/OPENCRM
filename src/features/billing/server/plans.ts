@@ -45,9 +45,9 @@ export function getStripePriceId(tier: PlanTier): string | undefined {
 }
 
 export function planTierFromPriceId(priceId: string): PlanTier | null {
-  if (priceId === process.env.STRIPE_PRICE_STARTER) return "STARTER";
-  if (priceId === process.env.STRIPE_PRICE_PRO) return "PRO";
-  if (priceId === process.env.STRIPE_PRICE_BUSINESS) return "BUSINESS";
+  if (priceId === getStripePriceId("STARTER")) return "STARTER";
+  if (priceId === getStripePriceId("PRO")) return "PRO";
+  if (priceId === getStripePriceId("BUSINESS")) return "BUSINESS";
   return null;
 }
 
