@@ -19,6 +19,10 @@ import {
 } from "@/server/scraper/importer";
 import { enqueueOutreachForLeads } from "@/features/outreach/server/enqueue";
 import { parseStringArray as parseArray } from "@/server/scraper/utils";
+import {
+  clampScraperInput,
+  getOrgSubscription,
+} from "@/features/billing/server/enforcement";
 function deserializeJob<T extends { locations: unknown; categories: unknown }>(
   job: T
 ): Omit<T, "locations" | "categories"> & { locations: string[]; categories: string[] } {
@@ -177,6 +181,11 @@ export const scraperRouter = createTRPCRouter({
           code: "BAD_REQUEST",
           message: e instanceof Error ? e.message : "Invalid locations",
         });
+      }
+
+      const sub = await getOrgSubscription(ctx.prisma, ctx.organizationId);
+      if (sub) {
+        clampScraperInput(sub, { locations: cleanLocations, limit: input.limit });
       }
 
       const orgCategoryNames =

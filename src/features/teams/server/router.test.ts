@@ -47,6 +47,8 @@ describe("teamsRouter", () => {
 
     it("creates a pending Invitation row with a hashed token after replacing any prior pending invite", async () => {
       prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.count.mockResolvedValue(1);
+      prisma.invitation.count.mockResolvedValue(0);
       prisma.invitation.deleteMany.mockResolvedValue({ count: 0 });
       prisma.invitation.create.mockResolvedValue({});
       prisma.organization.findUnique.mockResolvedValue({ name: "Acme" });
@@ -72,6 +74,29 @@ describe("teamsRouter", () => {
       expect(createArg.data.role).toBe("USER");
       expect(typeof createArg.data.tokenHash).toBe("string");
       expect(createArg.data.tokenHash.length).toBe(64); // sha-256 hex
+    });
+
+    it("blocks invites when the seat limit is reached", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.count.mockResolvedValue(10);
+      prisma.invitation.count.mockResolvedValue(0);
+      prisma.organizationSubscription.findUnique.mockResolvedValue({
+        planTier: "PRO",
+        status: "ACTIVE",
+        seatLimit: 10,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      });
+
+      await expect(
+        caller.teams.inviteByEmail({
+          email: "new@example.com",
+          role: "USER",
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
   });
 

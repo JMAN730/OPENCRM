@@ -2,25 +2,47 @@
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useSession, signOut } from "next-auth/react";
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
 import { Plus, Trash2, UserPlus } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
+import { BillingPanel } from "@/features/billing/components/BillingPanel";
 import {
   getBrowserStorage,
   type LoadingAnimationMode,
   writeLoadingAnimationMode,
 } from "@/lib/loading-animation";
 
-// Only surface tabs that have a working backend. Billing, API, Audit log,
-// Integrations, and Workspace settings are roadmap items — exposing empty
-// tabs misleads users into thinking the features exist.
-const NAV = ["Profile", "Members", "Tags"];
+// Only surface tabs that have a working backend.
+const NAV = ["Profile", "Members", "Tags", "Billing"];
 
 export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="crm-content">
+            <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
+              Loading settings…
+            </div>
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <SettingsPageContent />
+    </Suspense>
+  );
+}
+
+function SettingsPageContent() {
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
   const { data: session, update: updateSession } = useSession();
-  const [active, setActive] = useState("Profile");
+  const [active, setActive] = useState(() =>
+    tabFromUrl && NAV.includes(tabFromUrl) ? tabFromUrl : "Profile",
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -117,6 +139,7 @@ export default function SettingsPage() {
     Profile: "Your personal information and account preferences.",
     Members: "Manage who has access to this workspace.",
     Tags: "Manage labels you can attach to leads to categorize and filter them.",
+    Billing: "Subscription plan, seat usage, and payment management.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -299,6 +322,8 @@ export default function SettingsPage() {
               </>
             ) : active === "Tags" ? (
               <TagsPanel />
+            ) : active === "Billing" ? (
+              <BillingPanel isAdmin={isAdmin} />
             ) : (
               <MembersPanel
                 isAdmin={isAdmin}
@@ -467,6 +492,8 @@ function MembersPanel({
 function TagsPanel() {
   const utils = trpc.useUtils();
   const { data: tags = [], isLoading } = trpc.leads.listOrgTags.useQuery(undefined, { staleTime: 30_000 });
+  const { data: subscription } = trpc.billing.getSubscription.useQuery();
+  const maxTags = subscription?.limits.maxTags ?? 25;
   const [newName, setNewName] = useState("");
 
   const createTag = trpc.leads.createTag.useMutation({
@@ -554,7 +581,7 @@ function TagsPanel() {
             </div>
           ))}
           <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 8 }}>
-            {tags.length} / 100 tags used
+            {tags.length} / {maxTags} tags used
           </div>
         </div>
       )}

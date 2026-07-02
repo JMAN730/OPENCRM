@@ -115,4 +115,14 @@ const enforceUserHasOrg = enforceUserIsAuthed.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, organizationId } });
 });
 
-export const organizationProcedure = enforceUserHasOrg;
+const enforceActiveSubscription = enforceUserHasOrg.use(async ({ ctx, next, type, path }) => {
+  if (type === "mutation" && !path.startsWith("billing.")) {
+    const { assertSubscriptionActiveForOrg } = await import(
+      "@/features/billing/server/enforcement"
+    );
+    await assertSubscriptionActiveForOrg(ctx.prisma, ctx.organizationId);
+  }
+  return next({ ctx });
+});
+
+export const organizationProcedure = enforceActiveSubscription;

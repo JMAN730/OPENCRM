@@ -88,10 +88,37 @@ export function createMockPrisma() {
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      count: vi.fn().mockResolvedValue(1),
     },
     organization: {
       create: vi.fn(),
       findUnique: vi.fn(),
+    },
+    organizationSubscription: {
+      findUnique: vi.fn().mockResolvedValue({
+        planTier: "PRO",
+        status: "ACTIVE",
+        seatLimit: 10,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      }),
+      findFirst: vi.fn(),
+      create: vi.fn().mockResolvedValue({
+        planTier: "STARTER",
+        status: "TRIALING",
+        seatLimit: 3,
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      }),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      upsert: vi.fn(),
+    },
+    stripeWebhookEvent: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
     },
     invitation: {
       findUnique: vi.fn(),
@@ -100,6 +127,7 @@ export function createMockPrisma() {
       create: vi.fn(),
       update: vi.fn(),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      count: vi.fn().mockResolvedValue(0),
     },
     note: {
       create: vi.fn(),
