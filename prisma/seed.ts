@@ -92,7 +92,18 @@ async function main() {
   }
 
   // ── Org + user ────────────────────────────────────────────────────────────
-  const org  = await prisma.organization.create({ data: { name: "Demo Company" } });
+  const org  = await prisma.organization.create({
+    data: {
+      name: "Demo Company",
+      subscription: {
+        create: {
+          planTier: "PRO",
+          status: "ACTIVE",
+          seatLimit: 10,
+        },
+      },
+    },
+  });
   const user = await prisma.user.create({
     data: {
       name: "Demo User",

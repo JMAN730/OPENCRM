@@ -8,6 +8,10 @@ import { assertAdmin, assertCanGrantRole, isAdmin, ROLE_VALUES } from "@/server/
 import { invalidateLeadScope } from "@/server/teams/scope";
 import { sendInvitationEmail } from "@/lib/email";
 import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
+import {
+  assertSeatAvailable,
+  getOrgSubscription,
+} from "@/features/billing/server/enforcement";
 
 function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
@@ -431,6 +435,25 @@ export const teamsRouter = createTRPCRouter({
         if (existing.organizationId) {
           throw new TRPCError({ code: "CONFLICT", message: "User already belongs to another organization." });
         }
+      }
+
+      const [users, pendingInvites, pendingForEmail] = await Promise.all([
+        ctx.prisma.user.count({ where: { organizationId: ctx.organizationId } }),
+        ctx.prisma.invitation.count({
+          where: { organizationId: ctx.organizationId, status: "PENDING" },
+        }),
+        ctx.prisma.invitation.count({
+          where: {
+            organizationId: ctx.organizationId,
+            status: "PENDING",
+            email,
+          },
+        }),
+      ]);
+
+      const sub = await getOrgSubscription(ctx.prisma, ctx.organizationId);
+      if (sub && pendingForEmail === 0) {
+        assertSeatAvailable(sub, users + pendingInvites);
       }
 
       // Replace any pending invite for this email in this org so the latest

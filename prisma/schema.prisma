@@ -116,8 +116,48 @@ model Organization {
   trainingPersonas TrainingPersona[]
   trainingSessions TrainingSession[]
 
+  subscription OrganizationSubscription?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum SubscriptionStatus {
+  NONE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+enum PlanTier {
+  STARTER
+  PRO
+  BUSINESS
+}
+
+model OrganizationSubscription {
+  id                   String             @id @default(cuid())
+  organizationId       String             @unique
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  planTier             PlanTier           @default(STARTER)
+  status               SubscriptionStatus @default(TRIALING)
+  seatLimit            Int                @default(3)
+  trialEndsAt          DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model StripeWebhookEvent {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  type      String
+  createdAt DateTime @default(now())
 }
 
 model Team {

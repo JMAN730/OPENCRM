@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 vi.mock("@/lib/email", () => ({ sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/features/billing/server/stripe", () => ({
+  createStripeCustomer: vi.fn().mockResolvedValue("cus_test"),
+}));
 
 describe("authRouter.resetPassword", () => {
   it("always returns success without revealing whether the email exists", async () => {
@@ -354,7 +357,15 @@ describe("authRouter.register", () => {
     await caller.auth.register({ ...validInput, organizationName: undefined });
 
     expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: { name: "Alice's Organization" },
+      data: expect.objectContaining({
+        name: "Alice's Organization",
+        subscription: expect.objectContaining({
+          create: expect.objectContaining({
+            planTier: "STARTER",
+            status: "TRIALING",
+          }),
+        }),
+      }),
     });
   });
 
@@ -367,7 +378,12 @@ describe("authRouter.register", () => {
     await caller.auth.register({ ...validInput, organizationName: "  Acme  " });
 
     expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: { name: "Acme" },
+      data: expect.objectContaining({
+        name: "Acme",
+        subscription: expect.objectContaining({
+          create: expect.objectContaining({ planTier: "STARTER" }),
+        }),
+      }),
     });
   });
 
@@ -380,7 +396,15 @@ describe("authRouter.register", () => {
     await caller.auth.register({ ...validInput, organizationName: "   " });
 
     expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: { name: "Alice's Organization" },
+      data: expect.objectContaining({
+        name: "Alice's Organization",
+        subscription: expect.objectContaining({
+          create: expect.objectContaining({
+            planTier: "STARTER",
+            status: "TRIALING",
+          }),
+        }),
+      }),
     });
   });
 
@@ -389,6 +413,7 @@ describe("authRouter.register", () => {
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.organization.create.mockResolvedValue({ id: "org-99", name: "Acme" });
     prisma.user.create.mockResolvedValue({ id: "u-1" });
+    prisma.organizationSubscription.update.mockResolvedValue({});
 
     await caller.auth.register(validInput);
 
@@ -399,6 +424,10 @@ describe("authRouter.register", () => {
         organizationId: "org-99",
         role: "ADMIN",
       }),
+    });
+    expect(prisma.organizationSubscription.update).toHaveBeenCalledWith({
+      where: { organizationId: "org-99" },
+      data: { stripeCustomerId: "cus_test" },
     });
   });
 });

@@ -8,6 +8,11 @@ import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
 import { invalidate } from "@/lib/cache";
+import {
+  assertTagLimit,
+  getOrgSubscription,
+} from "@/features/billing/server/enforcement";
+import { getPlanLimits } from "@/features/billing/server/plans";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -1013,8 +1018,14 @@ export const leadsRouter = createTRPCRouter({
       const existing = await ctx.prisma.leadTag.count({
         where: { organizationId: ctx.organizationId },
       });
-      if (existing >= 100) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum 100 tags per organization." });
+      const sub = await getOrgSubscription(ctx.prisma, ctx.organizationId);
+      if (sub) {
+        assertTagLimit(sub, existing);
+      } else if (existing >= getPlanLimits("STARTER").maxTags) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Maximum ${getPlanLimits("STARTER").maxTags} tags per organization.`,
+        });
       }
       const name = input.name.trim();
       const tagKey = name.toLocaleLowerCase();
