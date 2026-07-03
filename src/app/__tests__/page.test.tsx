@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import RootPage from "../page";
 import { useSession } from "next-auth/react";
@@ -33,11 +33,12 @@ describe("Landing page", () => {
   it("shows sign-in and get-started links when unauthenticated", () => {
     render(<RootPage />);
 
-    const signInLinks = screen.getAllByRole("link", { name: /sign in/i });
-    expect(signInLinks.length).toBeGreaterThan(0);
-    expect(signInLinks[0]).toHaveAttribute("href", "/auth/signin");
-
-    expect(screen.getByRole("link", { name: /get started$/i })).toHaveAttribute(
+    const nav = screen.getByRole("navigation");
+    expect(within(nav).getByRole("link", { name: /sign in/i })).toHaveAttribute(
+      "href",
+      "/auth/signin"
+    );
+    expect(within(nav).getByRole("link", { name: /get started/i })).toHaveAttribute(
       "href",
       "/auth/register"
     );
@@ -59,8 +60,12 @@ describe("Landing page", () => {
       "href",
       "/dashboard"
     );
+    const nav = screen.getByRole("navigation");
     expect(
-      screen.queryByRole("link", { name: /^get started$/i })
+      within(nav).queryByRole("link", { name: /get started/i })
+    ).not.toBeInTheDocument();
+    expect(
+      within(nav).queryByRole("link", { name: /sign in/i })
     ).not.toBeInTheDocument();
   });
 
@@ -82,11 +87,15 @@ describe("Landing page", () => {
   });
 
   it("links every pricing tier to registration", () => {
-    render(<RootPage />);
+    const { container } = render(<RootPage />);
 
-    const trialLinks = screen.getAllByRole("link", { name: /start free trial/i });
-    expect(trialLinks).toHaveLength(3);
-    trialLinks.forEach((link) => {
+    const pricing = container.querySelector("#pricing");
+    expect(pricing).not.toBeNull();
+    const tierLinks = within(pricing as HTMLElement).getAllByRole("link", {
+      name: /get started/i,
+    });
+    expect(tierLinks).toHaveLength(3);
+    tierLinks.forEach((link) => {
       expect(link).toHaveAttribute("href", "/auth/register");
     });
   });

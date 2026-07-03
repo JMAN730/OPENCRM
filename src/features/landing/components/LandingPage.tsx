@@ -132,7 +132,7 @@ const FAQS = [
   },
   {
     q: "How does the free trial work?",
-    a: "Every new organization starts with a 14-day free trial with full access. Pick a plan whenever you're ready.",
+    a: "Every new workspace starts on a free 14-day trial — no credit card required. Upgrade to Pro or Business anytime from your billing settings.",
   },
 ];
 
@@ -383,7 +383,8 @@ export function LandingPage() {
                 Simple plans that grow with you
               </h2>
               <p className="mt-4 text-lg text-white/60">
-                Every plan starts with a 14-day free trial. Prefer full control? Self-host it free forever.
+                Every workspace starts on a free 14-day trial — upgrade to any plan whenever
+                you&apos;re ready. Prefer full control? Self-host it free forever.
               </p>
             </div>
             <div className="mt-14 grid gap-6 md:grid-cols-3">
@@ -419,7 +420,7 @@ export function LandingPage() {
                         : "border border-white/15 text-white hover:bg-white/5"
                     }`}
                   >
-                    Start free trial
+                    Get started
                   </Link>
                 </div>
               ))}
