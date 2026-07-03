@@ -113,12 +113,15 @@ export const billingRouter = createTRPCRouter({
       }
 
       if (!subscription) {
+        // Placeholder row at Starter limits only — the selected tier's plan
+        // and seats are applied by the webhook after payment succeeds, so an
+        // abandoned checkout can't leave the org trialing on paid-tier limits.
         subscription = await ctx.prisma.organizationSubscription.create({
           data: {
             organizationId: ctx.organizationId,
-            planTier: input.planTier,
+            planTier: "STARTER",
             status: "TRIALING",
-            seatLimit: defaultSeatLimitForTier(input.planTier),
+            seatLimit: defaultSeatLimitForTier("STARTER"),
             trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
           },
         });

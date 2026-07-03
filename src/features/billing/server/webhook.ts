@@ -32,11 +32,13 @@ function mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus
     case "past_due":
       return "PAST_DUE";
     case "canceled":
+    // incomplete_expired is terminal — Stripe generates no further invoices
+    // and sends no deleted event, so treat it as canceled or the checkout
+    // guard would lock the org out of ever starting a fresh subscription.
+    case "incomplete_expired":
       return "CANCELED";
     case "unpaid":
-      return "UNPAID";
     case "incomplete":
-    case "incomplete_expired":
     case "paused":
       return "UNPAID";
     default:

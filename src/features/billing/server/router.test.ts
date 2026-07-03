@@ -97,6 +97,19 @@ describe("billingRouter", () => {
     );
   });
 
+  it("creates the pre-checkout placeholder row at Starter limits", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.organizationSubscription.findUnique.mockResolvedValue(null);
+
+    await caller.billing.createCheckoutSession({ planTier: "BUSINESS" });
+
+    expect(prisma.organizationSubscription.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ planTier: "STARTER", seatLimit: 3 }),
+      }),
+    );
+  });
+
   it("rejects checkout when a Stripe subscription already exists", async () => {
     const { caller, prisma } = createTestCaller();
     prisma.organizationSubscription.findUnique.mockResolvedValue({

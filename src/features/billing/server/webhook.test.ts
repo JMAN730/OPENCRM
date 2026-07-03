@@ -59,6 +59,32 @@ describe("processStripeWebhookEvent", () => {
     });
   });
 
+  it("treats incomplete_expired as canceled so a fresh checkout is allowed", async () => {
+    await processStripeWebhookEvent(prisma as never, {
+      id: "evt_6",
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_expired",
+          customer: "cus_123",
+          status: "incomplete_expired",
+          metadata: { organizationId: "org-1" },
+          items: {
+            data: [{ price: { id: "price_pro_test" }, quantity: 10, current_period_end: 1893456000 }],
+          },
+          trial_end: null,
+          cancel_at_period_end: false,
+        },
+      },
+    } as never);
+
+    expect(prisma.organizationSubscription.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ status: "CANCELED" }),
+      }),
+    );
+  });
+
   it("marks subscriptions past due on failed invoice payment", async () => {
     prisma.organizationSubscription.findFirst.mockResolvedValue({
       organizationId: "org-1",
