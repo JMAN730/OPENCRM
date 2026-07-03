@@ -40,6 +40,27 @@ describe("websitesRouter", () => {
       const result = await caller.websites.getForLead({ leadId: "lead-1" });
       expect(result).toBeNull();
     });
+
+    it("uses assigned-lead visibility for non-admin callers", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      userPrisma.generatedWebsite.findFirst.mockResolvedValue(null);
+
+      await userCaller.websites.getForLead({ leadId: "lead-1" });
+
+      expect(userPrisma.generatedWebsite.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            leadId: "lead-1",
+            lead: {
+              organizationId: "org-1",
+              assignedToId: { in: ["user-1"] },
+            },
+          },
+        }),
+      );
+    });
   });
 
   describe("generate", () => {

@@ -5,13 +5,14 @@ import { Prisma } from "@prisma/client";
 import { TEMPLATE_IDS, getTemplate } from "@/features/websites/templates";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
+import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
 
 export const websitesRouter = createTRPCRouter({
   getForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
       return ctx.prisma.generatedWebsite.findFirst({
-        where: { leadId: input.leadId, lead: { organizationId: ctx.organizationId } },
+        where: { leadId: input.leadId, lead: await visibleLeadWhere(ctx) },
         orderBy: { createdAt: "desc" },
       });
     }),
@@ -22,11 +23,9 @@ export const websitesRouter = createTRPCRouter({
       const template = getTemplate(input.template);
       if (!template) throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown template." });
 
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
+      const lead = await requireVisibleLead(ctx, input.leadId, {
         include: { notes: { take: 3, orderBy: { createdAt: "desc" } } },
       });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
       const { title, ...sections } = template.fillContent(lead);
 
@@ -66,10 +65,7 @@ export const websitesRouter = createTRPCRouter({
         windowSeconds: 60,
       });
 
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
+      const lead = await requireVisibleLead(ctx, input.leadId);
 
       const { website, needsPhotos } = await generateWebsiteForLead(ctx.prisma, lead, {
         organizationId: ctx.organizationId,
@@ -100,7 +96,7 @@ export const websitesRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { id: input.id, lead: { organizationId: ctx.organizationId } },
+        where: { id: input.id, lead: await visibleLeadWhere(ctx) },
         select: { id: true },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
@@ -118,7 +114,7 @@ export const websitesRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { id: input.id, lead: { organizationId: ctx.organizationId } },
+        where: { id: input.id, lead: await visibleLeadWhere(ctx) },
         select: { id: true },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
@@ -132,7 +128,7 @@ export const websitesRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { id: input.id, lead: { organizationId: ctx.organizationId } },
+        where: { id: input.id, lead: await visibleLeadWhere(ctx) },
         select: { id: true, content: true },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });

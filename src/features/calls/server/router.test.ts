@@ -39,7 +39,7 @@ describe("callsRouter", () => {
 
   describe("logCall", () => {
     it("creates a call log when the lead belongs to the caller's org", async () => {
-      prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1" });
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
       prisma.callLog.create.mockResolvedValue({ id: "call-1" });
 
       await caller.calls.logCall({
@@ -71,7 +71,7 @@ describe("callsRouter", () => {
     });
 
     it("persists twilioCallSid when provided", async () => {
-      prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1" });
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
       prisma.callLog.create.mockResolvedValue({ id: "call-3" });
 
       await caller.calls.logCall({
@@ -85,8 +85,8 @@ describe("callsRouter", () => {
       });
     });
 
-    it("refuses when the lead is in a different org", async () => {
-      prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+    it("refuses when the lead is outside lead visibility", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
 
       await expect(
         caller.calls.logCall({ leadId: "lead-1", status: "CONNECTED" })
@@ -95,7 +95,7 @@ describe("callsRouter", () => {
     });
 
     it("refuses when the lead does not exist", async () => {
-      prisma.lead.findUnique.mockResolvedValue(null);
+      prisma.lead.findFirst.mockResolvedValue(null);
 
       await expect(
         caller.calls.logCall({ leadId: "missing", status: "CONNECTED" })
@@ -110,6 +110,25 @@ describe("callsRouter", () => {
       await expect(
         orphan.calls.logCall({ leadId: "lead-1", status: "CONNECTED" })
       ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    });
+
+    it("checks assigned-lead visibility for non-admin callers", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      userPrisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      userPrisma.callLog.create.mockResolvedValue({ id: "call-1" });
+
+      await userCaller.calls.logCall({ leadId: "lead-1", status: "CONNECTED" });
+
+      expect(userPrisma.lead.findFirst).toHaveBeenCalledWith({
+        select: { id: true },
+        where: {
+          id: "lead-1",
+          organizationId: "org-1",
+          assignedToId: { in: ["user-1"] },
+        },
+      });
     });
 
     it("rejects invalid status enum values", async () => {
@@ -134,7 +153,7 @@ describe("callsRouter", () => {
 
   describe("getForLead", () => {
     it("returns calls when the lead belongs to the caller's org", async () => {
-      prisma.lead.findUnique.mockResolvedValue({ organizationId: "org-1" });
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
       const calls = [{ id: "c1" }];
       prisma.callLog.findMany.mockResolvedValue(calls);
 
@@ -146,8 +165,8 @@ describe("callsRouter", () => {
       );
     });
 
-    it("refuses cross-tenant access", async () => {
-      prisma.lead.findUnique.mockResolvedValue({ organizationId: "other-org" });
+    it("refuses access outside lead visibility", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
       await expect(
         caller.calls.getForLead({ leadId: "lead-1" })
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
