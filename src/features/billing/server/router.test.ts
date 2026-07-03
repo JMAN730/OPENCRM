@@ -62,6 +62,7 @@ describe("billingRouter", () => {
     prisma.organizationSubscription.findUnique.mockResolvedValue({
       id: "sub-1",
       stripeCustomerId: "cus_existing",
+      stripeSubscriptionId: null,
       seatLimit: 10,
       planTier: "STARTER",
       status: "TRIALING",
@@ -70,6 +71,59 @@ describe("billingRouter", () => {
     const result = await caller.billing.createCheckoutSession({ planTier: "PRO" });
 
     expect(result.url).toBe("https://checkout.stripe.test/session");
+  });
+
+  it("checks out the target tier's seat quantity, not the current one", async () => {
+    const { requireStripe } = await import("@/features/billing/server/stripe");
+    const sessionCreate = vi.mocked(requireStripe)().checkout.sessions.create;
+    vi.mocked(sessionCreate).mockClear();
+
+    const { caller, prisma } = createTestCaller();
+    prisma.organizationSubscription.findUnique.mockResolvedValue({
+      id: "sub-1",
+      stripeCustomerId: "cus_existing",
+      stripeSubscriptionId: null,
+      seatLimit: 3,
+      planTier: "STARTER",
+      status: "TRIALING",
+    });
+
+    await caller.billing.createCheckoutSession({ planTier: "PRO" });
+
+    expect(sessionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [expect.objectContaining({ quantity: 10 })],
+      }),
+    );
+  });
+
+  it("creates the pre-checkout placeholder row at Starter limits", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.organizationSubscription.findUnique.mockResolvedValue(null);
+
+    await caller.billing.createCheckoutSession({ planTier: "BUSINESS" });
+
+    expect(prisma.organizationSubscription.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ planTier: "STARTER", seatLimit: 3 }),
+      }),
+    );
+  });
+
+  it("rejects checkout when a Stripe subscription already exists", async () => {
+    const { caller, prisma } = createTestCaller();
+    prisma.organizationSubscription.findUnique.mockResolvedValue({
+      id: "sub-1",
+      stripeCustomerId: "cus_existing",
+      stripeSubscriptionId: "sub_live",
+      seatLimit: 10,
+      planTier: "PRO",
+      status: "ACTIVE",
+    });
+
+    await expect(
+      caller.billing.createCheckoutSession({ planTier: "BUSINESS" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
   it("requires admin for billing portal", async () => {

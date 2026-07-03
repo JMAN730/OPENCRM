@@ -114,7 +114,14 @@ export function createMockPrisma() {
       }),
       update: vi.fn(),
       updateMany: vi.fn(),
-      upsert: vi.fn(),
+      upsert: vi.fn().mockResolvedValue({
+        planTier: "STARTER",
+        status: "TRIALING",
+        seatLimit: 3,
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      }),
     },
     stripeWebhookEvent: {
       findUnique: vi.fn().mockResolvedValue(null),

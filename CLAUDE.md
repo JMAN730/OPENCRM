@@ -95,6 +95,13 @@ TWILIO_PHONE_NUMBER="+15555555555"
 DEEPSEEK_API_KEY="..."
 DEEPSEEK_BASE_URL="https://api.deepseek.com"
 AI_MODEL="deepseek-chat"
+
+# Optional – Stripe billing (subscriptions, plan enforcement)
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."    # signing secret for /api/webhooks/stripe
+STRIPE_PRICE_STARTER="price_..."
+STRIPE_PRICE_PRO="price_..."
+STRIPE_PRICE_BUSINESS="price_..."
 ```
 
 ## Architecture
@@ -137,6 +144,7 @@ appRouter = {
   analytics:        analyticsRouter,        // analytics aggregations for /analytics
   outreach:         outreachRouter,         // automated outreach queue (cron worker + review/bulk-send)
   map:              mapRouter,              // lead map (OSM viewport queries, discovery, enrichment)
+  billing:          billingRouter,          // Stripe subscriptions (checkout, portal, plan limits)
 }
 ```
 
@@ -202,6 +210,7 @@ All caching uses `src/lib/cache.ts` (read-through helper) backed by `src/lib/red
 | Auth snapshot (session user fields) | 60s | `auth:snapshot:{userId}` |
 | Dashboard KPI stats | 60s | `dashboard:kpi:{orgId}` |
 | Team lead scope | 60s | `scope:leads:{orgId}:{userId}` |
+| Billing subscription snapshot | 60s | `billing:sub:{orgId}` |
 
 ### Rate limiting
 
@@ -242,6 +251,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail`, `leads.*Tag` | Profile + Members + Tags tabs | Implemented |
 | Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
 | Map | `/map` | `map` | `LeadMap` (OSM lead map: discover businesses, select pins, enrich contact details) | Implemented |
+| Billing | `/settings` (Billing tab) | `billing` | `BillingPanel` (Stripe checkout/portal, plan + seat usage) | Implemented |
 
 ### Key tRPC procedures per namespace
 
@@ -257,6 +267,7 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
 | `websites` | `getForLead`, `generate`, `update`, `delete` |
 | `outreach` | `stats`, `list`, `retry`, `bulkSend` |
+| `billing` | `getSubscription`, `createCheckoutSession`, `createPortalSession` |
 
 ---
 
