@@ -18,6 +18,10 @@ const personaInput = z.object({
 });
 
 export const trainerRouter = createTRPCRouter({
+  config: organizationProcedure.query(() => ({
+    voiceConfigured: Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID),
+  })),
+
   listPersonas: organizationProcedure.query(({ ctx }) =>
     ctx.prisma.trainingPersona.findMany({
       where: { organizationId: ctx.organizationId },
