@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("leadsRouter", () => {
@@ -286,6 +286,37 @@ describe("leadsRouter", () => {
         code: "NOT_FOUND",
       });
       expect(prisma.lead.delete).not.toHaveBeenCalled();
+    });
+
+    it("busts the org's dashboard caches after the mutation (write-path middleware)", async () => {
+      const { safeDel } = await import("@/lib/redis");
+      const mockSafeDel = vi.mocked(safeDel);
+      mockSafeDel.mockClear();
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.delete.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.delete({ id: "lead-1" });
+
+      const deleted = mockSafeDel.mock.calls.map((c) => c[0]);
+      expect(deleted).toEqual(
+        expect.arrayContaining([
+          "dashboard:kpi:org-1",
+          "dashboard:team:org-1",
+          "dashboard:sidebar:org-1",
+        ]),
+      );
+    });
+
+    it("does not bust dashboard caches when the mutation fails", async () => {
+      const { safeDel } = await import("@/lib/redis");
+      const mockSafeDel = vi.mocked(safeDel);
+      mockSafeDel.mockClear();
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(caller.leads.delete({ id: "lead-1" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      expect(mockSafeDel).not.toHaveBeenCalled();
     });
   });
 

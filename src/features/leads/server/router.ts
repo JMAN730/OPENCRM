@@ -7,13 +7,11 @@ import { getLeadScope, leadWhereFromScope, scopedLeadWhere } from "@/server/team
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
-import { invalidate } from "@/lib/cache";
 import {
   assertTagLimit,
   getOrgSubscription,
 } from "@/features/billing/server/enforcement";
 import { getPlanLimits } from "@/features/billing/server/plans";
-import { keys } from "@/lib/cacheKeys";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -752,10 +750,6 @@ export const leadsRouter = createTRPCRouter({
             organizationId: ctx.organizationId,
           },
         }),
-      ]);
-      await Promise.all([
-        invalidate(keys.dashboardKpi(ctx.organizationId)),
-        invalidate(keys.dashboardTeam(ctx.organizationId)),
       ]);
       return updated;
     }),
