@@ -73,7 +73,7 @@ export async function generateDraftForLead(
   const niche = lead.source ?? "local business";
   const city = lead.city ?? "your area";
   const physicalAddress = process.env.SENDER_PHYSICAL_ADDRESS ?? "";
-  const senderName = process.env.SENDER_NAME ?? "OpenCRM";
+  const senderName = process.env.SENDER_NAME ?? "ClientCore";
 
   const demoLine = website?.slug
     ? `Here's the demo:\n${trackedDemoUrl(unsubToken)}\n\nNo pressure — I just wanted to show you what I had in mind before reaching out.\n\nWould you be open to me making a few changes and showing you how it could help bring in more jobs?`
@@ -168,7 +168,7 @@ export async function sendDraft(
     throw new OutreachEmailError("CAN_SPAM", canSpamErrors.join(" "));
   }
 
-  const senderName = process.env.SENDER_NAME ?? "OpenCRM";
+  const senderName = process.env.SENDER_NAME ?? "ClientCore";
   const fromEmail = process.env.RESEND_FROM_EMAIL ?? "";
 
   const r = resendClient();
