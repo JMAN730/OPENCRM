@@ -1,6 +1,6 @@
-# OpenCRM
+# ClientCore
 
-OpenCRM is a self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.
+ClientCore is a self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.
 
 ## Current stack
 

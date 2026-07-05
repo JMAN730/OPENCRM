@@ -106,9 +106,9 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
     <aside className={`crm-sidebar${isOpen ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}`}>
       <div className="crm-brand">
         <div className="crm-brand-mark">
-          <span>O</span>
+          <span>C</span>
         </div>
-        {!collapsed && <div className="crm-brand-name">OpenCRM</div>}
+        {!collapsed && <div className="crm-brand-name">ClientCore</div>}
         <button
           className="crm-sidebar-collapse-btn"
           onClick={onToggleCollapse}

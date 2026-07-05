@@ -169,7 +169,7 @@ export function renderDemoHtml(site: DemoExportSite): string {
       ${footerLinks("Shop", ["About", "Gallery", "Reviews", "Contact"])}
       <div><h5>Contact</h5><a href="${attr(telHref)}">${text(site.phone ?? content.cta)}</a></div>
     </div>
-    <div class="subfooter"><span>Demo website preview</span><span>${new Date().getFullYear()} · OpenCRM</span></div>
+    <div class="subfooter"><span>Demo website preview</span><span>${new Date().getFullYear()} · ClientCore</span></div>
   </footer>
 </body>
 </html>`;

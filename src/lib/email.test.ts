@@ -73,7 +73,7 @@ describe("sendPasswordResetEmail", () => {
     await sendPasswordResetEmail("u@example.com", "https://example.com/reset");
 
     expect(mockSendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: "noreply@opencrm.app" }),
+      expect.objectContaining({ from: "noreply@clientcore.app" }),
     );
   });
 

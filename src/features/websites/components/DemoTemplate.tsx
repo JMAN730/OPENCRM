@@ -335,7 +335,7 @@ export function DemoTemplate({
         </div>
         <div className="mx-auto flex max-w-7xl flex-col gap-2 pt-6 text-xs font-bold uppercase tracking-wide text-[#9ca3af] sm:flex-row sm:justify-between">
           <span>Demo website preview</span>
-          <span>{new Date().getFullYear()} · OpenCRM</span>
+          <span>{new Date().getFullYear()} · ClientCore</span>
         </div>
       </footer>
     </div>
