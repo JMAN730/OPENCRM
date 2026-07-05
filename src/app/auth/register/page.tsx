@@ -66,7 +66,7 @@ export default function RegisterPage() {
             C
           </div>
           <h1 className="text-xl font-semibold">Create your account</h1>
-          <p className="text-sm text-muted-foreground">Get started with OpenCRM</p>
+          <p className="text-sm text-muted-foreground">Get started with ClientCore</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

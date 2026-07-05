@@ -48,13 +48,13 @@ export async function sendInvitationEmail(args: {
   await transport.sendMail({
     from,
     to,
-    subject: `${inviterName} invited you to join ${organizationName} on OpenCRM`,
+    subject: `${inviterName} invited you to join ${organizationName} on ClientCore`,
     html: `
-      <p>${safeInviter} invited you to join <strong>${safeOrg}</strong> on OpenCRM.</p>
+      <p>${safeInviter} invited you to join <strong>${safeOrg}</strong> on ClientCore.</p>
       <p><a href="${acceptUrl}">Accept the invitation and set your password</a></p>
       <p>This link expires in 7 days.</p>
     `,
-    text: `${inviterName} invited you to join ${organizationName} on OpenCRM.\n\nAccept: ${acceptUrl}\n\nThis link expires in 7 days.`,
+    text: `${inviterName} invited you to join ${organizationName} on ClientCore.\n\nAccept: ${acceptUrl}\n\nThis link expires in 7 days.`,
   });
 }
 
@@ -70,9 +70,9 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   await transport.sendMail({
     from,
     to,
-    subject: "Reset your OpenCRM password",
+    subject: "Reset your ClientCore password",
     html: `
-      <p>You requested a password reset for your OpenCRM account.</p>
+      <p>You requested a password reset for your ClientCore account.</p>
       <p><a href="${resetUrl}">Click here to reset your password</a></p>
       <p>This link expires in 1 hour. If you did not request a reset, you can ignore this email.</p>
     `,
