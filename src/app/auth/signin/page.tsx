@@ -6,14 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { X, UserPlus, ArrowLeft } from "lucide-react";
@@ -193,15 +186,15 @@ export default function SignInPage() {
 
   if (status === "loading")
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50">
+      <AuthShell>
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
+      </AuthShell>
     );
 
   // ── Account picker ──────────────────────────────────────────────────────────
   if (view === "picker") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
+      <AuthShell>
         <div className="flex flex-col items-center gap-10 w-full max-w-lg">
           <div className="text-center">
             <h1 className="text-3xl font-bold">Welcome back</h1>
@@ -246,31 +239,29 @@ export default function SignInPage() {
             </button>
           </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   // ── Password prompt for saved user ──────────────────────────────────────────
   if (view === "password" && selectedUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-        <Card className="w-full max-w-sm border-none shadow-lg">
-          <CardHeader className="space-y-4 text-center">
-            <div className="flex justify-center">
-              <Avatar className="h-20 w-20 text-2xl">
-                {selectedUser.image && (
-                  <AvatarImage src={selectedUser.image} alt={selectedUser.name} />
-                )}
-                <AvatarFallback>{getInitials(selectedUser.name)}</AvatarFallback>
-              </Avatar>
-            </div>
+      <AuthShell>
+        <AuthCard>
+          <div className="mb-6 flex flex-col items-center gap-4 text-center">
+            <Avatar className="h-20 w-20 text-2xl">
+              {selectedUser.image && (
+                <AvatarImage src={selectedUser.image} alt={selectedUser.name} />
+              )}
+              <AvatarFallback>{getInitials(selectedUser.name)}</AvatarFallback>
+            </Avatar>
             <div>
-              <CardTitle className="text-xl">{selectedUser.name}</CardTitle>
-              <CardDescription>{selectedUser.email}</CardDescription>
+              <h1 className="text-xl font-semibold">{selectedUser.name}</h1>
+              <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
             </div>
-          </CardHeader>
+          </div>
           <form onSubmit={handleSignIn}>
-            <CardContent className="space-y-4">
+            <div className="space-y-4">
               {error && (
                 <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
@@ -287,8 +278,8 @@ export default function SignInPage() {
                   required
                 />
               </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-3 border-t-0 bg-transparent">
+            </div>
+            <div className="mt-6 flex flex-col gap-3">
               <Button className="w-full" type="submit" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
@@ -315,23 +306,22 @@ export default function SignInPage() {
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to accounts
               </Button>
-            </CardFooter>
+            </div>
           </form>
-        </Card>
-      </div>
+        </AuthCard>
+      </AuthShell>
     );
   }
 
   // ── New account form ────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-md border-none shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
-          <CardDescription>Enter your email and password to access your account</CardDescription>
-        </CardHeader>
+    <AuthShell>
+      <AuthCard
+        title="Sign In"
+        description="Enter your email and password to access your account"
+      >
         <form onSubmit={handleSignIn}>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
@@ -366,8 +356,8 @@ export default function SignInPage() {
               />
               Remember this account on this device
             </label>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4 border-t-0 bg-transparent">
+          </div>
+          <div className="mt-6 flex flex-col items-center gap-4">
             <Button className="w-full" type="submit" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
@@ -405,9 +395,9 @@ export default function SignInPage() {
                 Create one
               </Link>
             </p>
-          </CardFooter>
+          </div>
         </form>
-      </Card>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
