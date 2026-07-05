@@ -284,7 +284,7 @@ export const dashboardRouter = createTRPCRouter({
 
   getMyPhoneReach: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const organizationId = (ctx.session.user as { organizationId?: string }).organizationId;
+    const organizationId = ctx.session.user.organizationId;
 
     if (!organizationId) return [];
 
@@ -338,7 +338,7 @@ export const dashboardRouter = createTRPCRouter({
 
   getMyStats: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const organizationId = (ctx.session.user as { organizationId?: string }).organizationId;
+    const organizationId = ctx.session.user.organizationId;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);

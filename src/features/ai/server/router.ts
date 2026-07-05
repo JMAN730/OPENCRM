@@ -29,7 +29,7 @@ export const aiRouter = createTRPCRouter({
     .output(z.object({ content: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const role = (ctx.session.user as { role: string }).role;
+      const role = ctx.session.user.role;
 
       await assertWithinRateLimit({
         key: `ai:chat:${userId}`,

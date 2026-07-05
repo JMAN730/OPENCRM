@@ -130,7 +130,7 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   topCallers: organizationProcedure.query(async ({ ctx }) => {
-    const user = ctx.session.user as { id: string; role: string };
+    const user = ctx.session.user;
     const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
       { key: `analytics:topCallers:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
@@ -139,7 +139,7 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   leadQuality: organizationProcedure.query(async ({ ctx }) => {
-    const user = ctx.session.user as { id: string; role: string };
+    const user = ctx.session.user;
     const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
       { key: `analytics:leadQuality:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },
@@ -148,7 +148,7 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   repPerformance: organizationProcedure.query(async ({ ctx }) => {
-    const user = ctx.session.user as { id: string; role: string };
+    const user = ctx.session.user;
     const scope = await getLeadScope(ctx, user.id, user.role);
     return cached(
       { key: `analytics:repPerformance:${scopeCacheKey(scope)}`, ttl: SALES_TTL_SECONDS },

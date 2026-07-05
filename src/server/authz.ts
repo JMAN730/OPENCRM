@@ -1,5 +1,4 @@
 import { TRPCError } from "@trpc/server";
-import type { Session } from "next-auth";
 
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
 
@@ -27,20 +26,6 @@ export function assertManagerOrAdmin(role: string | null | undefined): void {
   if (!isManagerOrAdmin(role)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Manager or admin privileges required." });
   }
-}
-
-export type SessionUser = NonNullable<Session["user"]> & {
-  id: string;
-  role: UserRole;
-  organizationId: string | null;
-  teamId: string | null;
-};
-
-export function getSessionUser(session: Session | null | undefined): SessionUser {
-  if (!session?.user?.id) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return session.user as SessionUser;
 }
 
 /**
