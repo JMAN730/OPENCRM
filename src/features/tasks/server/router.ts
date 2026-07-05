@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { isManagerOrAdmin } from "@/server/authz";
 import { logActivity } from "@/server/activity";
-import { getLeadScope, taskWhereFromScope } from "@/server/teams/scope";
+import { scopedTaskWhere } from "@/server/teams/scope";
 
 const prioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 const statusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]);
@@ -95,7 +95,7 @@ export const tasksRouter = createTRPCRouter({
       }
 
       // The assignee may update the task too (e.g. mark it complete) — it
-      // shows up in their list via taskWhereFromScope, so the checkbox in the
+      // shows up in their list via scopedTaskWhere, so the checkbox in the
       // UI must not 403 on tasks a manager created for them.
       const callerId = ctx.session.user.id;
       const callerRole = ctx.session.user.role;
@@ -204,11 +204,10 @@ export const tasksRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const limit = input.limit ?? 50;
 
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const where: Record<string, any> = {
-        ...taskWhereFromScope(scope),
+        ...(await scopedTaskWhere(ctx)),
         deletedAt: null,
       };
 
@@ -247,11 +246,10 @@ export const tasksRouter = createTRPCRouter({
   getById: organizationProcedure
     .input(z.object({ taskId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       return ctx.prisma.task.findFirst({
         where: {
           id: input.taskId,
-          ...taskWhereFromScope(scope),
+          ...(await scopedTaskWhere(ctx)),
           deletedAt: null,
         },
         include: {
@@ -269,10 +267,9 @@ export const tasksRouter = createTRPCRouter({
       assignedToId: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       return ctx.prisma.task.findMany({
         where: {
-          ...taskWhereFromScope(scope),
+          ...(await scopedTaskWhere(ctx)),
           deletedAt: null,
           dueDate: { gte: input.from, lte: input.to },
           ...(input.assignedToId ? { assignedToId: input.assignedToId } : {}),
@@ -312,10 +309,9 @@ export const tasksRouter = createTRPCRouter({
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     return ctx.prisma.task.findMany({
       where: {
-        ...taskWhereFromScope(scope),
+        ...(await scopedTaskWhere(ctx)),
         dueDate: { gte: today, lt: tomorrow },
         status: { not: "COMPLETED" },
         deletedAt: null,
@@ -333,10 +329,9 @@ export const tasksRouter = createTRPCRouter({
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     return ctx.prisma.task.findMany({
       where: {
-        ...taskWhereFromScope(scope),
+        ...(await scopedTaskWhere(ctx)),
         dueDate: { lt: now },
         status: { not: "COMPLETED" },
         deletedAt: null,
@@ -359,10 +354,9 @@ export const tasksRouter = createTRPCRouter({
     tomorrow.setHours(0, 0, 0, 0);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const tasks = await ctx.prisma.task.findMany({
       where: {
-        ...taskWhereFromScope(scope),
+        ...(await scopedTaskWhere(ctx)),
         leadId: { not: null },
         dueDate: { gte: tomorrow },
         status: { not: "COMPLETED" },

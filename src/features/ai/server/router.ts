@@ -29,7 +29,6 @@ export const aiRouter = createTRPCRouter({
     .output(z.object({ content: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const role = ctx.session.user.role;
 
       await assertWithinRateLimit({
         key: `ai:chat:${userId}`,
@@ -48,7 +47,7 @@ export const aiRouter = createTRPCRouter({
 
       // Build structured sales analytics for the sales-manager system prompt,
       // scoped to the leads/reps this caller is permitted to see.
-      const scope = await getLeadScope(ctx, userId, role);
+      const scope = await getLeadScope(ctx);
       const context = await buildAIContext(ctx.prisma, scope);
       const systemPrompt = `${SALES_MANAGER_SYSTEM_PROMPT}\n\n${formatAIContext(context)}`;
 

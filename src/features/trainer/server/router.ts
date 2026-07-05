@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { Prisma } from "@prisma/client";
 import { assertAdmin, isManagerOrAdmin } from "@/server/authz";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
-import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { getLeadScope, scopedLeadWhere } from "@/server/teams/scope";
 import { buildLeadContext, interpolate } from "../leadContext";
 import { scoreCall } from "./scoring";
 
@@ -78,7 +78,7 @@ export const trainerRouter = createTRPCRouter({
       if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const scope = await getLeadScope(ctx);
       if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
@@ -138,7 +138,7 @@ export const trainerRouter = createTRPCRouter({
       if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const scope = await getLeadScope(ctx);
       if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
@@ -197,8 +197,7 @@ export const trainerRouter = createTRPCRouter({
   }),
 
   pickableLeads: organizationProcedure.query(async ({ ctx }) => {
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-    const where = leadWhereFromScope(scope);
+    const where = await scopedLeadWhere(ctx);
     return ctx.prisma.lead.findMany({
       where,
       orderBy: [{ company: "asc" }, { createdAt: "desc" }],
