@@ -5,6 +5,7 @@ import { createTRPCContext } from "@/server/trpc";
 import { rateLimit } from "@/lib/rateLimit";
 import { resolveLeadScope } from "@/server/teams/scope";
 import { buildAIContext, formatAIContext, SALES_MANAGER_SYSTEM_PROMPT } from "@/features/ai/server/context";
+import { keys } from "@/lib/cacheKeys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const organizationId = user.organizationId;
   const role = user.role ?? "USER";
 
-  const limit = await rateLimit({ key: `ai:chat:${userId}`, limit: 30, windowSeconds: 60 });
+  const limit = await rateLimit({ key: keys.aiChatBucket(userId), limit: 30, windowSeconds: 60 });
   if (!limit.ok) {
     return Response.json({ error: "Too many AI requests. Try again in a moment." }, { status: 429 });
   }

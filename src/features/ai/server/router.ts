@@ -4,6 +4,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { getLeadScope } from "@/server/teams/scope";
 import { buildAIContext, formatAIContext, SALES_MANAGER_SYSTEM_PROMPT } from "./context";
+import { keys } from "@/lib/cacheKeys";
 
 function client() {
   return new OpenAI({
@@ -31,7 +32,7 @@ export const aiRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
 
       await assertWithinRateLimit({
-        key: `ai:chat:${userId}`,
+        key: keys.aiChatBucket(userId),
         limit: 30,
         windowSeconds: 60,
         message: "Too many AI requests. Try again in a moment.",

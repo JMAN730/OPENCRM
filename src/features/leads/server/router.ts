@@ -13,6 +13,7 @@ import {
   getOrgSubscription,
 } from "@/features/billing/server/enforcement";
 import { getPlanLimits } from "@/features/billing/server/plans";
+import { keys } from "@/lib/cacheKeys";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -753,8 +754,8 @@ export const leadsRouter = createTRPCRouter({
         }),
       ]);
       await Promise.all([
-        invalidate(`dashboard:kpi:${ctx.organizationId}`),
-        invalidate(`dashboard:team:${ctx.organizationId}`),
+        invalidate(keys.dashboardKpi(ctx.organizationId)),
+        invalidate(keys.dashboardTeam(ctx.organizationId)),
       ]);
       return updated;
     }),

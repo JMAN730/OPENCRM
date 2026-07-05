@@ -1,6 +1,7 @@
 import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
+import { keys } from "@/lib/cacheKeys";
 
 const DASHBOARD_TTL_SECONDS = 60;
 
@@ -9,7 +10,7 @@ export const dashboardRouter = createTRPCRouter({
     const { organizationId } = ctx;
 
     return cached(
-      { key: `dashboard:kpi:${organizationId}`, ttl: DASHBOARD_TTL_SECONDS },
+      { key: keys.dashboardKpi(organizationId), ttl: DASHBOARD_TTL_SECONDS },
       async () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -174,7 +175,7 @@ export const dashboardRouter = createTRPCRouter({
   sidebarCounts: organizationProcedure.query(async ({ ctx }) => {
     const { organizationId } = ctx;
     return cached(
-      { key: `dashboard:sidebar:${organizationId}`, ttl: 30 },
+      { key: keys.dashboardSidebar(organizationId), ttl: 30 },
       async () => {
         const [leads, tasks, scraperActive] = await Promise.all([
           ctx.prisma.lead.count({ where: { organizationId } }),
@@ -193,7 +194,7 @@ export const dashboardRouter = createTRPCRouter({
   getTeamStats: organizationProcedure.query(async ({ ctx }) => {
     const { organizationId } = ctx;
     return cached(
-      { key: `dashboard:team:${organizationId}`, ttl: DASHBOARD_TTL_SECONDS },
+      { key: keys.dashboardTeam(organizationId), ttl: DASHBOARD_TTL_SECONDS },
       async () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);

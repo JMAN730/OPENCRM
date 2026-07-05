@@ -7,6 +7,7 @@ import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { getLeadScope, scopedLeadWhere } from "@/server/teams/scope";
 import { buildLeadContext, interpolate } from "../leadContext";
 import { scoreCall } from "./scoring";
+import { keys } from "@/lib/cacheKeys";
 
 const personaInput = z.object({
   name: z.string().min(1),
@@ -156,7 +157,7 @@ export const trainerRouter = createTRPCRouter({
       }
 
       await assertWithinRateLimit({
-        key: `trainer:score:${ctx.session.user.id}`,
+        key: keys.trainerScoreBucket(ctx.session.user.id),
         limit: 20,
         windowSeconds: 60,
         message: "Too many scoring requests. Try again shortly.",

@@ -12,6 +12,7 @@ import {
   type PipelineMetrics,
   type ConversionInsights,
 } from "@/features/analytics/server/salesAnalytics";
+import { keys } from "@/lib/cacheKeys";
 
 /** Stable, scope-specific cache-key suffix so users don't read each other's snapshots. */
 export function scopeCacheKey(scope: LeadScope): string {
@@ -127,7 +128,7 @@ async function loadAIContext(db: Db, scope: LeadScope): Promise<AIContext> {
 /** Cached (60s) structured sales analytics snapshot for the AI prompt, scoped to the caller. */
 export async function buildAIContext(db: Db, scope: LeadScope): Promise<AIContext> {
   return cached(
-    { key: `ai:context:${scopeCacheKey(scope)}`, ttl: 60 },
+    { key: keys.aiContext(scopeCacheKey(scope)), ttl: 60 },
     () => loadAIContext(db, scope),
   );
 }

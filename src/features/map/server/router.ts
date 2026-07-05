@@ -21,6 +21,7 @@ import {
   NOMINATIM_DELAY_MS,
 } from "./osm";
 import { writeEnrichInput, type EnrichTarget } from "./enrich";
+import { keys } from "@/lib/cacheKeys";
 
 // Overpass public instances struggle with country-sized queries; roughly a
 // metro area at zoom ~11.
@@ -94,7 +95,7 @@ export const mapRouter = createTRPCRouter({
    */
   geocodeMissing: organizationProcedure.mutation(async ({ ctx }) => {
     await assertWithinRateLimit({
-      key: `map:geocode:${ctx.organizationId}`,
+      key: keys.mapGeocodeBucket(ctx.organizationId),
       limit: 6,
       windowSeconds: 60,
     });
@@ -178,7 +179,7 @@ export const mapRouter = createTRPCRouter({
         });
       }
       await assertWithinRateLimit({
-        key: `map:discover:${ctx.organizationId}`,
+        key: keys.mapDiscoverBucket(ctx.organizationId),
         limit: 30,
         windowSeconds: 60,
       });
