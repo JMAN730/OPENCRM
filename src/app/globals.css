@@ -652,6 +652,41 @@
 .crm-card-head .crm-sub { color: var(--crm-fg-faint); font-size: 12px; }
 .crm-card-head .crm-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 
+/* ===== Auth shell ===== */
+.crm-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.crm-auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--crm-surface);
+  border: 1px solid var(--crm-border);
+  border-radius: var(--crm-radius-xl);
+  padding: 32px 28px;
+  box-shadow: var(--crm-shadow-pop);
+}
+.crm-auth-card-head {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.crm-auth-card-head h1 {
+  margin: 0;
+  font-family: var(--crm-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--crm-fg);
+}
+.crm-auth-card-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--crm-fg-muted);
+}
+
 /* ===== KPI ===== */
 .crm-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .crm-kpi-grid-4 { grid-template-columns: repeat(4, 1fr); }

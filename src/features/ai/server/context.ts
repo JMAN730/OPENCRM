@@ -21,7 +21,7 @@ export function scopeCacheKey(scope: LeadScope): string {
     : `u:${scope.organizationId}:${[...scope.userIds].sort().join("-")}`;
 }
 
-export const SALES_MANAGER_SYSTEM_PROMPT = `You are an AI sales manager inside OpenCRM.
+export const SALES_MANAGER_SYSTEM_PROMPT = `You are an AI sales manager inside ClientCore.
 
 Use CRM analytics and activity data to:
 - identify top performers

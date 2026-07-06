@@ -7,7 +7,7 @@ const NOMINATIM_URL = () =>
   process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org/search";
 
 // Nominatim and Overpass usage policies require an identifying User-Agent.
-const USER_AGENT = "OpenCRM/0.1 (lead-map)";
+const USER_AGENT = "ClientCore/0.1 (lead-map)";
 
 // City centroids never move; cache them for 30 days so repeat geocode runs
 // stay off the Nominatim API entirely.

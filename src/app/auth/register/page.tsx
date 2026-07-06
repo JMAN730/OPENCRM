@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
 import Link from "next/link";
 import { trpc } from "@/app/_trpc/client";
 
@@ -58,15 +59,15 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
+    <AuthShell>
+      <AuthCard>
         {/* Logo */}
-        <div className="flex flex-col items-center gap-2 text-center">
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="w-8 h-8 bg-primary rounded flex items-center justify-center text-primary-foreground text-sm font-bold">
             C
           </div>
           <h1 className="text-xl font-semibold">Create your account</h1>
-          <p className="text-sm text-muted-foreground">Get started with OpenCRM</p>
+          <p className="text-sm text-muted-foreground">Get started with ClientCore</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -98,13 +99,13 @@ export default function RegisterPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/auth/signin" className="text-foreground hover:underline underline-offset-4">
             Sign in
           </Link>
         </p>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
