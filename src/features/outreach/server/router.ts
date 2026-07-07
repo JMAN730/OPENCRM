@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { EmailDraftStatus, OutreachJobStatus } from "@prisma/client";
 import { OutreachEmailError, sendDraft } from "@/features/emails/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
+import { keys } from "@/lib/cacheKeys";
 
 type OutreachListPage = {
   items: Array<{
@@ -137,7 +138,7 @@ export const outreachRouter = createTRPCRouter({
       // unit — otherwise a 20-draft bulk send would cost the same as a single
       // send and the budget would be 400 emails/minute instead of 20.
       await assertWithinRateLimit({
-        key: `email-send:${ctx.organizationId}`,
+        key: keys.emailSendBucket(ctx.organizationId),
         limit: 20,
         windowSeconds: 60,
         cost: input.draftIds.length,

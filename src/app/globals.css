@@ -653,7 +653,7 @@
 .crm-card-head .crm-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 
 /* ===== Auth shell ===== */
-.crm-auth-shell {
+.crm-app.crm-auth-shell {
   min-height: 100vh;
   display: flex;
   align-items: center;

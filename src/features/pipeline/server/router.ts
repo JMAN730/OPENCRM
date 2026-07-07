@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@prisma/client';
 import { logActivity } from '@/server/activity';
-import { getLeadScope, leadWhereFromScope } from '@/server/teams/scope';
+import { scopedLeadWhere } from '@/server/teams/scope';
 
 const DEFAULT_STAGES = [
   { name: 'Potential',   order: 0 },
@@ -72,16 +72,15 @@ export const pipelineRouter = createTRPCRouter({
   getBoard: organizationProcedure.query(async ({ ctx }) => {
     const pipeline = await getOrCreateDefaultPipeline(ctx.prisma as unknown as PrismaClient, ctx.organizationId);
     // Scope the nested leads to what the caller is allowed to see (mirrors
-    // moveLead and the rest of the pipeline mutations). leadWhereFromScope
+    // moveLead and the rest of the pipeline mutations). scopedLeadWhere
     // already constrains by organizationId, so a USER/team-leader no longer
     // sees every org lead's names, companies, deal values, and assignees.
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const stages = await ctx.prisma.pipelineStage.findMany({
       where: { pipelineId: pipeline.id },
       orderBy: { order: 'asc' },
       include: {
         leads: {
-          where: leadWhereFromScope(scope),
+          where: await scopedLeadWhere(ctx),
           select: LEAD_SELECT,
           orderBy: { updatedAt: 'desc' },
         },
@@ -106,9 +105,8 @@ export const pipelineRouter = createTRPCRouter({
         }
       }
 
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        where: { id: input.leadId, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: 'FORBIDDEN', message: 'Lead not found' });
@@ -187,9 +185,8 @@ export const pipelineRouter = createTRPCRouter({
   updateDealValue: organizationProcedure
     .input(z.object({ leadId: z.string(), value: z.number().nonnegative().max(1_000_000_000).nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
+        where: { id: input.leadId, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: 'NOT_FOUND', message: 'Lead not found' });
@@ -233,9 +230,8 @@ export const pipelineRouter = createTRPCRouter({
       }
 
       if ('leadId' in input) {
-        const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
         const existing = await ctx.prisma.lead.findFirst({
-          where: { id: input.leadId, ...leadWhereFromScope(scope) },
+          where: { id: input.leadId, ...(await scopedLeadWhere(ctx)) },
         });
         if (!existing) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Lead not found' });

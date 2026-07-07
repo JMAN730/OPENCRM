@@ -1,4 +1,5 @@
 import { safeGet, safeSetEx, safeDel } from "@/lib/redis";
+import { keys } from "@/lib/cacheKeys";
 
 export type CacheOptions = {
   /** Stable key. Callers must include all variables (orgId, userId, etc). */
@@ -32,4 +33,18 @@ export async function cached<T>(opts: CacheOptions, loader: () => Promise<T>): P
 /** Drop a single cache entry. Used after writes that invalidate the value. */
 export async function invalidate(key: string): Promise<void> {
   await safeDel(key);
+}
+
+/**
+ * Drop every dashboard aggregate derived from an organization's data.
+ * Fired by the organizationProcedure mutation middleware after any
+ * successful org write, so individual mutations never need to remember
+ * which dashboards their write went stale.
+ */
+export async function invalidateOrgDashboards(organizationId: string): Promise<void> {
+  await Promise.all([
+    safeDel(keys.dashboardKpi(organizationId)),
+    safeDel(keys.dashboardTeam(organizationId)),
+    safeDel(keys.dashboardSidebar(organizationId)),
+  ]);
 }

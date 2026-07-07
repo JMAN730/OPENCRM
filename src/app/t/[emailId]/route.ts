@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { EmailDraftStatus } from "@prisma/client";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
+import { keys } from "@/lib/cacheKeys";
 
 export async function GET(
   req: Request,
@@ -15,7 +16,7 @@ export async function GET(
 
   // Throttle by IP so a guessing/abuse loop can't hammer the endpoint.
   const { ok } = await rateLimit({
-    key: `email-track:${getClientIp(req.headers)}`,
+    key: keys.emailTrackIpBucket(getClientIp(req.headers)),
     limit: 60,
     windowSeconds: 60,
   });

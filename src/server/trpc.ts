@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { invalidateOrgDashboards } from "@/lib/cache";
 
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   // Primary: try getServerSession (uses next/headers cookies() under the hood).
@@ -125,4 +126,18 @@ const enforceActiveSubscription = enforceUserHasOrg.use(async ({ ctx, next, type
   return next({ ctx });
 });
 
-export const organizationProcedure = enforceActiveSubscription;
+// Any successful org mutation may change the aggregates the dashboard caches,
+// so the write path owns invalidation: individual procedures never need to
+// remember it. Over-invalidation (mutations that don't touch dashboard data)
+// costs three fail-open Redis DELs on entries with a ≤60s TTL.
+const bustDashboardsAfterMutation = enforceActiveSubscription.use(
+  async ({ ctx, next, type }) => {
+    const result = await next();
+    if (type === "mutation" && result.ok) {
+      await invalidateOrgDashboards(ctx.organizationId);
+    }
+    return result;
+  },
+);
+
+export const organizationProcedure = bustDashboardsAfterMutation;

@@ -9,6 +9,7 @@ import { invalidateAuthSnapshot } from "@/lib/auth";
 import { createStripeCustomer } from "@/features/billing/server/stripe";
 import { TRIAL_DAYS } from "@/features/billing/server/plans";
 import { defaultSeatLimitForTier } from "@/features/billing/server/enforcement";
+import { keys } from "@/lib/cacheKeys";
 
 const loadingAnimationModeSchema = z.enum(["ALWAYS", "ONCE_DAILY", "OFF"]);
 
@@ -26,12 +27,12 @@ export const authRouter = createTRPCRouter({
       // Two-tier rate limit: protect the user from spam reset emails AND
       // protect the system from anyone iterating addresses.
       await assertWithinRateLimit({
-        key: `auth:reset:email:${email}`,
+        key: keys.authResetEmailBucket(email),
         limit: 3,
         windowSeconds: 60 * 60,
       });
       await assertWithinRateLimit({
-        key: `auth:reset:ip:${ip}`,
+        key: keys.authResetIpBucket(ip),
         limit: 10,
         windowSeconds: 60 * 60,
       });
@@ -65,7 +66,7 @@ export const authRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.headers);
       await assertWithinRateLimit({
-        key: `auth:reset-confirm:ip:${ip}`,
+        key: keys.authResetConfirmIpBucket(ip),
         limit: 20,
         windowSeconds: 60 * 60,
       });
@@ -115,7 +116,7 @@ export const authRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.headers);
       await assertWithinRateLimit({
-        key: `auth:register:ip:${ip}`,
+        key: keys.authRegisterIpBucket(ip),
         limit: 10,
         windowSeconds: 60 * 60,
       });

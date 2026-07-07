@@ -82,7 +82,7 @@ export const scheduledScraperRouter = createTRPCRouter({
   create: organizationProcedure
     .input(scheduleInput)
     .mutation(async ({ ctx, input }): Promise<ScheduleRow> => {
-      if (!isManagerOrAdmin((ctx.session.user as { role?: string }).role)) {
+      if (!isManagerOrAdmin(ctx.session.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only managers and admins can create schedules." });
       }
       const count = await ctx.prisma.scheduledScrape.count({
@@ -114,7 +114,7 @@ export const scheduledScraperRouter = createTRPCRouter({
   update: organizationProcedure
     .input(updateInput)
     .mutation(async ({ ctx, input }): Promise<ScheduleRow> => {
-      if (!isManagerOrAdmin((ctx.session.user as { role?: string }).role)) {
+      if (!isManagerOrAdmin(ctx.session.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       const existing = await ctx.prisma.scheduledScrape.findFirst({
@@ -138,7 +138,7 @@ export const scheduledScraperRouter = createTRPCRouter({
   delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<{ ok: boolean }> => {
-      if (!isManagerOrAdmin((ctx.session.user as { role?: string }).role)) {
+      if (!isManagerOrAdmin(ctx.session.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       const existing = await ctx.prisma.scheduledScrape.findFirst({

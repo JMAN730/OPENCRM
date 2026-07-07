@@ -67,16 +67,15 @@ export async function invalidateLeadScope(userId: string): Promise<void> {
  */
 type ScopeCtx = {
   prisma: PrismaClient;
+  organizationId: string;
+  session: { user: { id: string; role: string } };
   __leadScope?: Map<string, Promise<LeadScope>>;
 };
 
-export function getLeadScope(
-  ctx: ScopeCtx,
-  userId: string,
-  role: string,
-): Promise<LeadScope> {
-  const orgId = (ctx as { organizationId?: string }).organizationId;
+export function getLeadScope(ctx: ScopeCtx): Promise<LeadScope> {
+  const orgId = ctx.organizationId;
   if (!orgId) throw new Error("getLeadScope requires ctx.organizationId");
+  const { id: userId, role } = ctx.session.user;
 
   if (!ctx.__leadScope) ctx.__leadScope = new Map();
   const key = `${orgId}:${userId}`;
@@ -86,6 +85,20 @@ export function getLeadScope(
   const p = resolveLeadScope(ctx.prisma, userId, orgId, role);
   ctx.__leadScope.set(key, p);
   return p;
+}
+
+/**
+ * The one-call scoped `where`: derives the caller's identity from ctx and
+ * returns the Prisma fragment restricting leads to what they may see.
+ * Prefer this over the getLeadScope + leadWhereFromScope pair.
+ */
+export async function scopedLeadWhere(ctx: ScopeCtx) {
+  return leadWhereFromScope(await getLeadScope(ctx));
+}
+
+/** Task counterpart of {@link scopedLeadWhere}. */
+export async function scopedTaskWhere(ctx: ScopeCtx) {
+  return taskWhereFromScope(await getLeadScope(ctx));
 }
 
 export function leadWhereFromScope(scope: LeadScope) {
@@ -107,7 +120,7 @@ export function leadWhereFromScope(scope: LeadScope) {
  *  - Team leader: tasks owned by or assigned to any team member (plus their own).
  *  - Everyone else: only tasks they own or are assigned.
  */
-export function taskWhereFromScope(scope: LeadScope) {
+function taskWhereFromScope(scope: LeadScope) {
   if (scope.kind === "all") {
     return { organizationId: scope.organizationId };
   }

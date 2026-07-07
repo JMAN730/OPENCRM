@@ -4,9 +4,10 @@ import { TRPCError } from "@trpc/server";
 import { Prisma } from "@prisma/client";
 import { assertAdmin, isManagerOrAdmin } from "@/server/authz";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
-import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { getLeadScope, scopedLeadWhere } from "@/server/teams/scope";
 import { buildLeadContext, interpolate } from "../leadContext";
 import { scoreCall } from "./scoring";
+import { keys } from "@/lib/cacheKeys";
 
 const personaInput = z.object({
   name: z.string().min(1),
@@ -78,7 +79,7 @@ export const trainerRouter = createTRPCRouter({
       if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const scope = await getLeadScope(ctx);
       if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
@@ -138,7 +139,7 @@ export const trainerRouter = createTRPCRouter({
       if (!lead || lead.organizationId !== ctx.organizationId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+      const scope = await getLeadScope(ctx);
       if (scope.kind === "users" && (!lead.assignedToId || !scope.userIds.includes(lead.assignedToId))) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       }
@@ -156,7 +157,7 @@ export const trainerRouter = createTRPCRouter({
       }
 
       await assertWithinRateLimit({
-        key: `trainer:score:${ctx.session.user.id}`,
+        key: keys.trainerScoreBucket(ctx.session.user.id),
         limit: 20,
         windowSeconds: 60,
         message: "Too many scoring requests. Try again shortly.",
@@ -197,8 +198,7 @@ export const trainerRouter = createTRPCRouter({
   }),
 
   pickableLeads: organizationProcedure.query(async ({ ctx }) => {
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-    const where = leadWhereFromScope(scope);
+    const where = await scopedLeadWhere(ctx);
     return ctx.prisma.lead.findMany({
       where,
       orderBy: [{ company: "asc" }, { createdAt: "desc" }],

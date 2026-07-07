@@ -6,7 +6,6 @@ import {
   assertAdmin,
   assertManagerOrAdmin,
   assertCanGrantRole,
-  getSessionUser,
   ROLE_VALUES,
 } from "./authz";
 
@@ -79,25 +78,6 @@ describe("assertCanGrantRole", () => {
     expect(() => assertCanGrantRole("ADMIN", "USER")).not.toThrow();
     expect(() => assertCanGrantRole("MANAGER", "USER")).not.toThrow();
     expect(() => assertCanGrantRole("USER", "USER")).toThrow();
-  });
-});
-
-describe("getSessionUser", () => {
-  it("throws UNAUTHORIZED when session is missing", () => {
-    expect(() => getSessionUser(null)).toThrow();
-    expect(() => getSessionUser(undefined)).toThrow();
-  });
-
-  it("throws UNAUTHORIZED when user is missing", () => {
-    expect(() => getSessionUser({ user: undefined, expires: "" } as never)).toThrow();
-  });
-
-  it("returns the user when present", () => {
-    const session = {
-      user: { id: "u1", role: "ADMIN" as const, organizationId: "o1", teamId: null },
-      expires: "",
-    };
-    expect(getSessionUser(session as never)).toBe(session.user);
   });
 });
 

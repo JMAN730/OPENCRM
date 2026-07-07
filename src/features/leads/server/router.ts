@@ -1,18 +1,14 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { customOutcomesRouter } from "./customOutcomesRouter";
+import { leadNotesProcedures } from "./notesProcedures";
+import { leadTagsProcedures } from "./tagsProcedures";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { Prisma, type LeadStatus, type LeadTemperatureOverride } from "@prisma/client";
-import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { getLeadScope, leadWhereFromScope, scopedLeadWhere } from "@/server/teams/scope";
 import { logActivity } from "@/server/activity";
 import { isAdmin, isManagerOrAdmin } from "@/server/authz";
 import { normalizeState, parseCityState, parseLocationSearch } from "@/features/leads/location";
-import { invalidate } from "@/lib/cache";
-import {
-  assertTagLimit,
-  getOrgSubscription,
-} from "@/features/billing/server/enforcement";
-import { getPlanLimits } from "@/features/billing/server/plans";
 
 // Accept "" as a synonym for "absent" so optional URL/email fields don't reject
 // empty form inputs. Real values are still validated by .email()/.url().
@@ -190,7 +186,7 @@ export const leadsRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
       const limit = input.limit ?? 100;
 
-      const baseScope = await getLeadScope(ctx, userId, role);
+      const baseScope = await getLeadScope(ctx);
 
       let where: Record<string, unknown> = leadWhereFromScope(baseScope);
 
@@ -296,7 +292,7 @@ export const leadsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
-      const baseScope = await getLeadScope(ctx, userId, role);
+      const baseScope = await getLeadScope(ctx);
 
       let where: Record<string, unknown> = leadWhereFromScope(baseScope);
 
@@ -352,10 +348,8 @@ export const leadsRouter = createTRPCRouter({
   getById: organizationProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
         include: includeAssignee,
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
@@ -365,10 +359,8 @@ export const leadsRouter = createTRPCRouter({
   delete: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
       return ctx.prisma.lead.delete({ where: { id: input.id } });
@@ -377,13 +369,11 @@ export const leadsRouter = createTRPCRouter({
   bulkDelete: organizationProcedure
     .input(z.object({ leadIds: z.array(z.string()).min(1).max(500) }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
       const uniqueIds = [...new Set(input.leadIds)];
 
-      const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (leads.length !== uniqueIds.length) {
@@ -619,10 +609,8 @@ export const leadsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
@@ -646,10 +634,8 @@ export const leadsRouter = createTRPCRouter({
   updateTemperatureOverride: organizationProcedure
     .input(z.object({ id: z.string(), temperatureOverride: optionalTemperatureOverride }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
@@ -675,10 +661,8 @@ export const leadsRouter = createTRPCRouter({
   updateValue: organizationProcedure
     .input(z.object({ id: z.string(), value: z.number().min(0).max(1_000_000_000).nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
@@ -703,10 +687,8 @@ export const leadsRouter = createTRPCRouter({
   updateCallOutcome: organizationProcedure
     .input(z.object({ id: z.string(), ...callOutcomeSchema.shape }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
@@ -766,20 +748,14 @@ export const leadsRouter = createTRPCRouter({
           },
         }),
       ]);
-      await Promise.all([
-        invalidate(`dashboard:kpi:${ctx.organizationId}`),
-        invalidate(`dashboard:team:${ctx.organizationId}`),
-      ]);
       return updated;
     }),
 
   setDisposition: organizationProcedure
     .input(z.object({ id: z.string(), secondaryOutcomeId: z.string().nullable() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
@@ -801,10 +777,8 @@ export const leadsRouter = createTRPCRouter({
   toggleStar: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
         select: { id: true, starred: true },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
@@ -866,9 +840,8 @@ export const leadsRouter = createTRPCRouter({
       }
 
       // Restrict which leads the caller can reassign
-      const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: input.leadIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: input.leadIds }, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (leads.length !== input.leadIds.length) {
@@ -906,222 +879,6 @@ export const leadsRouter = createTRPCRouter({
       return { count: result.count };
     }),
 
-  createNote: organizationProcedure
-    .input(z.object({ leadId: z.string(), content: z.string().min(1).max(5000) }))
-    .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      const note = await ctx.prisma.note.create({
-        data: {
-          content: input.content,
-          leadId: input.leadId,
-          userId: ctx.session.user.id,
-          organizationId: ctx.organizationId,
-        },
-      });
-      await logActivity(ctx.prisma, {
-        leadId: input.leadId,
-        userId: ctx.session.user.id,
-        type: "NOTE_ADDED",
-        description: "Added a note",
-        organizationId: ctx.organizationId,
-      });
-      return note;
-    }),
-
-  getNotes: organizationProcedure
-    .input(z.object({ leadId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      // Defense-in-depth: filter Notes by the lead's organization in addition
-      // to leadId, so a leaked Note relation can't escape the org boundary
-      // even if the upstream scope check is ever bypassed.
-      return ctx.prisma.note.findMany({
-        where: {
-          leadId: input.leadId,
-          lead: { organizationId: ctx.organizationId },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        include: { user: { select: { id: true, name: true, email: true, image: true } } },
-      });
-    }),
-
-  deleteNote: organizationProcedure
-    .input(z.object({ noteId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const note = await ctx.prisma.note.findFirst({
-        where: { id: input.noteId, lead: { organizationId: ctx.organizationId } },
-        select: { id: true, userId: true, leadId: true },
-      });
-      if (!note) throw new TRPCError({ code: "NOT_FOUND" });
-      const callerId = ctx.session.user.id;
-      const callerRole = ctx.session.user.role;
-      if (note.userId !== callerId && !isManagerOrAdmin(callerRole)) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-      await ctx.prisma.note.delete({ where: { id: note.id } });
-      await logActivity(ctx.prisma, {
-        leadId: note.leadId,
-        userId: callerId,
-        type: "NOTE_DELETED",
-        description: "Deleted a note",
-      });
-      return { success: true };
-    }),
-
-  /** Returns activities for a single lead (scope-filtered). */
-  getActivities: organizationProcedure
-    .input(z.object({ leadId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      // Defense-in-depth: same org join filter as getNotes.
-      return ctx.prisma.activity.findMany({
-        where: {
-          leadId: input.leadId,
-          lead: { organizationId: ctx.organizationId },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-        include: { user: { select: { id: true, name: true, email: true, image: true } } },
-      });
-    }),
-
-  listOrgTags: organizationProcedure.query(({ ctx }) =>
-    ctx.prisma.leadTag.findMany({
-      where: { organizationId: ctx.organizationId },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-  ),
-
-  createTag: organizationProcedure
-    .input(z.object({ name: z.string().trim().min(1).max(50) }))
-    .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.prisma.leadTag.count({
-        where: { organizationId: ctx.organizationId },
-      });
-      const sub = await getOrgSubscription(ctx.prisma, ctx.organizationId);
-      if (sub) {
-        assertTagLimit(sub, existing);
-      } else if (existing >= getPlanLimits("STARTER").maxTags) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Maximum ${getPlanLimits("STARTER").maxTags} tags per organization.`,
-        });
-      }
-      const name = input.name.trim();
-      const tagKey = name.toLocaleLowerCase();
-      return ctx.prisma.leadTag.upsert({
-        where: { organizationId_tagKey: { organizationId: ctx.organizationId, tagKey } },
-        create: { name, tagKey, organizationId: ctx.organizationId },
-        update: {},
-        select: { id: true, name: true },
-      });
-    }),
-
-  deleteTag: organizationProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const tag = await ctx.prisma.leadTag.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
-        select: { id: true },
-      });
-      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
-      await ctx.prisma.leadTag.delete({ where: { id: tag.id } });
-      return { ok: true };
-    }),
-
-  addTagToLead: organizationProcedure
-    .input(z.object({ leadId: z.string(), tagId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
-      const [lead, tag] = await Promise.all([
-        ctx.prisma.lead.findFirst({
-          where: { id: input.leadId, ...leadWhereFromScope(scope) },
-          select: { id: true },
-        }),
-        ctx.prisma.leadTag.findFirst({
-          where: { id: input.tagId, organizationId: ctx.organizationId },
-          select: { id: true },
-        }),
-      ]);
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
-
-      await ctx.prisma.lead.update({
-        where: { id: lead.id },
-        data: { tags: { connect: { id: tag.id } } },
-      });
-      return { ok: true };
-    }),
-
-  removeTagFromLead: organizationProcedure
-    .input(z.object({ leadId: z.string(), tagId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-
-      await ctx.prisma.lead.update({
-        where: { id: lead.id },
-        data: { tags: { disconnect: { id: input.tagId } } },
-      });
-      return { ok: true };
-    }),
-
-  bulkAddTag: organizationProcedure
-    .input(z.object({ leadIds: z.array(z.string()).min(1).max(500), tagId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const userId = ctx.session.user.id;
-      const uniqueIds = [...new Set(input.leadIds)];
-
-      const tag = await ctx.prisma.leadTag.findFirst({
-        where: { id: input.tagId, organizationId: ctx.organizationId },
-        select: { id: true },
-      });
-      if (!tag) throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found." });
-
-      const scope = await getLeadScope(ctx, userId, role);
-      const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
-        select: { id: true },
-      });
-      if (leads.length !== uniqueIds.length) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "One or more leads are outside your scope." });
-      }
-
-      await ctx.prisma.leadTag.update({
-        where: { id: tag.id },
-        data: { leads: { connect: uniqueIds.map((id) => ({ id })) } },
-      });
-
-      return { count: uniqueIds.length };
-    }),
-
   export: organizationProcedure
     .input(
       z
@@ -1136,11 +893,9 @@ export const leadsRouter = createTRPCRouter({
         .default({}),
     )
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const userId = ctx.session.user.id;
       const search = input.search?.trim();
 
-      const baseScope = await getLeadScope(ctx, userId, role);
+      const baseScope = await getLeadScope(ctx);
       const where: Record<string, unknown> = {
         ...leadWhereFromScope(baseScope),
         ...searchWhere(search),
@@ -1209,13 +964,11 @@ export const leadsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
       const userId = ctx.session.user.id;
       const uniqueIds = [...new Set(input.leadIds)];
 
-      const scope = await getLeadScope(ctx, userId, role);
       const leads = await ctx.prisma.lead.findMany({
-        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...(await scopedLeadWhere(ctx)) },
         select: { id: true },
       });
       if (leads.length !== uniqueIds.length) {
@@ -1245,10 +998,8 @@ export const leadsRouter = createTRPCRouter({
   qualify: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
 
@@ -1273,10 +1024,8 @@ export const leadsRouter = createTRPCRouter({
   generateQualification: organizationProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const role = ctx.session.user.role;
-      const scope = await getLeadScope(ctx, ctx.session.user.id, role);
       const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.id, ...leadWhereFromScope(scope) },
+        where: { id: input.id, ...(await scopedLeadWhere(ctx)) },
         include: includeAssignee,
       });
       if (!lead) throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
@@ -1345,17 +1094,8 @@ export const leadsRouter = createTRPCRouter({
       return { lead: updated, summary };
     }),
 
-  getLeadTags: organizationProcedure
-    .input(z.object({ leadId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...leadWhereFromScope(scope) },
-        select: { tags: { select: { id: true, name: true } } },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      return lead.tags;
-    }),
+  ...leadNotesProcedures,
+  ...leadTagsProcedures,
 
   customOutcomes: customOutcomesRouter,
 });

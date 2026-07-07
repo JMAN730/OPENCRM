@@ -2,7 +2,7 @@ import path from "path";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
-import { getLeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { scopedLeadWhere } from "@/server/teams/scope";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { logActivity } from "@/server/activity";
 import { scraperConfig } from "@/server/scraper/config";
@@ -21,6 +21,7 @@ import {
   NOMINATIM_DELAY_MS,
 } from "./osm";
 import { writeEnrichInput, type EnrichTarget } from "./enrich";
+import { keys } from "@/lib/cacheKeys";
 
 // Overpass public instances struggle with country-sized queries; roughly a
 // metro area at zoom ~11.
@@ -56,11 +57,10 @@ export const mapRouter = createTRPCRouter({
   leadsInBounds: organizationProcedure
     .input(z.object({ bounds: boundsSchema }))
     .query(async ({ ctx, input }) => {
-      const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
       const { bounds } = input;
       return ctx.prisma.lead.findMany({
         where: {
-          ...leadWhereFromScope(scope),
+          ...(await scopedLeadWhere(ctx)),
           latitude: { gte: bounds.south, lte: bounds.north },
           longitude: { gte: bounds.west, lte: bounds.east },
         },
@@ -81,9 +81,8 @@ export const mapRouter = createTRPCRouter({
     }),
 
   missingCoordinatesCount: organizationProcedure.query(async ({ ctx }) => {
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
     const count = await ctx.prisma.lead.count({
-      where: { ...leadWhereFromScope(scope), latitude: null },
+      where: { ...(await scopedLeadWhere(ctx)), latitude: null },
     });
     return { count };
   }),
@@ -96,13 +95,12 @@ export const mapRouter = createTRPCRouter({
    */
   geocodeMissing: organizationProcedure.mutation(async ({ ctx }) => {
     await assertWithinRateLimit({
-      key: `map:geocode:${ctx.organizationId}`,
+      key: keys.mapGeocodeBucket(ctx.organizationId),
       limit: 6,
       windowSeconds: 60,
     });
 
-    const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
-    const scopeWhere = leadWhereFromScope(scope);
+    const scopeWhere = await scopedLeadWhere(ctx);
 
     // Pass 1: parse coordinates straight out of stored Google Maps URLs.
     const withMapsUrl = await ctx.prisma.lead.findMany({
@@ -181,7 +179,7 @@ export const mapRouter = createTRPCRouter({
         });
       }
       await assertWithinRateLimit({
-        key: `map:discover:${ctx.organizationId}`,
+        key: keys.mapDiscoverBucket(ctx.organizationId),
         limit: 30,
         windowSeconds: 60,
       });
@@ -254,9 +252,8 @@ export const mapRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
 
       // Existing leads must be inside the caller's scope (same rule as bulkDelete).
-      const scope = await getLeadScope(ctx, userId, ctx.session.user.role);
       const scopedLeads = await ctx.prisma.lead.findMany({
-        where: { id: { in: uniqueIds }, ...leadWhereFromScope(scope) },
+        where: { id: { in: uniqueIds }, ...(await scopedLeadWhere(ctx)) },
         select: { id: true, company: true, website: true, mapsUrl: true, phone: true },
       });
       if (scopedLeads.length !== uniqueIds.length) {

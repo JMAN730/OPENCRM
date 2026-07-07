@@ -4,6 +4,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { getLeadScope } from "@/server/teams/scope";
 import { buildAIContext, formatAIContext, SALES_MANAGER_SYSTEM_PROMPT } from "./context";
+import { keys } from "@/lib/cacheKeys";
 
 function client() {
   return new OpenAI({
@@ -29,10 +30,9 @@ export const aiRouter = createTRPCRouter({
     .output(z.object({ content: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const role = (ctx.session.user as { role: string }).role;
 
       await assertWithinRateLimit({
-        key: `ai:chat:${userId}`,
+        key: keys.aiChatBucket(userId),
         limit: 30,
         windowSeconds: 60,
         message: "Too many AI requests. Try again in a moment.",
@@ -48,7 +48,7 @@ export const aiRouter = createTRPCRouter({
 
       // Build structured sales analytics for the sales-manager system prompt,
       // scoped to the leads/reps this caller is permitted to see.
-      const scope = await getLeadScope(ctx, userId, role);
+      const scope = await getLeadScope(ctx);
       const context = await buildAIContext(ctx.prisma, scope);
       const systemPrompt = `${SALES_MANAGER_SYSTEM_PROMPT}\n\n${formatAIContext(context)}`;
 
