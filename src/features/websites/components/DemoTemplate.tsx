@@ -1,15 +1,6 @@
-import type { DemoContent } from "@/lib/ai";
-import { buildDemoView, type DemoView } from "@/features/websites/demoView";
+import { buildDemoView, type DemoView, type DemoViewInput } from "@/features/websites/demoView";
 
-interface DemoTemplateProps {
-  businessName: string;
-  phone: string | null;
-  city: string | null;
-  category: string | null;
-  content: DemoContent;
-  photos?: string[];
-  googleMapsUrl?: string;
-}
+type DemoTemplateProps = DemoViewInput;
 
 const heroImage = "/demo-template/workshop.jpg";
 const shopImage = "/demo-template/shop-exterior.jpg";
@@ -112,7 +103,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
                   href="#services"
                   className="rounded-full border border-white/15 px-6 py-3 text-sm font-bold uppercase tracking-wide text-[#f4efe6] hover:bg-white/10"
                 >
-                  View services
+                  {view.viewServicesLabel}
                 </a>
               </div>
             </div>
@@ -129,7 +120,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
               body={view.sections.services.body}
             />
             <div className="grid overflow-hidden border border-black/10 bg-black/10 md:grid-cols-2 lg:grid-cols-3">
-              {view.services.map((service, index) => (
+              {view.marqueeServices.map((service, index) => (
                 <article
                   key={service}
                   className="min-h-56 bg-[#faf7f0] p-7 transition hover:bg-[#0b0d14] hover:text-[#f4efe6]"
@@ -158,7 +149,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photos[0] ?? heroImage} alt="" className="h-full w-full object-cover" />
               <span className="absolute bottom-6 left-6 rounded bg-[#f4efe6] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#0b0d14]">
-                Inside the shop
+                {view.whyPhotoCaption}
               </span>
             </div>
             <div>
@@ -166,11 +157,15 @@ export function DemoTemplate(props: DemoTemplateProps) {
                 {view.sections.why.kicker}
               </p>
               <h2 className="mt-4 text-5xl font-black uppercase italic leading-[.88] [font-family:'Arial_Narrow',Impact,sans-serif] md:text-7xl">
-                Big-shop work.
-                <br />
-                <span className="text-[#b5172a]">Neighborhood</span>
-                <br />
-                honesty.
+                {view.sections.why.titleLines.map((line, index) => (
+                  <span key={line} className="block">
+                    {index === view.sections.why.accentLine ? (
+                      <span className="text-[#b5172a]">{line}</span>
+                    ) : (
+                      line
+                    )}
+                  </span>
+                ))}
               </h2>
               <p className="mt-7 max-w-xl text-lg leading-8 text-[#f4efe6]/75">
                 {view.sections.why.body}
@@ -195,7 +190,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
             <div className="grid auto-rows-[88px] grid-cols-6 gap-4 lg:grid-cols-12">
               <GalleryTile src={photos[0] ?? shopImage} label="The Shop" index="01/06" className="col-span-6 row-span-5 lg:col-span-7" />
               <GalleryTile src={photos[1] ?? heroImage} label="Lift Bay" index="02/06" className="col-span-6 row-span-3 lg:col-span-5" />
-              {view.services.slice(0, 4).map((service, index) => (
+              {view.marqueeServices.slice(0, 4).map((service, index) => (
                 <GalleryTile
                   key={service}
                   label={service}
@@ -221,12 +216,12 @@ export function DemoTemplate(props: DemoTemplateProps) {
                 </div>
                 <div className="flex items-end gap-4">
                   <span className="text-8xl font-black italic leading-[.8] [font-family:'Arial_Narrow',Impact,sans-serif]">
-                    5.0
+                    {view.reviewsBadge.score}
                   </span>
                   <span className="pb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#6b7280]">
-                    ★★★★★
+                    {view.reviewsBadge.stars}
                     <br />
-                    Demo reviews
+                    {view.reviewsBadge.note}
                   </span>
                 </div>
               </div>
@@ -247,7 +242,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
                       <span>
                         <span className="block text-sm font-bold">{testimonial.author}</span>
                         <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6b7280]">
-                          Local customer
+                          {view.reviewerLabel}
                         </span>
                       </span>
                     </figcaption>

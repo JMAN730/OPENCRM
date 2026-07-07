@@ -37,6 +37,12 @@ describe("buildDemoView", () => {
     expect(view.serviceArea).toBe("Local area");
   });
 
+  it("treats empty-string category/city like missing (scraper imports)", () => {
+    const view = buildDemoView({ ...base, category: "", city: "" });
+    expect(view.specialty).toBe("Local service");
+    expect(view.serviceArea).toBe("Local area");
+  });
+
   it("splits long headlines into at most four two-word lines", () => {
     const view = buildDemoView({
       ...base,

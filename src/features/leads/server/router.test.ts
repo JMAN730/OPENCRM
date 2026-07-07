@@ -865,6 +865,63 @@ describe("leadsRouter", () => {
     });
   });
 
+  describe("lead notes", () => {
+    it("createNote checks lead scope, writes the note, and logs activity", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      prisma.note.create.mockResolvedValue({ id: "note-1", content: "hi" });
+      prisma.activity.create.mockResolvedValue({ id: "act-1" });
+
+      const result = await caller.leads.createNote({ leadId: "lead-1", content: "hi" });
+
+      expect(result).toEqual({ id: "note-1", content: "hi" });
+      expect(prisma.lead.findFirst.mock.calls[0][0].where.organizationId).toBe("org-1");
+      expect(prisma.note.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ leadId: "lead-1", organizationId: "org-1" }),
+      });
+      expect(prisma.activity.create).toHaveBeenCalled();
+    });
+
+    it("createNote rejects a lead outside the caller's scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.leads.createNote({ leadId: "lead-x", content: "hi" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(prisma.note.create).not.toHaveBeenCalled();
+    });
+
+    it("deleteNote forbids a plain USER deleting someone else's note", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { id: "user-2", role: "USER" },
+      });
+      userPrisma.note.findFirst.mockResolvedValue({
+        id: "note-1",
+        userId: "someone-else",
+        leadId: "lead-1",
+      });
+
+      await expect(userCaller.leads.deleteNote({ noteId: "note-1" })).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      expect(userPrisma.note.delete).not.toHaveBeenCalled();
+    });
+
+    it("deleteNote lets the author delete and logs with the org id", async () => {
+      prisma.note.findFirst.mockResolvedValue({ id: "note-1", userId: "user-1", leadId: "lead-1" });
+      prisma.note.delete.mockResolvedValue({ id: "note-1" });
+      prisma.activity.create.mockResolvedValue({ id: "act-1" });
+
+      await expect(caller.leads.deleteNote({ noteId: "note-1" })).resolves.toEqual({
+        success: true,
+      });
+      expect(prisma.activity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ organizationId: "org-1" }),
+        }),
+      );
+    });
+  });
+
   describe("lead tags", () => {
     it("upserts tags by normalized key to prevent case-insensitive duplicates", async () => {
       prisma.leadTag.upsert.mockResolvedValue({ id: "tag-1", name: "Priority" });

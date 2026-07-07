@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ZodError } from "zod";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { invalidateOrgDashboards } from "@/lib/cache";
 
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   // Primary: try getServerSession (uses next/headers cookies() under the hood).
@@ -133,7 +134,6 @@ const bustDashboardsAfterMutation = enforceActiveSubscription.use(
   async ({ ctx, next, type }) => {
     const result = await next();
     if (type === "mutation" && result.ok) {
-      const { invalidateOrgDashboards } = await import("@/lib/cache");
       await invalidateOrgDashboards(ctx.organizationId);
     }
     return result;

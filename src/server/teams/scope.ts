@@ -120,7 +120,7 @@ export function leadWhereFromScope(scope: LeadScope) {
  *  - Team leader: tasks owned by or assigned to any team member (plus their own).
  *  - Everyone else: only tasks they own or are assigned.
  */
-export function taskWhereFromScope(scope: LeadScope) {
+function taskWhereFromScope(scope: LeadScope) {
   if (scope.kind === "all") {
     return { organizationId: scope.organizationId };
   }

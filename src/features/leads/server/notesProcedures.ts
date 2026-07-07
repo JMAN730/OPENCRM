@@ -78,6 +78,7 @@ export const leadNotesProcedures = {
         userId: callerId,
         type: "NOTE_DELETED",
         description: "Deleted a note",
+        organizationId: ctx.organizationId,
       });
       return { success: true };
     }),

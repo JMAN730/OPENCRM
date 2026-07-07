@@ -1,4 +1,4 @@
-# OpenCRM — Complete Pre-Scale Technical Audit
+# ClientCore — Complete Pre-Scale Technical Audit
 
 Date: 2026-05-16 | Auditor: Senior Staff Engineer / Principal Architect
 Scope: Full production codebase — jman730/opencrm
@@ -70,7 +70,7 @@ Audit corrections (items reported as issues but already correct in codebase):
 
 What the App Does
 -----------------
-OpenCRM is a multi-tenant SaaS CRM targeting high-volume outbound sales teams —
+ClientCore is a multi-tenant SaaS CRM targeting high-volume outbound sales teams —
 particularly home-service businesses (landscaping, power washing, mobile mechanics,
 etc.). Core value proposition: scrape Google Maps leads → work them in a
 dialer-style pipeline → track activity across a sales team.

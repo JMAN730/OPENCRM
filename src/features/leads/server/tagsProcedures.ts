@@ -61,9 +61,10 @@ export const leadTagsProcedures = {
   addTagToLead: organizationProcedure
     .input(z.object({ leadId: z.string(), tagId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const scopedWhere = await scopedLeadWhere(ctx);
       const [lead, tag] = await Promise.all([
         ctx.prisma.lead.findFirst({
-          where: { id: input.leadId, ...(await scopedLeadWhere(ctx)) },
+          where: { id: input.leadId, ...scopedWhere },
           select: { id: true },
         }),
         ctx.prisma.leadTag.findFirst({

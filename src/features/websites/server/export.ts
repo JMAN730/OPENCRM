@@ -104,7 +104,7 @@ export function renderDemoHtml(site: DemoExportSite): string {
             <p><strong>${text(businessName)}</strong> ${text(view.subheadline)}</p>
             <div class="actions">
               <a class="pill red" href="${attr(telHref)}">${text(view.cta)}</a>
-              <a class="pill ghost" href="#services">View services</a>
+              <a class="pill ghost" href="#services">${text(view.viewServicesLabel)}</a>
             </div>
           </div>
         </div>
@@ -121,10 +121,10 @@ export function renderDemoHtml(site: DemoExportSite): string {
     </section>
 
     <section id="why" class="section dark split">
-      <div class="photo-card"><img src="${shopImage}" alt=""><span>Inside the shop</span></div>
+      <div class="photo-card"><img src="${shopImage}" alt=""><span>${text(view.whyPhotoCaption)}</span></div>
       <div>
         <p class="kicker">${text(view.sections.why.kicker)}</p>
-        <h2>Big-shop work.<br><span>Neighborhood</span><br>honesty.</h2>
+        <h2>${view.sections.why.titleLines.map((line, index) => index === view.sections.why.accentLine ? `<span>${text(line)}</span>` : text(line)).join("<br>")}</h2>
         <p class="muted">${text(view.sections.why.body)}</p>
         <div class="stats">
           ${view.stats.map((item) => stat(item.value, item.label)).join("\n          ")}
@@ -142,8 +142,8 @@ export function renderDemoHtml(site: DemoExportSite): string {
     </section>
 
     ${view.testimonials.length > 0 ? `<section id="reviews" class="section reviews">
-      <div class="review-head"><div><p class="kicker">${text(view.sections.reviews.kicker)}</p><h2>${text(view.sections.reviews.title)}</h2></div><strong>5.0 <small>★★★★★<br>Demo reviews</small></strong></div>
-      <div class="review-grid">${view.testimonials.map((testimonial) => `<figure><p>★★★★★</p><blockquote>&ldquo;${text(testimonial.quote)}&rdquo;</blockquote><figcaption>${text(testimonial.author)}<span>Local customer</span></figcaption></figure>`).join("")}</div>
+      <div class="review-head"><div><p class="kicker">${text(view.sections.reviews.kicker)}</p><h2>${text(view.sections.reviews.title)}</h2></div><strong>${text(view.reviewsBadge.score)} <small>${text(view.reviewsBadge.stars)}<br>${text(view.reviewsBadge.note)}</small></strong></div>
+      <div class="review-grid">${view.testimonials.map((testimonial) => `<figure><p>★★★★★</p><blockquote>&ldquo;${text(testimonial.quote)}&rdquo;</blockquote><figcaption>${text(testimonial.author)}<span>${text(view.reviewerLabel)}</span></figcaption></figure>`).join("")}</div>
     </section>` : ""}
 
     <section id="contact" class="section">

@@ -21,7 +21,6 @@ export type DemoViewInput = {
 
 export type DemoView = {
   businessName: string;
-  phone: string | null;
   /** `tel:` href, or null when the business has no phone. */
   telHref: string | null;
   specialty: string;
@@ -44,12 +43,22 @@ export type DemoView = {
   heroMeta: { label: string; value: string }[];
   sections: {
     services: SectionHead;
-    why: { kicker: string; body: string };
+    why: {
+      kicker: string;
+      /** Display lines of the why-us headline; `accent` indexes the highlighted line. */
+      titleLines: string[];
+      accentLine: number;
+      body: string;
+    };
     gallery: SectionHead;
     reviews: { kicker: string; title: string };
     contact: SectionHead;
   };
   serviceCardBlurb: string;
+  viewServicesLabel: string;
+  whyPhotoCaption: string;
+  reviewsBadge: { score: string; stars: string; note: string };
+  reviewerLabel: string;
   stats: { value: string; label: string }[];
   testimonials: DemoContent["testimonials"];
   contactBlocks: { label: string; value: string; sub: string }[];
@@ -68,8 +77,8 @@ type SectionHead = { kicker: string; title: string; body: string };
 export function buildDemoView(input: DemoViewInput): DemoView {
   const { content } = input;
   const businessName = input.businessName || "Demo Site";
-  const specialty = input.category ?? "Local service";
-  const serviceArea = input.city ?? "Local area";
+  const specialty = input.category || "Local service";
+  const serviceArea = input.city || "Local area";
   const phone = input.phone;
   const photos = (input.photos ?? content.photos ?? []).filter(Boolean);
   const googleMapsUrl = input.googleMapsUrl ?? content.googleMapsUrl;
@@ -78,7 +87,6 @@ export function buildDemoView(input: DemoViewInput): DemoView {
 
   return {
     businessName,
-    phone,
     telHref: phone ? `tel:${phone.replace(/[^0-9+]/g, "")}` : null,
     specialty,
     serviceArea,
@@ -100,6 +108,8 @@ export function buildDemoView(input: DemoViewInput): DemoView {
       services: { kicker: "/ 01 - SERVICES", title: "What we fix.", body: content.city_body_copy },
       why: {
         kicker: "/ 02 - WHY US",
+        titleLines: ["Big-shop work.", "Neighborhood", "honesty."],
+        accentLine: 1,
         body: `${content.local_seo_headline} ${content.city_body_copy}`,
       },
       gallery: {
@@ -112,6 +122,10 @@ export function buildDemoView(input: DemoViewInput): DemoView {
     },
     serviceCardBlurb:
       "Straightforward scheduling, clear communication, and work handled by a local team.",
+    viewServicesLabel: "View services",
+    whyPhotoCaption: "Inside the shop",
+    reviewsBadge: { score: "5.0", stars: "★★★★★", note: "Demo reviews" },
+    reviewerLabel: "Local customer",
     stats: [
       { value: "Local", label: "Service area" },
       { value: "Clear", label: "Communication" },
@@ -130,7 +144,7 @@ export function buildDemoView(input: DemoViewInput): DemoView {
       shopLinks: ["About", "Gallery", "Reviews", "Contact"],
       contactValue: phone ?? content.cta,
       attribution: "Demo website preview",
-      stamp: `${new Date().getFullYear()} · OpenCRM`,
+      stamp: `${new Date().getFullYear()} · ClientCore`,
     },
   };
 }

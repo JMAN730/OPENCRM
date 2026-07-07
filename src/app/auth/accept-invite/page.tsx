@@ -163,7 +163,7 @@ function MessageCard({
 
 export default function AcceptInvitePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<AuthShell />}>
       <AcceptInviteForm />
     </Suspense>
   );

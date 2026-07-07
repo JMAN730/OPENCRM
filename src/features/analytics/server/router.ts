@@ -131,7 +131,6 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   topCallers: organizationProcedure.query(async ({ ctx }) => {
-
     const scope = await getLeadScope(ctx);
     return cached(
       { key: keys.analyticsTopCallers(scopeCacheKey(scope)), ttl: SALES_TTL_SECONDS },
@@ -140,7 +139,6 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   leadQuality: organizationProcedure.query(async ({ ctx }) => {
-
     const scope = await getLeadScope(ctx);
     return cached(
       { key: keys.analyticsLeadQuality(scopeCacheKey(scope)), ttl: SALES_TTL_SECONDS },
@@ -149,7 +147,6 @@ export const analyticsRouter = createTRPCRouter({
   }),
 
   repPerformance: organizationProcedure.query(async ({ ctx }) => {
-
     const scope = await getLeadScope(ctx);
     return cached(
       { key: keys.analyticsRepPerformance(scopeCacheKey(scope)), ttl: SALES_TTL_SECONDS },

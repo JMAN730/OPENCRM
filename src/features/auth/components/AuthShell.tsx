@@ -11,7 +11,7 @@ export function AuthShell({
   children,
   className,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }) {
   return <div className={cn("crm-app crm-auth-shell", className)}>{children}</div>;
