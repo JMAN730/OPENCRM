@@ -162,7 +162,10 @@ export function TeamOverview({
                       <div style={{ fontSize: 13 }}>
                         <strong>{activity.user?.name || activity.user?.email || "Someone"}</strong>{" "}
                         <span style={{ color: "var(--crm-fg-faint)" }}>{verb}</span>{" "}
-                        <Link href="/leads" style={{ color: "var(--crm-fg)" }}>
+                        <Link
+                          href={activity.lead ? `/leads?leadId=${activity.lead.id}` : "/leads"}
+                          style={{ color: "var(--crm-fg)" }}
+                        >
                           {leadLabel}
                         </Link>
                       </div>

@@ -17,6 +17,7 @@ let leadQueryCalls: Array<{ search?: string; limit: number; cursor?: string }> =
 let leadPages: Record<string, { items: Array<Record<string, unknown>>; nextCursor: string | null }> =
   {};
 let searchParamView: string | null = null;
+let searchParamLeadId: string | null = null;
 let leadQueryState = { isLoading: false, isFetching: false };
 let customOutcomesState: Array<{ id: string; label: string }> = [];
 let dueTodayState: { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean } = {
@@ -48,12 +49,14 @@ vi.mock("next/navigation", () => ({
     get: (key: string) => {
       if (key === "new") return searchParamNew;
       if (key === "view") return searchParamView;
+      if (key === "leadId") return searchParamLeadId;
       return null;
     },
     toString: () => {
       const params = new URLSearchParams();
       if (searchParamNew !== null) params.set("new", searchParamNew);
       if (searchParamView !== null) params.set("view", searchParamView);
+      if (searchParamLeadId !== null) params.set("leadId", searchParamLeadId);
       return params.toString();
     },
   }),
@@ -369,6 +372,7 @@ describe("LeadsList", () => {
     vi.clearAllMocks();
     searchParamNew = null;
     searchParamView = null;
+    searchParamLeadId = null;
     leadQueryCalls = [];
     leadQueryState = { isLoading: false, isFetching: false };
     customOutcomesState = [];
@@ -470,6 +474,14 @@ describe("LeadsList", () => {
 
     expect(screen.getByText("Create new lead modal")).toBeInTheDocument();
     expect(mockReplace).toHaveBeenCalledWith("/leads");
+  });
+
+  it("opens the lead details modal from the ?leadId route flag", () => {
+    searchParamLeadId = "lead-1";
+
+    render(<LeadsList />);
+
+    expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
   });
 
   it("preserves the selected layout when clearing the ?new=1 route flag", () => {
