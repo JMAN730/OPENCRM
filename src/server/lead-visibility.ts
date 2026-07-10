@@ -20,7 +20,7 @@ type LeadVisibilityCtx = {
 export async function visibleLeadWhere(
   ctx: LeadVisibilityCtx,
 ): Promise<Prisma.LeadWhereInput> {
-  const scope = await getLeadScope(ctx, ctx.session.user.id, ctx.session.user.role);
+  const scope = await getLeadScope(ctx);
   return leadWhereFromScope(scope);
 }
 
