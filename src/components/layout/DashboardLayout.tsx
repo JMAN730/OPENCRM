@@ -25,7 +25,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       )}
       <div className="crm-main">
         <Header onMenuClick={() => setSidebarOpen((o) => !o)} />
-        <main style={{ flex: 1, overflowY: "auto" }}>
+        <main className="crm-main-scroll">
           {children}
         </main>
       </div>

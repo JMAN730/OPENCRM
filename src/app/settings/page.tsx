@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageShell } from "@/components/layout/PageShell";
 import { useSession, signOut } from "next-auth/react";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -23,11 +24,11 @@ export default function SettingsPage() {
     <Suspense
       fallback={
         <DashboardLayout>
-          <div className="crm-content">
+          <PageShell>
             <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
               Loading settings…
             </div>
-          </div>
+          </PageShell>
         </DashboardLayout>
       }
     >
@@ -146,14 +147,7 @@ function SettingsPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="crm-content">
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">Settings</h1>
-            <div className="crm-page-sub">Profile and organization members</div>
-          </div>
-        </div>
-
+      <PageShell title="Settings" subtitle="Profile and organization members">
         <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 24, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {NAV.map((s) => (
@@ -350,7 +344,7 @@ function SettingsPageContent() {
             )}
           </div>
         </div>
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

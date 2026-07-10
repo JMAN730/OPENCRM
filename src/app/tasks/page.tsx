@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageShell } from "@/components/layout/PageShell";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
@@ -801,22 +802,21 @@ function TasksPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="crm-content">
-        {/* Header */}
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">Tasks</h1>
-            <div className="crm-page-sub">
-              {counts.pending} pending · {counts.overdue > 0 && <span style={{ color: "#ef4444" }}>{counts.overdue} overdue · </span>}{counts.completed} completed
-            </div>
-          </div>
-          <div className="crm-page-head-actions">
-            <button type="button" onClick={() => setCreating(true)} className="crm-btn primary" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Plus size={13} /> New Task
-            </button>
-          </div>
-        </div>
-
+      <PageShell
+        title="Tasks"
+        subtitle={
+          <>
+            {counts.pending} pending ·{" "}
+            {counts.overdue > 0 && <span style={{ color: "#ef4444" }}>{counts.overdue} overdue · </span>}
+            {counts.completed} completed
+          </>
+        }
+        actions={
+          <button type="button" onClick={() => setCreating(true)} className="crm-btn primary" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Plus size={13} /> New Task
+          </button>
+        }
+      >
         {/* Summary cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
           {[
@@ -887,7 +887,7 @@ function TasksPageContent() {
             <CalendarView tasks={tasks} onTaskClick={(t) => setSelectedTask(t)} />
           </div>
         )}
-      </div>
+      </PageShell>
 
       {/* Dialogs */}
       {creating && (
@@ -937,11 +937,11 @@ function TasksPageContent() {
 function TasksPageFallback() {
   return (
     <DashboardLayout>
-      <div className="crm-content">
+      <PageShell>
         <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 13 }}>
           Loading tasks...
         </div>
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

@@ -19,6 +19,7 @@ npm run seed         # Seed the database (npx prisma db seed)
 npm test             # Run all tests once (vitest run)
 npm run test:watch   # Run tests in watch mode
 npm run test:coverage  # Run tests with coverage
+npm run test:e2e     # Playwright browser-flow tests
 npx vitest src/features/leads/components/LeadsList.test.tsx  # Run a single test file
 
 npm run tauri:dev    # Tauri desktop wrapper (WIP — see convention #9)
@@ -82,6 +83,22 @@ SENDER_PHYSICAL_ADDRESS="123 Main St, City, ST 00000"  # required for CAN-SPAM c
 
 # Optional – Cron auth (shared secret for /api/cron/* endpoints)
 CRON_SECRET="..."
+OUTREACH_BATCH_SIZE="5"                # max leads processed per /api/cron/outreach tick
+
+# Optional – Stripe billing (subscriptions + Settings → Billing tab)
+STRIPE_SECRET_KEY="..."
+STRIPE_WEBHOOK_SECRET="..."          # svix signing secret for /api/webhooks/stripe
+STRIPE_PRICE_STARTER="price_..."
+STRIPE_PRICE_PRO="price_..."
+STRIPE_PRICE_BUSINESS="price_..."
+
+# Optional – Voice call trainer (ElevenLabs Conversational AI)
+ELEVENLABS_API_KEY="..."
+ELEVENLABS_AGENT_ID="agent_..."
+
+# Optional – Demo site photos (Google Places → Pexels fallback)
+GOOGLE_PLACES_API_KEY="..."
+PEXELS_API_KEY="..."
 
 # Optional – Twilio (browser dialer)
 TWILIO_ACCOUNT_SID="..."
@@ -109,7 +126,7 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 - **Procedures**:
   - `publicProcedure` — unauthenticated (auth endpoints only)
   - `protectedProcedure` — throws `UNAUTHORIZED` if no valid session
-  - `organizationProcedure` — extends `protectedProcedure`; additionally throws `UNAUTHORIZED` if `organizationId` is missing from the session
+  - `organizationProcedure` — extends `protectedProcedure`; additionally throws `UNAUTHORIZED` if `organizationId` is missing from the session. On **mutations** (except `billing.*`), auto-provisions a 14-day STARTER trial if needed and enforces an active subscription via `assertSubscriptionActiveForOrg`.
 - **Root router** (`src/server/api/root.ts`): merges all feature routers.
 - **Client** (`src/app/_trpc/client.ts`): typed `trpc` hook object, imported in any client component.
 - **Provider** (`src/app/_trpc/Provider.tsx` + `src/components/Providers.tsx`): wraps the app in `SessionProvider` → `TRPCProvider` → `QueryClientProvider`.
@@ -137,6 +154,8 @@ appRouter = {
   analytics:        analyticsRouter,        // analytics aggregations for /analytics
   outreach:         outreachRouter,         // automated outreach queue (cron worker + review/bulk-send)
   map:              mapRouter,              // lead map (OSM viewport queries, discovery, enrichment)
+  trainer:          trainerRouter,          // voice call trainer (ElevenLabs personas + session scoring)
+  billing:          billingRouter,          // Stripe subscriptions + plan limits
 }
 ```
 
@@ -237,11 +256,13 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Pipeline | `/pipeline` | `pipeline` | pipeline board (stages + drag) | Implemented |
 | Analytics | `/analytics` | `analytics` | analytics dashboards | Implemented |
 | Emails | (in lead modal) | `emails` | `EmailDraftPanel` (CAN-SPAM outreach + tracking) | Implemented |
-| Scripts | `/dialer`, lead modal | `scripts` | `ScriptsPanel` | Implemented |
+| Scripts | `/scripts`, `/dialer`, lead modal | `scripts` | `ScriptsPanel` | Implemented |
 | AI | (in lead modal) | `ai` | lead qualification + email copy | Implemented |
-| Settings | `/settings` | `auth.updateProfile`, `auth.deleteAccount`, `teams.inviteByEmail`, `leads.*Tag` | Profile + Members + Tags tabs | Implemented |
+| Settings | `/settings`, `/settings/scoring` | `auth.*`, `teams.*`, `leads.*Tag`, `billing.*`, `scoring.*` | Profile + Members + Tags + Billing tabs; scoring rules page | Implemented |
 | Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
 | Map | `/map` | `map` | `LeadMap` (OSM lead map: discover businesses, select pins, enrich contact details) | Implemented |
+| Trainer | `/trainer` | `trainer` | voice call practice with ElevenLabs personas + AI scorecards | Implemented |
+| Calendar | `/calendar` | `tasks` | task calendar view (standalone page) | Implemented |
 
 ### Key tRPC procedures per namespace
 
@@ -257,6 +278,9 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
 | `websites` | `getForLead`, `generate`, `update`, `delete` |
 | `outreach` | `stats`, `list`, `retry`, `bulkSend` |
+| `map` | `discoveryCategories`, `leadsInBounds`, `missingCoordinatesCount`, `geocodeMissing`, `discoverBusinesses`, `enrich`, `enrichmentStatus` |
+| `trainer` | `listPersonas`, `createPersona`, `updatePersona`, `deletePersona`, `startSession`, `scoreSession`, `getSessions`, `pickableLeads` |
+| `billing` | `getSubscription`, `createCheckoutSession`, `createPortalSession` |
 
 ---
 
@@ -279,6 +303,8 @@ Organization → Pipeline → PipelineStage
 Organization → ScraperJob
 Organization → LeadTag
 Organization → PasswordResetToken
+Organization → OrganizationSubscription
+Organization → TrainingPersona → TrainingSession
 ```
 
 NextAuth tables (`Account`, `Session`, `VerificationToken`) also live in the schema but are managed by `@auth/prisma-adapter` — generally don't touch them.
@@ -292,8 +318,8 @@ NextAuth tables (`Account`, `Session`, `VerificationToken`) also live in the sch
 | `CallStatus` | `BUSY`, `NO_ANSWER`, `CONNECTED`, `FAILED`, `CANCELED` |
 | `CallOutcome` | `NOT_CONTACTED`, `ANSWERED`, `HUNG_UP`, `NO_ANSWER`, `AI_VOICEMAIL` (denormalized onto `Lead`) |
 | `ScraperJobStatus` | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` |
-
-`Pipeline` / `PipelineStage` exist in the schema but are not yet surfaced in the UI.
+| `PlanTier` | `STARTER`, `PRO`, `BUSINESS` |
+| `SubscriptionStatus` | `NONE`, `TRIALING`, `ACTIVE`, `PAST_DUE`, `CANCELED`, `UNPAID` |
 
 ### Key indexes
 
@@ -312,7 +338,7 @@ Composite indexes added for common query patterns:
 The lead scraper (`/scraper`) generates leads from Google Maps.
 
 - **Backend**: `src/server/scraper/` — `runner.ts` spawns `scraper.py` as a child process, buffers logs, tracks job state in-memory.
-- **Config** (`src/server/scraper/config.ts`): categories (Mobile Mechanics, Power washing, Landscaping, etc.), max limits (50 locations, 200 records, 4 concurrency), paths via env vars.
+- **Config** (`src/server/scraper/config.ts`): categories (Mobile Mechanics, Power washing, Landscaping, etc.), server max limits (50 locations, 200 records, 4 concurrency), paths via env vars. Per-org caps are enforced by plan tier via `clampScraperInput()` in `src/features/billing/server/enforcement.ts` (STARTER: 10/50, PRO/BUSINESS: 50/200).
 - **Output**: CSV files written to `scraper-output/{jobId}/`.
 - **Import**: `src/server/scraper/importer.ts` parses CSV (PapaParse), deduplicates by `(company, normalized_phone)`, and bulk-inserts leads.
 - **Jobs**: persisted in `ScraperJob` DB model; active job registry is in-memory (server restart clears it). `runner.ts` uses a `globalThis`-based registry to survive Next.js hot-reload.
@@ -331,6 +357,30 @@ Scraper import → `OutreachJob` queue → cron worker → review queue at `/out
 - **Shared services**: `src/features/websites/server/service.ts` (`generateWebsiteForLead`) and `src/features/emails/server/service.ts` (`generateDraftForLead`, `sendDraft`, `OutreachEmailError`) are the single code path used by both the tRPC routers and the worker.
 - **Photos**: Google Places photos → Pexels stock fallback (`src/lib/stockPhotos.ts`, `PEXELS_API_KEY`) → Maps-embed fallback.
 - **Email capture**: `scraper.py` extracts emails from the Maps panel, the homepage body (free — already fetched during the website check), and `/contact`-style pages; `importer.ts` sanitizes and maps the CSV `Email` column onto `Lead.email`.
+
+---
+
+## Billing and plan enforcement
+
+Stripe subscriptions gate org-scoped mutations and resource limits.
+
+- **Router** (`src/features/billing/server/router.ts`): `getSubscription`, `createCheckoutSession` (admin), `createPortalSession` (admin). UI lives in Settings → Billing tab.
+- **Webhook** (`POST /api/webhooks/stripe`): syncs `OrganizationSubscription` from Stripe events; idempotent via `StripeWebhookEvent`.
+- **Plans** (`src/features/billing/server/plans.ts`): `STARTER` / `PRO` / `BUSINESS` tiers with seat, tag, and scraper limits. New orgs get a 14-day STARTER trial (`TRIAL_DAYS = 14`).
+- **Middleware** (`src/server/trpc.ts`): `organizationProcedure` calls `assertSubscriptionActiveForOrg` on every mutation except `billing.*`.
+- **Per-feature limits** (`src/features/billing/server/enforcement.ts`): seat invites (`assertSeatAvailable`), tag CRUD (`assertTagLimit`), scraper jobs (`clampScraperInput`). Used in `teams`, `leads`, and `scraper` routers.
+- **Graceful degradation**: when Stripe env vars are unset, billing UI shows "not configured" but the app still runs on trial/default limits.
+
+---
+
+## Voice call trainer
+
+Practice calls against AI personas powered by ElevenLabs Conversational AI.
+
+- **Router** (`src/features/trainer/server/router.ts`): persona CRUD (admin), `startSession` (signed ElevenLabs URL + lead context), `scoreSession` (AI scorecard, rate-limited), session history.
+- **Lead context** (`src/features/trainer/leadContext.ts`): interpolates lead fields into persona prompts.
+- **Scoring** (`src/features/trainer/server/scoring.ts`): post-call scorecard generation via DeepSeek/heuristics.
+- **Requires** `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` for live sessions.
 
 ---
 
@@ -373,12 +423,21 @@ Test files live in two patterns:
 | `src/features/scraper/server/router.test.ts` | Scraper job procedures |
 | `src/features/dashboard/server/router.test.ts` | KPI stats + caching |
 | `src/features/teams/server/router.test.ts` | Team CRUD + membership |
+| `src/features/billing/server/router.test.ts` | Billing checkout + subscription queries |
+| `src/features/billing/server/enforcement.test.ts` | Plan limits + subscription gating |
+| `src/features/billing/server/webhook.test.ts` | Stripe webhook sync |
+| `src/features/trainer/server/router.test.ts` | Trainer personas + sessions |
+| `src/features/map/server/router.test.ts` | Map discovery + enrichment |
+| `src/features/pipeline/server/router.test.ts` | Pipeline board procedures |
+| `src/features/outreach/server/router.test.ts` | Outreach queue procedures |
+| `src/features/analytics/server/router.test.ts` | Analytics aggregations |
 | `src/features/leads/components/LeadsList.test.tsx` | LeadsList component |
-| `src/features/leads/components/LeadDetailsModal.test.tsx` | LeadDetailsModal component |
 | `src/features/calls/components/Dialer.test.tsx` | Dialer component |
 | `src/features/tasks/components/TasksList.test.tsx` | TasksList component |
 | `src/app/auth/signin/__tests__/page.test.tsx` | Sign-in page |
 | `src/proxy.test.ts` | Auth proxy boundary |
+
+Every feature router under `src/features/*/server/` has a co-located `router.test.ts`; see `src/**/*.test.{ts,tsx}` for the full list (~65 files).
 
 Coverage thresholds (vitest.config.ts): 60% lines/functions, 50% branches for routers and scraper utilities.
 
@@ -467,3 +526,20 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 13. **Rate limiting**: apply `assertWithinRateLimit()` to any unauthenticated or sensitive mutation (especially auth flows).
 14. **Activity logging**: call `logActivity()` from `src/server/activity.ts` for mutations that affect lead state — keeps the audit trail complete.
 15. **Redis is optional**: all Redis operations must fail open. Use the safe helpers in `src/lib/redis.ts` (`safeGet`, `safeSetEx`, `safeDel`) rather than direct ioredis calls that throw.
+16. **Plan limits**: when adding org-scoped resources (seats, tags, scraper jobs), use helpers from `src/features/billing/server/enforcement.ts`. New mutations on `organizationProcedure` are automatically subscription-gated unless they live under `billing.*`.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `JMAN730/OPENCRM` via the `gh` CLI; external PRs are a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage roles use default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

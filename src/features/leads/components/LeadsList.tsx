@@ -14,6 +14,7 @@ import { LeadModal } from "./lead-list/LeadModal";
 import { LeadsFocusHero } from "./lead-list/LeadsFocusHero";
 import { LeadsManagementBar } from "./lead-list/LeadsManagementBar";
 import { LeadsTable } from "./lead-list/LeadsTable";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   buildFocusSpotlightLeads,
   filterLeadByQuickFilter,
@@ -548,6 +549,29 @@ export function LeadsList() {
     ? "Loading your leads…"
     : `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
 
+  const viewToggle = (
+    <div
+      role="group"
+      aria-label="Lead layout"
+      style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}
+    >
+      <button
+        className="crm-chip"
+        aria-pressed={viewMode === "focus"}
+        onClick={() => replaceLeadsRoute({ view: null })}
+      >
+        Focus view
+      </button>
+      <button
+        className="crm-chip"
+        aria-pressed={viewMode === "classic"}
+        onClick={() => replaceLeadsRoute({ view: "classic" })}
+      >
+        Classic view
+      </button>
+    </div>
+  );
+
   return (
     <>
       {showAdd ? (
@@ -567,33 +591,23 @@ export function LeadsList() {
         />
       ) : null}
 
-      <div className="crm-content">
-        <div
-          className="crm-page-head-actions"
-          style={{ justifyContent: "flex-end", marginBottom: 12 }}
-        >
-          <div
-            role="group"
-            aria-label="Lead layout"
-            style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}
-          >
-            <button
-              className="crm-chip"
-              aria-pressed={viewMode === "focus"}
-              onClick={() => replaceLeadsRoute({ view: null })}
-            >
-              Focus view
-            </button>
-            <button
-              className="crm-chip"
-              aria-pressed={viewMode === "classic"}
-              onClick={() => replaceLeadsRoute({ view: "classic" })}
-            >
-              Classic view
-            </button>
-          </div>
-        </div>
-
+      <PageShell
+        title={viewMode === "classic" ? "Leads" : undefined}
+        subtitle={viewMode === "classic" ? classicSubtitle : undefined}
+        actions={
+          viewMode === "classic" ? (
+            <>
+              {viewToggle}
+              <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
+              <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
+                New lead
+              </button>
+            </>
+          ) : (
+            viewToggle
+          )
+        }
+      >
         {viewMode === "focus" ? (
           <>
             <LeadsFocusHero
@@ -695,19 +709,6 @@ export function LeadsList() {
           </>
         ) : (
           <>
-            <div className="crm-page-head">
-              <div>
-                <h1 className="crm-page-title">Leads</h1>
-                <div className="crm-page-sub">{classicSubtitle}</div>
-              </div>
-              <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
-                <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
-                  New lead
-                </button>
-              </div>
-            </div>
-
             <LeadsTable
               allLeadsCount={allLeads.length}
               customOutcomes={customOutcomes}
@@ -790,7 +791,7 @@ export function LeadsList() {
             showAssignMenu={showAssign}
           />
         ) : null}
-      </div>
+      </PageShell>
     </>
   );
 }

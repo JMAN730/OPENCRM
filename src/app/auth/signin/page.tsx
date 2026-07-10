@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
   CardContent,
   CardDescription,
   CardFooter,
@@ -18,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { X, UserPlus, ArrowLeft } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
+import { AuthCard, AuthShell } from "@/components/layout/AuthShell";
 
 type SavedUser = {
   email: string;
@@ -193,19 +193,21 @@ export default function SignInPage() {
 
   if (status === "loading")
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
+      <AuthShell>
+        <div className="flex justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      </AuthShell>
     );
 
   // ── Account picker ──────────────────────────────────────────────────────────
   if (view === "picker") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-        <div className="flex flex-col items-center gap-10 w-full max-w-lg">
+      <AuthShell wide>
+        <div className="flex flex-col items-center gap-10">
           <div className="text-center">
-            <h1 className="text-3xl font-bold">Welcome back</h1>
-            <p className="mt-1 text-muted-foreground">Select your account to continue</p>
+            <h1 className="crm-auth-title text-3xl">Welcome back</h1>
+            <p className="crm-auth-sub mt-1">Select your account to continue</p>
           </div>
 
           <div className="flex flex-wrap justify-center gap-3">
@@ -216,7 +218,7 @@ export default function SignInPage() {
                 tabIndex={0}
                 onClick={() => handleSelectUser(user)}
                 onKeyDown={(e) => e.key === "Enter" && handleSelectUser(user)}
-                className="group relative flex w-32 cursor-pointer flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="crm-auth-tile group relative flex w-32 cursor-pointer flex-col items-center gap-3 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <button
                   onClick={(e) => handleRemoveUser(user.email, e)}
@@ -237,7 +239,7 @@ export default function SignInPage() {
 
             <button
               onClick={() => { setEmail(""); setPassword(""); setError(""); setViewOverride("new"); }}
-              className="flex w-32 flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="crm-auth-tile flex w-32 flex-col items-center gap-3 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">
                 <UserPlus className="h-6 w-6 text-muted-foreground/60" />
@@ -246,16 +248,16 @@ export default function SignInPage() {
             </button>
           </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   // ── Password prompt for saved user ──────────────────────────────────────────
   if (view === "password" && selectedUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-        <Card className="w-full max-w-sm border-none shadow-lg">
-          <CardHeader className="space-y-4 text-center">
+      <AuthShell>
+        <AuthCard>
+        <CardHeader className="space-y-4 text-center border-0 p-0 pb-4">
             <div className="flex justify-center">
               <Avatar className="h-20 w-20 text-2xl">
                 {selectedUser.image && (
@@ -317,18 +319,20 @@ export default function SignInPage() {
               </Button>
             </CardFooter>
           </form>
-        </Card>
-      </div>
+        </AuthCard>
+      </AuthShell>
     );
   }
 
   // ── New account form ────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-md border-none shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
-          <CardDescription>Enter your email and password to access your account</CardDescription>
+    <AuthShell>
+      <AuthCard className="max-w-md">
+        <CardHeader className="space-y-1 border-0 p-0 pb-4 text-center">
+          <CardTitle className="crm-auth-title text-2xl">Sign In</CardTitle>
+          <CardDescription className="crm-auth-sub">
+            Enter your email and password to access your account
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleSignIn}>
           <CardContent className="space-y-4">
@@ -407,7 +411,7 @@ export default function SignInPage() {
             </p>
           </CardFooter>
         </form>
-      </Card>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }

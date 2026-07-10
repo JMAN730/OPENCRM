@@ -4,6 +4,7 @@ import { trpc } from "@/app/_trpc/client";
 import { useSession } from "next-auth/react";
 import { AdminTeamsPanel } from "./team-page/AdminTeamsPanel";
 import { TeamOverview } from "./team-page/TeamOverview";
+import { PageShell } from "@/components/layout/PageShell";
 
 export function TeamPage() {
   const { data: session } = useSession();
@@ -21,20 +22,16 @@ export function TeamPage() {
   const isLeader = !!myTeam && myTeam.leaderId === callerId;
 
   return (
-    <div className="crm-content">
-      <div className="crm-page-head">
-        <div>
-          <h1 className="crm-page-title">Team</h1>
-          <div className="crm-page-sub">
-            {myTeam
-              ? `${myTeam.name} · ${myTeam.users.length} member${myTeam.users.length === 1 ? "" : "s"}`
-              : isAdmin
-                ? "Manage teams for your organization"
-                : "You are not on a team yet"}
-          </div>
-        </div>
-      </div>
-
+    <PageShell
+      title="Team"
+      subtitle={
+        myTeam
+          ? `${myTeam.name} · ${myTeam.users.length} member${myTeam.users.length === 1 ? "" : "s"}`
+          : isAdmin
+            ? "Manage teams for your organization"
+            : "You are not on a team yet"
+      }
+    >
       {!myTeam && !isAdmin ? (
         <div className="crm-card" style={{ padding: 32, textAlign: "center", color: "var(--crm-fg-faint)" }}>
           You are not on a team yet. Ask your admin to add you to one.
@@ -64,6 +61,6 @@ export function TeamPage() {
           Loading...
         </div>
       ) : null}
-    </div>
+    </PageShell>
   );
 }

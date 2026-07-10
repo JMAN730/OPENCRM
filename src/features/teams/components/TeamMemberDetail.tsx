@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import type { AppRouter } from "@/server/api/root";
+import { PageShell } from "@/components/layout/PageShell";
 
 type MemberDetail = inferRouterOutputs<AppRouter>["teams"]["memberDetail"];
 type MemberLead = MemberDetail["leads"][number];
@@ -60,18 +61,18 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <div className="crm-content">
+      <PageShell>
         <div style={{ padding: 32, textAlign: "center", color: "var(--crm-fg-faint)" }}>Loading…</div>
-      </div>
+      </PageShell>
     );
   }
   if (error) {
     return (
-      <div className="crm-content">
+      <PageShell>
         <div className="crm-card" style={{ padding: 24, color: "var(--crm-neg)" }}>
           {error.message}
         </div>
-      </div>
+      </PageShell>
     );
   }
   if (!data) return null;
@@ -80,51 +81,51 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
   const name = user.name || user.email || "Member";
 
   return (
-    <div className="crm-content">
-      <div className="crm-page-head">
+    <PageShell
+      title={
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Link href="/team" className="crm-btn ghost icon" style={{ textDecoration: "none" }}>
-            <ArrowLeft size={14} />
-          </Link>
           <div className={`crm-avatar ${avatarClass(name)}`} style={{ width: 48, height: 48, fontSize: 16 }}>
             {initials(name)}
           </div>
-          <div>
-            <h1 className="crm-page-title">{name}</h1>
-            <div className="crm-page-sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {isAdmin ? (
-                <select
-                  value={user.role}
-                  onChange={(e) =>
-                    promoteRole.mutate({
-                      userId: user.id,
-                      role: e.target.value as "ADMIN" | "MANAGER" | "USER",
-                    })
-                  }
-                  disabled={promoteRole.isPending}
-                  style={{
-                    padding: "2px 6px",
-                    background: "var(--crm-surface)",
-                    border: "1px solid var(--crm-border)",
-                    borderRadius: "var(--crm-radius-sm)",
-                    color: "var(--crm-fg-faint)",
-                    fontSize: 12,
-                  }}
-                >
-                  <option value="USER">User</option>
-                  <option value="MANAGER">Manager</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-              ) : (
-                <span>{user.role}</span>
-              )}
-              {user.team ? <span>· {user.team.name}</span> : null}
-              {user.email ? <span>· {user.email}</span> : null}
-            </div>
-          </div>
+          <span>{name}</span>
         </div>
-      </div>
-
+      }
+      subtitle={
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {isAdmin ? (
+            <select
+              value={user.role}
+              onChange={(e) =>
+                promoteRole.mutate({
+                  userId: user.id,
+                  role: e.target.value as "ADMIN" | "MANAGER" | "USER",
+                })
+              }
+              disabled={promoteRole.isPending}
+              className="crm-clay-input"
+              style={{
+                padding: "2px 6px",
+                fontSize: 12,
+                color: "var(--crm-fg-faint)",
+              }}
+            >
+              <option value="USER">User</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          ) : (
+            <span>{user.role}</span>
+          )}
+          {user.team ? <span>· {user.team.name}</span> : null}
+          {user.email ? <span>· {user.email}</span> : null}
+        </div>
+      }
+      actions={
+        <Link href="/team" className="crm-btn ghost icon" style={{ textDecoration: "none" }}>
+          <ArrowLeft size={14} />
+        </Link>
+      }
+    >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
         <StatCard label="Leads owned" value={leadCount} />
         <StatCard label="Calls logged" value={callCount} />
@@ -225,7 +226,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
