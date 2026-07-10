@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Call as TwilioCall, Device } from "@twilio/voice-sdk";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Phone, PhoneOff, Delete, Mic, MicOff, Volume2, History, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -222,14 +221,14 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      <Card className="lg:col-span-1 border-none shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Phone size={20} className="text-primary" />
-            Dialer
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <div className="crm-card lg:col-span-1">
+        <div className="crm-card-head">
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+            <Phone size={16} style={{ color: "var(--crm-accent-fg)" }} />
+            Keypad
+          </h3>
+        </div>
+        <div className="space-y-6" style={{ paddingTop: 4 }}>
           <div className="relative">
             <Input
               value={phoneNumber}
@@ -317,29 +316,29 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
               </p>
             )
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="lg:col-span-1 border-none shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <ScrollText size={20} className="text-primary" />
+      <div className="crm-card lg:col-span-1">
+        <div className="crm-card-head">
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+            <ScrollText size={16} style={{ color: "var(--crm-accent-fg)" }} />
             Scripts
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="max-h-[560px] overflow-y-auto">
+          </h3>
+        </div>
+        <div className="max-h-[560px] overflow-y-auto" style={{ paddingTop: 4 }}>
           <ScriptsPanel readOnly />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="lg:col-span-2 border-none shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2">
-            <History size={20} className="text-primary" />
+      <div className="crm-card lg:col-span-2">
+        <div className="crm-card-head">
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+            <History size={16} style={{ color: "var(--crm-accent-fg)" }} />
             Call History
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
+        </div>
+        <div style={{ paddingTop: 4 }}>
           {twilioUnconfigured ? (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
               <Phone size={36} className="text-muted-foreground/20" />
@@ -391,8 +390,8 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
               <p className="text-xs text-muted-foreground">Calls you make will appear here.</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

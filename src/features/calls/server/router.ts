@@ -2,6 +2,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { logActivity } from "@/server/activity";
+import { requireVisibleLead } from "@/server/lead-visibility";
 import twilio from "twilio";
 
 export const callsRouter = createTRPCRouter({
@@ -38,14 +39,7 @@ export const callsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       if (input.leadId) {
-        const lead = await ctx.prisma.lead.findUnique({
-          where: { id: input.leadId },
-          select: { organizationId: true },
-        });
-
-        if (!lead || lead.organizationId !== ctx.organizationId) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-        }
+        await requireVisibleLead(ctx, input.leadId, { select: { id: true } });
       }
 
       const call = await ctx.prisma.callLog.create({
@@ -75,14 +69,7 @@ export const callsRouter = createTRPCRouter({
   getForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const lead = await ctx.prisma.lead.findUnique({
-        where: { id: input.leadId },
-        select: { organizationId: true },
-      });
-
-      if (!lead || lead.organizationId !== ctx.organizationId) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Lead not found." });
-      }
+      await requireVisibleLead(ctx, input.leadId, { select: { id: true } });
 
       return ctx.prisma.callLog.findMany({
         where: { leadId: input.leadId },

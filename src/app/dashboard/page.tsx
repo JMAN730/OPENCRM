@@ -2,6 +2,7 @@
 
 import { trpc } from "@/app/_trpc/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   Users,
   Phone,
@@ -722,27 +723,31 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="crm-content">
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">{greeting}, {firstName}</h1>
-            <div className="crm-page-sub">
-              {statsLoading ? (
-                "Loading your activity…"
-              ) : (
+      <PageShell
+        title={`${greeting}, ${firstName}`}
+        subtitle={
+          statsLoading ? (
+            "Loading your activity…"
+          ) : (
+            <>
+              {callsToday > 0 && (
                 <>
-                  {callsToday > 0 && (
-                    <><strong style={{ color: "var(--crm-fg)" }}>{callsToday}</strong> call{callsToday !== 1 ? "s" : ""} logged today · </>
-                  )}
-                  {followupsDue > 0
-                    ? <><strong style={{ color: "var(--crm-fg)" }}>{followupsDue}</strong> follow-up{followupsDue !== 1 ? "s" : ""} due</>
-                    : "No follow-ups due today"}
+                  <strong style={{ color: "var(--crm-fg)" }}>{callsToday}</strong> call
+                  {callsToday !== 1 ? "s" : ""} logged today ·{" "}
                 </>
               )}
-            </div>
-          </div>
-        </div>
-
+              {followupsDue > 0 ? (
+                <>
+                  <strong style={{ color: "var(--crm-fg)" }}>{followupsDue}</strong> follow-up
+                  {followupsDue !== 1 ? "s" : ""} due
+                </>
+              ) : (
+                "No follow-ups due today"
+              )}
+            </>
+          )
+        }
+      >
         {/* Tab navigation */}
         <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid var(--crm-border)", paddingBottom: 0 }}>
           {tabs.map((tab) => (
@@ -829,7 +834,7 @@ export default function DashboardPage() {
 
         {activeTab === "team" && <TeamStatsTab />}
         {activeTab === "my-stats" && <MyStatsTab />}
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }
