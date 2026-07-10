@@ -141,7 +141,7 @@ export const teamsRouter = createTRPCRouter({
         ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
         include: {
           user: { select: { id: true, name: true, email: true, image: true } },
-          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
+          lead: { select: { id: true, firstName: true, lastName: true, company: true, assignedToId: true } },
         },
       });
 
