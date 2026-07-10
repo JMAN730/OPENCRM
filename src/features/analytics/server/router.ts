@@ -2,7 +2,7 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
 import { getLeadScope } from "@/server/teams/scope";
-import { scopeCacheKey } from "@/features/ai/server/context";
+import { scopeCacheKey } from "@/server/teams/scope";
 import {
   getTopCallers,
   getLeadQuality,

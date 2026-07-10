@@ -12,13 +12,11 @@ export const keys = {
   dashboardKpi: (organizationId: string) => `dashboard:kpi:${organizationId}`,
   dashboardSidebar: (organizationId: string) => `dashboard:sidebar:${organizationId}`,
   dashboardTeam: (organizationId: string) => `dashboard:team:${organizationId}`,
-  aiContext: (scopeKey: string) => `ai:context:${scopeKey}`,
   analyticsTopCallers: (scopeKey: string) => `analytics:topCallers:${scopeKey}`,
   analyticsLeadQuality: (scopeKey: string) => `analytics:leadQuality:${scopeKey}`,
   analyticsRepPerformance: (scopeKey: string) => `analytics:repPerformance:${scopeKey}`,
 
   // ── Rate-limit buckets ───────────────────────────────────────────────
-  aiChatBucket: (userId: string) => `ai:chat:${userId}`,
   authSigninBucket: (email: string) => `auth:signin:${email}`,
   authRegisterIpBucket: (ip: string) => `auth:register:ip:${ip}`,
   authResetEmailBucket: (email: string) => `auth:reset:email:${email}`,
