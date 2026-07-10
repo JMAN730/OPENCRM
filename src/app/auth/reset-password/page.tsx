@@ -5,14 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
 import Link from "next/link";
 import { trpc } from "@/app/_trpc/client";
 
@@ -33,35 +26,33 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-        <Card className="w-full max-w-sm border-none shadow-lg text-center">
-          <CardHeader>
-            <CardTitle>Invalid link</CardTitle>
-            <CardDescription>This password reset link is missing or malformed.</CardDescription>
-          </CardHeader>
-          <CardFooter className="justify-center">
+      <AuthShell>
+        <AuthCard
+          title="Invalid link"
+          description="This password reset link is missing or malformed."
+        >
+          <div className="flex justify-center">
             <Link href="/auth/signin" className="text-sm underline-offset-4 hover:underline">
               Back to sign in
             </Link>
-          </CardFooter>
-        </Card>
-      </div>
+          </div>
+        </AuthCard>
+      </AuthShell>
     );
   }
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-        <Card className="w-full max-w-sm border-none shadow-lg text-center">
-          <CardHeader>
-            <CardTitle>Password updated</CardTitle>
-            <CardDescription>Your password has been reset. You can now sign in.</CardDescription>
-          </CardHeader>
-          <CardFooter className="justify-center">
+      <AuthShell>
+        <AuthCard
+          title="Password updated"
+          description="Your password has been reset. You can now sign in."
+        >
+          <div className="flex justify-center">
             <Button onClick={() => router.push("/auth/signin")}>Sign in</Button>
-          </CardFooter>
-        </Card>
-      </div>
+          </div>
+        </AuthCard>
+      </AuthShell>
     );
   }
 
@@ -78,14 +69,13 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-sm border-none shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Set new password</CardTitle>
-          <CardDescription>Enter a new password for your account.</CardDescription>
-        </CardHeader>
+    <AuthShell>
+      <AuthCard
+        title="Set new password"
+        description="Enter a new password for your account."
+      >
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
@@ -114,8 +104,8 @@ function ResetPasswordForm() {
                 onChange={(e) => { setConfirm(e.target.value); setError(""); }}
               />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3 border-t-0 bg-transparent">
+          </div>
+          <div className="mt-6 flex flex-col items-center gap-3">
             <Button className="w-full" type="submit" disabled={confirm_.isPending}>
               {confirm_.isPending ? "Saving..." : "Reset password"}
             </Button>
@@ -125,16 +115,16 @@ function ResetPasswordForm() {
             >
               Back to sign in
             </Link>
-          </CardFooter>
+          </div>
         </form>
-      </Card>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<AuthShell />}>
       <ResetPasswordForm />
     </Suspense>
   );

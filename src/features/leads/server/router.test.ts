@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestCaller } from "@/test/trpc";
 
 describe("leadsRouter", () => {
@@ -286,6 +286,37 @@ describe("leadsRouter", () => {
         code: "NOT_FOUND",
       });
       expect(prisma.lead.delete).not.toHaveBeenCalled();
+    });
+
+    it("busts the org's dashboard caches after the mutation (write-path middleware)", async () => {
+      const { safeDel } = await import("@/lib/redis");
+      const mockSafeDel = vi.mocked(safeDel);
+      mockSafeDel.mockClear();
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1", organizationId: "org-1" });
+      prisma.lead.delete.mockResolvedValue({ id: "lead-1" });
+
+      await caller.leads.delete({ id: "lead-1" });
+
+      const deleted = mockSafeDel.mock.calls.map((c) => c[0]);
+      expect(deleted).toEqual(
+        expect.arrayContaining([
+          "dashboard:kpi:org-1",
+          "dashboard:team:org-1",
+          "dashboard:sidebar:org-1",
+        ]),
+      );
+    });
+
+    it("does not bust dashboard caches when the mutation fails", async () => {
+      const { safeDel } = await import("@/lib/redis");
+      const mockSafeDel = vi.mocked(safeDel);
+      mockSafeDel.mockClear();
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(caller.leads.delete({ id: "lead-1" })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      expect(mockSafeDel).not.toHaveBeenCalled();
     });
   });
 
@@ -831,6 +862,63 @@ describe("leadsRouter", () => {
           organizationId: "org-1",
         },
       });
+    });
+  });
+
+  describe("lead notes", () => {
+    it("createNote checks lead scope, writes the note, and logs activity", async () => {
+      prisma.lead.findFirst.mockResolvedValue({ id: "lead-1" });
+      prisma.note.create.mockResolvedValue({ id: "note-1", content: "hi" });
+      prisma.activity.create.mockResolvedValue({ id: "act-1" });
+
+      const result = await caller.leads.createNote({ leadId: "lead-1", content: "hi" });
+
+      expect(result).toEqual({ id: "note-1", content: "hi" });
+      expect(prisma.lead.findFirst.mock.calls[0][0].where.organizationId).toBe("org-1");
+      expect(prisma.note.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ leadId: "lead-1", organizationId: "org-1" }),
+      });
+      expect(prisma.activity.create).toHaveBeenCalled();
+    });
+
+    it("createNote rejects a lead outside the caller's scope", async () => {
+      prisma.lead.findFirst.mockResolvedValue(null);
+
+      await expect(
+        caller.leads.createNote({ leadId: "lead-x", content: "hi" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(prisma.note.create).not.toHaveBeenCalled();
+    });
+
+    it("deleteNote forbids a plain USER deleting someone else's note", async () => {
+      const { caller: userCaller, prisma: userPrisma } = createTestCaller({
+        sessionOverrides: { id: "user-2", role: "USER" },
+      });
+      userPrisma.note.findFirst.mockResolvedValue({
+        id: "note-1",
+        userId: "someone-else",
+        leadId: "lead-1",
+      });
+
+      await expect(userCaller.leads.deleteNote({ noteId: "note-1" })).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+      expect(userPrisma.note.delete).not.toHaveBeenCalled();
+    });
+
+    it("deleteNote lets the author delete and logs with the org id", async () => {
+      prisma.note.findFirst.mockResolvedValue({ id: "note-1", userId: "user-1", leadId: "lead-1" });
+      prisma.note.delete.mockResolvedValue({ id: "note-1" });
+      prisma.activity.create.mockResolvedValue({ id: "act-1" });
+
+      await expect(caller.leads.deleteNote({ noteId: "note-1" })).resolves.toEqual({
+        success: true,
+      });
+      expect(prisma.activity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ organizationId: "org-1" }),
+        }),
+      );
     });
   });
 

@@ -12,6 +12,7 @@ import {
   assertSeatAvailable,
   getOrgSubscription,
 } from "@/features/billing/server/enforcement";
+import { keys } from "@/lib/cacheKeys";
 
 function hashToken(raw: string): string {
   return crypto.createHash("sha256").update(raw).digest("hex");
@@ -140,7 +141,7 @@ export const teamsRouter = createTRPCRouter({
         ...(input.cursor ? { skip: 1, cursor: { id: input.cursor } } : {}),
         include: {
           user: { select: { id: true, name: true, email: true, image: true } },
-          lead: { select: { id: true, firstName: true, lastName: true, company: true } },
+          lead: { select: { id: true, firstName: true, lastName: true, company: true, assignedToId: true } },
         },
       });
 
@@ -582,7 +583,7 @@ export const teamsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.headers);
       await assertWithinRateLimit({
-        key: `auth:accept-invite:ip:${ip}`,
+        key: keys.acceptInviteIpBucket(ip),
         limit: 20,
         windowSeconds: 60 * 60,
       });

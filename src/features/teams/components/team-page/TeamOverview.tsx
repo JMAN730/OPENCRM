@@ -143,6 +143,15 @@ export function TeamOverview({
                   [activity.lead?.firstName, activity.lead?.lastName].filter(Boolean).join(" ") ||
                   activity.lead?.company ||
                   "(lead)";
+                // Mirror resolveLeadScope: only deep-link to the modal when
+                // leads.getById would let this caller read the lead — otherwise
+                // the modal never opens and a stale ?leadId= strands the URL.
+                const canOpenLead =
+                  !!activity.lead &&
+                  (isAdmin ||
+                    activity.lead.assignedToId === callerId ||
+                    (isLeader &&
+                      myTeam.users.some((u) => u.id === activity.lead?.assignedToId)));
 
                 return (
                   <div
@@ -162,7 +171,10 @@ export function TeamOverview({
                       <div style={{ fontSize: 13 }}>
                         <strong>{activity.user?.name || activity.user?.email || "Someone"}</strong>{" "}
                         <span style={{ color: "var(--crm-fg-faint)" }}>{verb}</span>{" "}
-                        <Link href="/leads" style={{ color: "var(--crm-fg)" }}>
+                        <Link
+                          href={canOpenLead ? `/leads?leadId=${activity.lead!.id}` : "/leads"}
+                          style={{ color: "var(--crm-fg)" }}
+                        >
                           {leadLabel}
                         </Link>
                       </div>

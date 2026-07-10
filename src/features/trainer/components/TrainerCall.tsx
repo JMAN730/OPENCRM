@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { matchHint } from "../hints";
 import type { Scorecard, TranscriptEntry } from "../types";
-import { Mic, PhoneOff, Loader2, RotateCcw } from "lucide-react";
+import { Mic, PhoneOff, Loader2, RotateCcw, SlidersHorizontal } from "lucide-react";
 
 type Phase = "idle" | "connecting" | "active" | "scoring" | "done" | "error";
 interface ActiveConversation { endSession: () => Promise<void>; }
@@ -20,7 +20,7 @@ function scoreColor(n: number) {
   return n >= 75 ? "text-green-600" : n >= 50 ? "text-amber-600" : "text-red-600";
 }
 
-export function TrainerCall({ leadId, personaId, onReset }: { leadId: string; personaId: string; onReset: () => void }) {
+export function TrainerCall({ leadId, personaId, voiceConfigured = true, onReset }: { leadId: string; personaId: string; voiceConfigured?: boolean; onReset: () => void }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [hints, setHints] = useState<string[]>([]);
@@ -91,6 +91,24 @@ export function TrainerCall({ leadId, personaId, onReset }: { leadId: string; pe
   }, [leadId, personaId, transcript, seconds, score]);
 
   useEffect(() => () => { stopTimer(); void convRef.current?.endSession(); }, []);
+
+  if (!voiceConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-border bg-card p-10 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+          <SlidersHorizontal size={26} className="text-muted-foreground" />
+        </div>
+        <div>
+          <p className="font-medium">Live calls aren&apos;t configured yet</p>
+          <p className="text-sm text-muted-foreground">
+            Practice calls need a voice provider. Set <code>ELEVENLABS_API_KEY</code> and{" "}
+            <code>ELEVENLABS_AGENT_ID</code> to enable them. Personas and past sessions still work without it.
+          </p>
+        </div>
+        <Button variant="outline" onClick={onReset}><RotateCcw size={16} /> Back</Button>
+      </div>
+    );
+  }
 
   if (phase === "idle" || phase === "connecting" || phase === "error") {
     return (

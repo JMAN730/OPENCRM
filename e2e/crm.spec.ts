@@ -388,9 +388,129 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
       };
     }
 
+    // ── Read-only handlers for sidebar-route smoke coverage ──────────────────
+    // These return empty/default shapes so each page renders its shell without a
+    // real backend. Mutations for these routes are out of scope for smoke tests.
+
+    case "pipeline.getBoard":
+      return { stages: [] };
+
+    case "analytics.overview":
+      return {
+        kpis: {
+          totalLeads: 0,
+          leadsThisWeek: 0,
+          callsThisWeek: 0,
+          connectedCount: 0,
+          contactRate: "0.0",
+        },
+        leadsPerDay: [],
+        callsPerDay: [],
+        touchDepth: { untouched: 0, one: 0, twoToFive: 0, sixPlus: 0 },
+        bySource: [],
+        byTemperature: [],
+      };
+
+    case "analytics.topCallers":
+    case "analytics.repPerformance":
+      return [];
+
+    case "analytics.leadQuality":
+      return { byNiche: [], byCity: [] };
+
+    case "dashboard.getKpiStats":
+      return { leadsByStatus: [] };
+
+    case "dashboard.getTeamStats":
+      return { memberStats: [] };
+
+    case "scraper.config":
+      return {
+        enabled: true,
+        categories: ["Mobile Mechanics", "Power washing", "Landscaping"],
+        orgCategories: [],
+        maxLocations: 50,
+        maxLimit: 200,
+        maxConcurrency: 4,
+      };
+
+    case "scraper.list":
+    case "scraperSchedules.list":
+      return [];
+
+    case "outreach.stats":
+      return { PENDING: 0, PROCESSING: 0, DONE: 0, SKIPPED: 0, FAILED: 0 };
+
+    case "outreach.list":
+      return { items: [], nextCursor: null };
+
+    case "map.discoveryCategories":
+      return { categories: [], enrichEnabled: false };
+
+    case "map.missingCoordinatesCount":
+      return { count: 0 };
+
+    case "map.leadsInBounds":
+      return [];
+
+    case "billing.getSubscription":
+      return {
+        configured: false,
+        planTier: "STARTER",
+        planLabel: "Starter",
+        status: "NONE",
+        seatLimit: 3,
+        seatsUsed: 1,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        hasStripeSubscription: false,
+        limits: { maxTags: 25, maxScraperLocations: 50, maxScraperRecords: 200, seatLimit: 3 },
+        availableTiers: [],
+      };
+
     default:
       throw new Error(`Unhandled tRPC procedure: ${procedure}`);
   }
+}
+
+// ── Smoke-test helpers ────────────────────────────────────────────────────────
+// A minimal admin session + empty mock state, reused by the sidebar-route smoke
+// tests below. Each test asserts the route renders its shell and one critical
+// interaction works — no real backend is involved.
+
+function smokeAdminUser(): SessionUser {
+  return {
+    id: "admin-smoke",
+    email: "admin@example.com",
+    name: "Admin User",
+    organizationId: "org-1",
+    role: "ADMIN",
+    teamId: null,
+  };
+}
+
+async function seedSmokeSession(context: BrowserContext, page: Page) {
+  const user = smokeAdminUser();
+  const state: MockState = {
+    leads: [],
+    tasks: [],
+    members: [
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: null,
+        role: user.role,
+        teamId: null,
+        team: null,
+      },
+    ],
+    teams: [],
+  };
+  await seedAuthenticatedSession(context, user);
+  await mockAuthenticatedApis(page, user, state);
+  return user;
 }
 
 test("redirects anonymous users to sign in for protected routes", async ({ page }) => {
@@ -522,4 +642,80 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await memberRow.click();
   await page.getByRole("button", { name: /add 1 selected/i }).click();
   await expect(adminTeamsPanel.getByText(memberName).last()).toBeVisible();
+});
+
+// ── Sidebar-route smoke coverage ──────────────────────────────────────────────
+// Authenticated navigation + one critical interaction per route, backed by the
+// mock tRPC handlers above. These guard against render regressions on routes not
+// covered by the primary flow test.
+
+test("smoke: pipeline board renders and switches to the forecast view", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/pipeline");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Pipeline" })).toBeVisible();
+
+  // Client-only view switch — no backend round-trip.
+  await main.getByRole("button", { name: "forecast" }).click();
+  await expect(main.getByText("Weighted value")).toBeVisible();
+});
+
+test("smoke: analytics dashboard renders its KPI strip", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/analytics");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Analytics" })).toBeVisible();
+  await expect(main.getByText("Total leads")).toBeVisible();
+  await expect(main.getByText("Contact rate")).toBeVisible();
+});
+
+test("smoke: scraper panel renders and accepts a location", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/scraper");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Scraper" })).toBeVisible();
+  await expect(main.getByText("Start a new scrape")).toBeVisible();
+
+  const locations = main.getByLabel("Locations");
+  await locations.fill("Toledo, Ohio");
+  await expect(locations).toHaveValue("Toledo, Ohio");
+});
+
+test("smoke: outreach queue renders its stat cards", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/outreach");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Outreach", exact: true })).toBeVisible();
+  await expect(main.getByText("Outreach queue")).toBeVisible();
+  await expect(main.getByText(/Nothing here yet/)).toBeVisible();
+
+  // Client-only status filter — no backend round-trip; empty queue stays empty.
+  await main.getByRole("button", { name: "Queued" }).click();
+  await expect(main.getByText(/Nothing here yet/)).toBeVisible();
+});
+
+test("smoke: lead map renders the discovery panel", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/map");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Map", exact: true })).toBeVisible();
+  // SelectionPanel only mounts once the client-only Leaflet bundle loads.
+  await expect(main.getByRole("heading", { name: "Discover businesses" })).toBeVisible();
+});
+
+test("smoke: settings billing tab renders plan limits", async ({ context, page }) => {
+  await seedSmokeSession(context, page);
+
+  await page.goto("/settings");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Settings" })).toBeVisible();
+
+  await main.getByRole("button", { name: "Billing" }).click();
+  await expect(main.getByText("Plan limits")).toBeVisible();
+  await expect(main.getByText(/team seats/)).toBeVisible();
 });

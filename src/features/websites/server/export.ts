@@ -1,4 +1,5 @@
 import type { DemoContent } from "@/lib/ai";
+import { buildDemoView } from "@/features/websites/demoView";
 
 export type DemoExportSite = {
   title: string;
@@ -41,18 +42,21 @@ export function buildDemoExport(site: DemoExportSite, assets: DemoExportFile[] =
 }
 
 export function renderDemoHtml(site: DemoExportSite): string {
-  const { content } = site;
-  const businessName = site.businessName || site.title || "Demo Site";
-  const specialty = site.category || "Local service";
-  const serviceArea = site.city || "Local area";
-  const photos = content.photos?.filter(Boolean) ?? [];
+  const view = buildDemoView({
+    businessName: site.businessName || site.title,
+    phone: site.phone,
+    city: site.city,
+    category: site.category,
+    content: site.content,
+  });
+  const { businessName, specialty, serviceArea, photos } = view;
   const heroImage = attr(photos[0] ?? "assets/workshop.jpg");
   const shopImage = attr(photos[1] ?? photos[0] ?? "assets/shop-exterior.jpg");
-  const telHref = site.phone ? `tel:${site.phone.replace(/[^0-9+]/g, "")}` : "#contact";
-  const services = content.services.length > 0 ? content.services : [specialty];
-  const headlineWords = splitHeadline(content.headline || businessName);
-  const googleMapsUrl = content.googleMapsUrl;
-  const mapQuery = `https://www.google.com/maps?q=${encodeURIComponent(`${businessName} ${site.city ?? ""}`)}&output=embed`;
+  const telHref = view.telHref ?? "#contact";
+  const services = view.marqueeServices;
+  const headlineWords = view.headlineLines;
+  const googleMapsUrl = view.googleMapsUrl;
+  const mapQuery = view.mapEmbedUrl;
 
   return `<!doctype html>
 <html lang="en">
@@ -76,7 +80,7 @@ export function renderDemoHtml(site: DemoExportSite): string {
         <a href="#reviews">Reviews</a>
         <a href="#contact">Visit</a>
       </div>
-      <a class="pill red" href="${attr(telHref)}">${site.phone ? "Call Now" : text(content.cta)}</a>
+      <a class="pill red" href="${attr(telHref)}">${text(view.headerCta)}</a>
     </nav>
   </header>
 
@@ -93,16 +97,14 @@ export function renderDemoHtml(site: DemoExportSite): string {
           <div>
             <h1>${headlineWords.map((word) => `<span>${text(word)}</span>`).join("")}</h1>
             <div class="hero-meta">
-              ${meta("Service", specialty)}
-              ${meta("Area", serviceArea)}
-              ${meta("Phone", site.phone ?? "Request a quote")}
+              ${view.heroMeta.map((item) => meta(item.label, item.value)).join("\n              ")}
             </div>
           </div>
           <div class="hero-copy">
-            <p><strong>${text(businessName)}</strong> ${text(content.subheadline)}</p>
+            <p><strong>${text(businessName)}</strong> ${text(view.subheadline)}</p>
             <div class="actions">
-              <a class="pill red" href="${attr(telHref)}">${text(content.cta)}</a>
-              <a class="pill ghost" href="#services">View services</a>
+              <a class="pill red" href="${attr(telHref)}">${text(view.cta)}</a>
+              <a class="pill ghost" href="#services">${text(view.viewServicesLabel)}</a>
             </div>
           </div>
         </div>
@@ -112,29 +114,26 @@ export function renderDemoHtml(site: DemoExportSite): string {
     <div class="marquee">${[...services, ...services, ...services].map((item) => `<span>${text(item)} <i></i></span>`).join("")}</div>
 
     <section id="services" class="section">
-      ${sectionHeader("/ 01 - SERVICES", "What we fix.", content.city_body_copy)}
+      ${sectionHeader(view.sections.services.kicker, view.sections.services.title, view.sections.services.body)}
       <div class="services">
-        ${services.map((service, index) => `<article><b>/${String(index + 1).padStart(2, "0")}</b><em>↗</em><h3>${text(service)}</h3><p>Straightforward scheduling, clear communication, and work handled by a local team.</p></article>`).join("")}
+        ${services.map((service, index) => `<article><b>/${String(index + 1).padStart(2, "0")}</b><em>↗</em><h3>${text(service)}</h3><p>${text(view.serviceCardBlurb)}</p></article>`).join("")}
       </div>
     </section>
 
     <section id="why" class="section dark split">
-      <div class="photo-card"><img src="${shopImage}" alt=""><span>Inside the shop</span></div>
+      <div class="photo-card"><img src="${shopImage}" alt=""><span>${text(view.whyPhotoCaption)}</span></div>
       <div>
-        <p class="kicker">/ 02 - WHY US</p>
-        <h2>Big-shop work.<br><span>Neighborhood</span><br>honesty.</h2>
-        <p class="muted">${text(content.local_seo_headline)} ${text(content.city_body_copy)}</p>
+        <p class="kicker">${text(view.sections.why.kicker)}</p>
+        <h2>${view.sections.why.titleLines.map((line, index) => index === view.sections.why.accentLine ? `<span>${text(line)}</span>` : text(line)).join("<br>")}</h2>
+        <p class="muted">${text(view.sections.why.body)}</p>
         <div class="stats">
-          ${stat("Local", "Service area")}
-          ${stat("Clear", "Communication")}
-          ${stat("Fast", "Customer contact")}
-          ${stat("100%", "Demo ready")}
+          ${view.stats.map((item) => stat(item.value, item.label)).join("\n          ")}
         </div>
       </div>
     </section>
 
     <section id="gallery" class="section dark">
-      ${sectionHeader("/ 03 - THE SHOP", "Drop in. Look around.", "A visual-first section for shop photos, work examples, before-and-after projects, or team shots.", true)}
+      ${sectionHeader(view.sections.gallery.kicker, view.sections.gallery.title, view.sections.gallery.body, true)}
       <div class="gallery">
         <img class="wide" src="${shopImage}" alt="">
         <img src="${heroImage}" alt="">
@@ -142,18 +141,16 @@ export function renderDemoHtml(site: DemoExportSite): string {
       </div>
     </section>
 
-    ${content.testimonials.length > 0 ? `<section id="reviews" class="section reviews">
-      <div class="review-head"><div><p class="kicker">/ 04 - WHAT FOLKS SAY</p><h2>Receipts.</h2></div><strong>5.0 <small>★★★★★<br>Demo reviews</small></strong></div>
-      <div class="review-grid">${content.testimonials.map((testimonial) => `<figure><p>★★★★★</p><blockquote>&ldquo;${text(testimonial.quote)}&rdquo;</blockquote><figcaption>${text(testimonial.author)}<span>Local customer</span></figcaption></figure>`).join("")}</div>
+    ${view.testimonials.length > 0 ? `<section id="reviews" class="section reviews">
+      <div class="review-head"><div><p class="kicker">${text(view.sections.reviews.kicker)}</p><h2>${text(view.sections.reviews.title)}</h2></div><strong>${text(view.reviewsBadge.score)} <small>${text(view.reviewsBadge.stars)}<br>${text(view.reviewsBadge.note)}</small></strong></div>
+      <div class="review-grid">${view.testimonials.map((testimonial) => `<figure><p>★★★★★</p><blockquote>&ldquo;${text(testimonial.quote)}&rdquo;</blockquote><figcaption>${text(testimonial.author)}<span>${text(view.reviewerLabel)}</span></figcaption></figure>`).join("")}</div>
     </section>` : ""}
 
     <section id="contact" class="section">
-      ${sectionHeader("/ 05 - VISIT", "Find us. Book fast.", content.contact_body)}
+      ${sectionHeader(view.sections.contact.kicker, view.sections.contact.title, view.sections.contact.body)}
       <div class="contact-grid">
         <div>
-          ${contactBlock("Business", businessName, specialty)}
-          ${contactBlock("Phone", site.phone ?? "Add phone number", "Fastest response during business hours.")}
-          ${contactBlock("Area", serviceArea, content.contact_heading)}
+          ${view.contactBlocks.map((block) => contactBlock(block.label, block.value, block.sub)).join("\n          ")}
         </div>
         <div class="map">
           ${googleMapsUrl ? `<iframe src="${attr(mapQuery)}" title="Business location" loading="lazy"></iframe>` : `<span>${text(businessName)}</span><i></i>`}
@@ -164,23 +161,15 @@ export function renderDemoHtml(site: DemoExportSite): string {
 
   <footer>
     <div class="footer-grid">
-      <div><img src="assets/logo.png" alt=""><h4>${text(businessName)}</h4><p>${text(specialty)} in ${text(serviceArea)}. Demo website, not an official site of this business.</p></div>
-      ${footerLinks("Services", services.slice(0, 4))}
-      ${footerLinks("Shop", ["About", "Gallery", "Reviews", "Contact"])}
-      <div><h5>Contact</h5><a href="${attr(telHref)}">${text(site.phone ?? content.cta)}</a></div>
+      <div><img src="assets/logo.png" alt=""><h4>${text(businessName)}</h4><p>${text(view.footer.tagline)}</p></div>
+      ${footerLinks("Services", view.footer.serviceLinks)}
+      ${footerLinks("Shop", view.footer.shopLinks)}
+      <div><h5>Contact</h5><a href="${attr(telHref)}">${text(view.footer.contactValue)}</a></div>
     </div>
-    <div class="subfooter"><span>Demo website preview</span><span>${new Date().getFullYear()} · OpenCRM</span></div>
+    <div class="subfooter"><span>${text(view.footer.attribution)}</span><span>${text(view.footer.stamp)}</span></div>
   </footer>
 </body>
 </html>`;
-}
-
-function splitHeadline(headline: string) {
-  const words = headline.trim().split(/\s+/).filter(Boolean);
-  if (words.length <= 4) return words.length ? words : ["Demo", "Site"];
-  const lines: string[] = [];
-  for (let index = 0; index < words.length; index += 2) lines.push(words.slice(index, index + 2).join(" "));
-  return lines.slice(0, 4);
 }
 
 function slugForFilename(value: string) {

@@ -5,14 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
 import Link from "next/link";
 import { trpc } from "@/app/_trpc/client";
 
@@ -39,59 +32,42 @@ function AcceptInviteForm() {
 
   if (!token) {
     return (
-      <CenteredCard>
-        <CardHeader>
-          <CardTitle>Invalid link</CardTitle>
-          <CardDescription>This invitation link is missing or malformed.</CardDescription>
-        </CardHeader>
-        <CardFooter className="justify-center">
-          <Link href="/auth/signin" className="text-sm underline-offset-4 hover:underline">
-            Back to sign in
-          </Link>
-        </CardFooter>
-      </CenteredCard>
+      <MessageCard
+        title="Invalid link"
+        description="This invitation link is missing or malformed."
+      >
+        <Link href="/auth/signin" className="text-sm underline-offset-4 hover:underline">
+          Back to sign in
+        </Link>
+      </MessageCard>
     );
   }
 
   if (isLoading) {
-    return (
-      <CenteredCard>
-        <CardHeader>
-          <CardTitle>Checking invitation…</CardTitle>
-        </CardHeader>
-      </CenteredCard>
-    );
+    return <MessageCard title="Checking invitation…" />;
   }
 
   if (!invitation) {
     return (
-      <CenteredCard>
-        <CardHeader>
-          <CardTitle>Invitation expired</CardTitle>
-          <CardDescription>
-            This invitation link is no longer valid. Ask your admin to send a new one.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter className="justify-center">
-          <Link href="/auth/signin" className="text-sm underline-offset-4 hover:underline">
-            Back to sign in
-          </Link>
-        </CardFooter>
-      </CenteredCard>
+      <MessageCard
+        title="Invitation expired"
+        description="This invitation link is no longer valid. Ask your admin to send a new one."
+      >
+        <Link href="/auth/signin" className="text-sm underline-offset-4 hover:underline">
+          Back to sign in
+        </Link>
+      </MessageCard>
     );
   }
 
   if (success) {
     return (
-      <CenteredCard>
-        <CardHeader>
-          <CardTitle>You&apos;re in</CardTitle>
-          <CardDescription>Your account is ready. Sign in to start working.</CardDescription>
-        </CardHeader>
-        <CardFooter className="justify-center">
-          <Button onClick={() => router.push("/auth/signin")}>Sign in</Button>
-        </CardFooter>
-      </CenteredCard>
+      <MessageCard
+        title="You're in"
+        description="Your account is ready. Sign in to start working."
+      >
+        <Button onClick={() => router.push("/auth/signin")}>Sign in</Button>
+      </MessageCard>
     );
   }
 
@@ -106,16 +82,17 @@ function AcceptInviteForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-sm border-none shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Join {invitation.organizationName}</CardTitle>
-          <CardDescription>
+    <AuthShell>
+      <AuthCard
+        title={`Join ${invitation.organizationName}`}
+        description={
+          <>
             Set a password to accept this invitation for <strong>{invitation.email}</strong>.
-          </CardDescription>
-        </CardHeader>
+          </>
+        }
+      >
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
@@ -154,29 +131,39 @@ function AcceptInviteForm() {
                 onChange={(e) => { setConfirm(e.target.value); setError(""); }}
               />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3 border-t-0 bg-transparent">
+          </div>
+          <div className="mt-6 flex flex-col gap-3">
             <Button className="w-full" type="submit" disabled={accept.isPending}>
               {accept.isPending ? "Joining…" : "Accept invitation"}
             </Button>
-          </CardFooter>
+          </div>
         </form>
-      </Card>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
-function CenteredCard({ children }: { children: React.ReactNode }) {
+function MessageCard({
+  title,
+  description,
+  children,
+}: {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/50 p-4">
-      <Card className="w-full max-w-sm border-none shadow-lg text-center">{children}</Card>
-    </div>
+    <AuthShell>
+      <AuthCard title={title} description={description}>
+        {children ? <div className="flex justify-center">{children}</div> : null}
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 export default function AcceptInvitePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<AuthShell />}>
       <AcceptInviteForm />
     </Suspense>
   );

@@ -5,6 +5,8 @@ import {
   invalidateLeadScope,
   getLeadScope,
   leadWhereFromScope,
+  scopedLeadWhere,
+  scopedTaskWhere,
 } from "./scope";
 
 // The global setup mocks @/lib/redis; cast to vi.Mock to control per-test behavior.
@@ -98,6 +100,10 @@ describe("invalidateLeadScope", () => {
   });
 });
 
+function makeCtx(prisma: ReturnType<typeof makePrisma>, userId: string, role = "USER", organizationId: string | undefined = "org-1") {
+  return { prisma, organizationId, session: { user: { id: userId, role } } };
+}
+
 describe("getLeadScope", () => {
   let prisma: ReturnType<typeof makePrisma>;
 
@@ -108,30 +114,74 @@ describe("getLeadScope", () => {
   });
 
   it("throws when ctx does not have organizationId", () => {
-    const ctx = { prisma };
-    expect(() => getLeadScope(ctx as never, "user-1", "USER")).toThrow("organizationId");
+    const ctx = { prisma, session: { user: { id: "user-1", role: "USER" } } };
+    expect(() => getLeadScope(ctx as never)).toThrow("organizationId");
   });
 
   it("memoizes: returns the exact same Promise for the same user within a request", () => {
-    const ctx = { prisma, organizationId: "org-1" };
-    const p1 = getLeadScope(ctx as never, "user-1", "USER");
-    const p2 = getLeadScope(ctx as never, "user-1", "USER");
+    const ctx = makeCtx(prisma, "user-1");
+    const p1 = getLeadScope(ctx as never);
+    const p2 = getLeadScope(ctx as never);
     expect(p1).toBe(p2);
   });
 
   it("issues distinct Promises for different users within the same request", () => {
-    const ctx = { prisma, organizationId: "org-1" };
-    const p1 = getLeadScope(ctx as never, "user-1", "USER");
-    const p2 = getLeadScope(ctx as never, "user-2", "USER");
+    // Two ctx objects sharing one memo map, as if the same request resolved
+    // scope for two users (memo key includes the user id).
+    const shared: { __leadScope?: Map<string, Promise<unknown>> } = {};
+    const ctx1 = Object.assign(shared, makeCtx(prisma, "user-1"));
+    const p1 = getLeadScope(ctx1 as never);
+    const ctx2 = Object.assign(shared, makeCtx(prisma, "user-2"));
+    const p2 = getLeadScope(ctx2 as never);
     expect(p1).not.toBe(p2);
   });
 
   it("issues distinct Promises across different org contexts", () => {
-    const ctx1 = { prisma, organizationId: "org-1" };
-    const ctx2 = { prisma, organizationId: "org-2" };
-    const p1 = getLeadScope(ctx1 as never, "user-1", "USER");
-    const p2 = getLeadScope(ctx2 as never, "user-1", "USER");
+    const ctx1 = makeCtx(prisma, "user-1", "USER", "org-1");
+    const ctx2 = makeCtx(prisma, "user-1", "USER", "org-2");
+    const p1 = getLeadScope(ctx1 as never);
+    const p2 = getLeadScope(ctx2 as never);
     expect(p1).not.toBe(p2);
+  });
+
+  it("derives identity from the session user (ADMIN gets all-scope)", async () => {
+    const ctx = makeCtx(prisma, "admin-1", "ADMIN");
+    await expect(getLeadScope(ctx as never)).resolves.toEqual({
+      kind: "all",
+      organizationId: "org-1",
+    });
+    expect(prisma.team.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("scopedLeadWhere / scopedTaskWhere", () => {
+  let prisma: ReturnType<typeof makePrisma>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma = makePrisma();
+    prisma.team.findMany.mockResolvedValue([]);
+  });
+
+  it("returns the org-wide lead where for ADMIN", async () => {
+    const ctx = makeCtx(prisma, "admin-1", "ADMIN");
+    await expect(scopedLeadWhere(ctx as never)).resolves.toEqual({ organizationId: "org-1" });
+  });
+
+  it("returns the assignedToId filter for a plain USER", async () => {
+    const ctx = makeCtx(prisma, "user-1", "USER");
+    await expect(scopedLeadWhere(ctx as never)).resolves.toEqual({
+      organizationId: "org-1",
+      assignedToId: { in: ["user-1"] },
+    });
+  });
+
+  it("returns the owner-or-assignee OR filter for tasks", async () => {
+    const ctx = makeCtx(prisma, "user-1", "USER");
+    await expect(scopedTaskWhere(ctx as never)).resolves.toEqual({
+      organizationId: "org-1",
+      OR: [{ userId: { in: ["user-1"] } }, { assignedToId: { in: ["user-1"] } }],
+    });
   });
 });
 

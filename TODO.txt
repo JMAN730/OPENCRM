@@ -16,6 +16,9 @@
 - [x] **Leads table search + dropdown actions** — implemented.
 - [x] **Tasks page** — implemented (`/tasks`, calendar view).
 - [x] **Email-token invitation flow** — `teams.inviteByEmail` + `/auth/accept-invite`.
+- [x] **Billing / subscription layer** (2026-07-02) — Stripe checkout + billing portal,
+  `OrganizationSubscription` model, 14-day trial, plan limits enforced on mutations
+  (seats, tags, scraper caps). See `src/features/billing/`.
 
 ## Open
 
@@ -29,7 +32,5 @@
 - [ ] **Backfill Note.organizationId and Activity.organizationId for legacy rows**
   - Run `npx tsx scripts/backfill-org-id.ts` once after schema sync.
   - After verification, promote both columns to NOT NULL.
-
-- [ ] **Billing / subscription layer** — no design yet; depends on Stripe selection.
 
 - [ ] **Pipeline stages UI** — schema removed; reintroduce when a pipeline model is designed.

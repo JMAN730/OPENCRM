@@ -81,51 +81,48 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
   const name = user.name || user.email || "Member";
 
   return (
-    <PageShell
-      title={
+    <PageShell>
+      <div className="crm-page-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link href="/team" className="crm-btn ghost icon" style={{ textDecoration: "none" }}>
+            <ArrowLeft size={14} />
+          </Link>
           <div className={`crm-avatar ${avatarClass(name)}`} style={{ width: 48, height: 48, fontSize: 16 }}>
             {initials(name)}
           </div>
-          <span>{name}</span>
+          <div>
+            <h1 className="crm-page-title">{name}</h1>
+            <div className="crm-page-sub" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {isAdmin ? (
+                <select
+                  value={user.role}
+                  onChange={(e) =>
+                    promoteRole.mutate({
+                      userId: user.id,
+                      role: e.target.value as "ADMIN" | "MANAGER" | "USER",
+                    })
+                  }
+                  disabled={promoteRole.isPending}
+                  className="crm-clay-input"
+                  style={{
+                    padding: "2px 6px",
+                    fontSize: 12,
+                    color: "var(--crm-fg-faint)",
+                  }}
+                >
+                  <option value="USER">User</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              ) : (
+                <span>{user.role}</span>
+              )}
+              {user.team ? <span>· {user.team.name}</span> : null}
+              {user.email ? <span>· {user.email}</span> : null}
+            </div>
+          </div>
         </div>
-      }
-      subtitle={
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {isAdmin ? (
-            <select
-              value={user.role}
-              onChange={(e) =>
-                promoteRole.mutate({
-                  userId: user.id,
-                  role: e.target.value as "ADMIN" | "MANAGER" | "USER",
-                })
-              }
-              disabled={promoteRole.isPending}
-              className="crm-clay-input"
-              style={{
-                padding: "2px 6px",
-                fontSize: 12,
-                color: "var(--crm-fg-faint)",
-              }}
-            >
-              <option value="USER">User</option>
-              <option value="MANAGER">Manager</option>
-              <option value="ADMIN">Admin</option>
-            </select>
-          ) : (
-            <span>{user.role}</span>
-          )}
-          {user.team ? <span>· {user.team.name}</span> : null}
-          {user.email ? <span>· {user.email}</span> : null}
-        </div>
-      }
-      actions={
-        <Link href="/team" className="crm-btn ghost icon" style={{ textDecoration: "none" }}>
-          <ArrowLeft size={14} />
-        </Link>
-      }
-    >
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
         <StatCard label="Leads owned" value={leadCount} />
         <StatCard label="Calls logged" value={callCount} />

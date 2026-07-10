@@ -22,6 +22,8 @@ export function TrainerPanel() {
 
   const { data: leads = [] } = trpc.trainer.pickableLeads.useQuery();
   const { data: personas = [] } = trpc.trainer.listPersonas.useQuery();
+  const { data: config } = trpc.trainer.config.useQuery();
+  const voiceConfigured = config?.voiceConfigured ?? true;
 
   const [leadId, setLeadId] = useState(initialLeadId);
   const [personaId, setPersonaId] = useState("");
@@ -86,23 +88,36 @@ export function TrainerPanel() {
             <button
               type="button"
               className="crm-btn primary"
-              disabled={!canStart}
+              disabled={!canStart || !voiceConfigured}
               onClick={() => setStarted(true)}
             >
               Start Practice Call
             </button>
           </div>
           <div className="crm-card flex flex-col items-center justify-center p-10 text-center">
-            <p className="font-medium">Ready to practice</p>
-            <p className="text-sm" style={{ color: "var(--crm-fg-muted)" }}>
-              Select a lead and persona, then start your session.
-            </p>
+            {voiceConfigured ? (
+              <>
+                <p className="font-medium">Ready to practice</p>
+                <p className="text-sm" style={{ color: "var(--crm-fg-muted)" }}>
+                  Select a lead and persona, then start your session.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium">Live calls aren&apos;t configured yet</p>
+                <p className="text-sm" style={{ color: "var(--crm-fg-muted)" }}>
+                  Practice calls need a voice provider. Set <code>ELEVENLABS_API_KEY</code> and{" "}
+                  <code>ELEVENLABS_AGENT_ID</code> to enable them. Personas and past sessions still work without it.
+                </p>
+              </>
+            )}
           </div>
         </div>
       ) : (
         <TrainerCall
           leadId={leadId}
           personaId={effectivePersonaId}
+          voiceConfigured={voiceConfigured}
           onReset={() => {
             setStarted(false);
             setPersonaId("");

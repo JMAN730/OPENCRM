@@ -6,18 +6,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { X, UserPlus, ArrowLeft } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
-import { AuthCard, AuthShell } from "@/components/layout/AuthShell";
 
 type SavedUser = {
   email: string;
@@ -194,20 +187,18 @@ export default function SignInPage() {
   if (status === "loading")
     return (
       <AuthShell>
-        <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </AuthShell>
     );
 
   // ── Account picker ──────────────────────────────────────────────────────────
   if (view === "picker") {
     return (
-      <AuthShell wide>
-        <div className="flex flex-col items-center gap-10">
+      <AuthShell>
+        <div className="flex flex-col items-center gap-10 w-full max-w-lg">
           <div className="text-center">
-            <h1 className="crm-auth-title text-3xl">Welcome back</h1>
-            <p className="crm-auth-sub mt-1">Select your account to continue</p>
+            <h1 className="text-3xl font-bold">Welcome back</h1>
+            <p className="mt-1 text-muted-foreground">Select your account to continue</p>
           </div>
 
           <div className="flex flex-wrap justify-center gap-3">
@@ -218,7 +209,7 @@ export default function SignInPage() {
                 tabIndex={0}
                 onClick={() => handleSelectUser(user)}
                 onKeyDown={(e) => e.key === "Enter" && handleSelectUser(user)}
-                className="crm-auth-tile group relative flex w-32 cursor-pointer flex-col items-center gap-3 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group relative flex w-32 cursor-pointer flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <button
                   onClick={(e) => handleRemoveUser(user.email, e)}
@@ -239,7 +230,7 @@ export default function SignInPage() {
 
             <button
               onClick={() => { setEmail(""); setPassword(""); setError(""); setViewOverride("new"); }}
-              className="crm-auth-tile flex w-32 flex-col items-center gap-3 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex w-32 flex-col items-center gap-3 rounded-xl p-4 transition-all duration-150 hover:bg-card hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">
                 <UserPlus className="h-6 w-6 text-muted-foreground/60" />
@@ -257,22 +248,20 @@ export default function SignInPage() {
     return (
       <AuthShell>
         <AuthCard>
-        <CardHeader className="space-y-4 text-center border-0 p-0 pb-4">
-            <div className="flex justify-center">
-              <Avatar className="h-20 w-20 text-2xl">
-                {selectedUser.image && (
-                  <AvatarImage src={selectedUser.image} alt={selectedUser.name} />
-                )}
-                <AvatarFallback>{getInitials(selectedUser.name)}</AvatarFallback>
-              </Avatar>
-            </div>
+          <div className="mb-6 flex flex-col items-center gap-4 text-center">
+            <Avatar className="h-20 w-20 text-2xl">
+              {selectedUser.image && (
+                <AvatarImage src={selectedUser.image} alt={selectedUser.name} />
+              )}
+              <AvatarFallback>{getInitials(selectedUser.name)}</AvatarFallback>
+            </Avatar>
             <div>
-              <CardTitle className="text-xl">{selectedUser.name}</CardTitle>
-              <CardDescription>{selectedUser.email}</CardDescription>
+              <h1 className="text-xl font-semibold">{selectedUser.name}</h1>
+              <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
             </div>
-          </CardHeader>
+          </div>
           <form onSubmit={handleSignIn}>
-            <CardContent className="space-y-4">
+            <div className="space-y-4">
               {error && (
                 <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
@@ -289,8 +278,8 @@ export default function SignInPage() {
                   required
                 />
               </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-3 border-t-0 bg-transparent">
+            </div>
+            <div className="mt-6 flex flex-col gap-3">
               <Button className="w-full" type="submit" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
@@ -317,7 +306,7 @@ export default function SignInPage() {
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to accounts
               </Button>
-            </CardFooter>
+            </div>
           </form>
         </AuthCard>
       </AuthShell>
@@ -327,15 +316,12 @@ export default function SignInPage() {
   // ── New account form ────────────────────────────────────────────────────────
   return (
     <AuthShell>
-      <AuthCard className="max-w-md">
-        <CardHeader className="space-y-1 border-0 p-0 pb-4 text-center">
-          <CardTitle className="crm-auth-title text-2xl">Sign In</CardTitle>
-          <CardDescription className="crm-auth-sub">
-            Enter your email and password to access your account
-          </CardDescription>
-        </CardHeader>
+      <AuthCard
+        title="Sign In"
+        description="Enter your email and password to access your account"
+      >
         <form onSubmit={handleSignIn}>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
@@ -370,8 +356,8 @@ export default function SignInPage() {
               />
               Remember this account on this device
             </label>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4 border-t-0 bg-transparent">
+          </div>
+          <div className="mt-6 flex flex-col items-center gap-4">
             <Button className="w-full" type="submit" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
@@ -409,7 +395,7 @@ export default function SignInPage() {
                 Create one
               </Link>
             </p>
-          </CardFooter>
+          </div>
         </form>
       </AuthCard>
     </AuthShell>

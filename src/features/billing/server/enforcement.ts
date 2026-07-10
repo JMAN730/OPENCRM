@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import type { OrganizationSubscription, PlanTier, PrismaClient, SubscriptionStatus } from "@prisma/client";
+import { cached, invalidate } from "@/lib/cache";
 import { getPlanLimits, TRIAL_DAYS } from "@/features/billing/server/plans";
 
 export type SubscriptionSnapshot = Pick<
@@ -12,21 +13,53 @@ export type SubscriptionSnapshot = Pick<
   | "cancelAtPeriodEnd"
 >;
 
+const SUBSCRIPTION_TTL_SECONDS = 60;
+
+function subscriptionKey(organizationId: string): string {
+  return `billing:sub:${organizationId}`;
+}
+
+/** Bust the Redis-cached snapshot. Call after any subscription row write. */
+export async function invalidateSubscriptionCache(organizationId: string): Promise<void> {
+  await invalidate(subscriptionKey(organizationId));
+}
+
+/** Dates survive a JSON round-trip through Redis as ISO strings — revive them. */
+function reviveSnapshot(sub: SubscriptionSnapshot | null): SubscriptionSnapshot | null {
+  if (!sub) return null;
+  return {
+    ...sub,
+    trialEndsAt: sub.trialEndsAt ? new Date(sub.trialEndsAt) : null,
+    currentPeriodEnd: sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null,
+  };
+}
+
+/**
+ * Subscription snapshot for enforcement checks. Hot path: the mutation gate in
+ * organizationProcedure runs this on every org-scoped mutation, so the row is
+ * cached in Redis with a 60s TTL. Webhook and checkout writes call
+ * `invalidateSubscriptionCache(organizationId)`.
+ */
 export async function getOrgSubscription(
   prisma: PrismaClient,
   organizationId: string,
 ): Promise<SubscriptionSnapshot | null> {
-  return prisma.organizationSubscription.findUnique({
-    where: { organizationId },
-    select: {
-      planTier: true,
-      status: true,
-      seatLimit: true,
-      trialEndsAt: true,
-      currentPeriodEnd: true,
-      cancelAtPeriodEnd: true,
-    },
-  });
+  const snapshot = await cached<SubscriptionSnapshot | null>(
+    { key: subscriptionKey(organizationId), ttl: SUBSCRIPTION_TTL_SECONDS },
+    () =>
+      prisma.organizationSubscription.findUnique({
+        where: { organizationId },
+        select: {
+          planTier: true,
+          status: true,
+          seatLimit: true,
+          trialEndsAt: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
+        },
+      }),
+  );
+  return reviveSnapshot(snapshot);
 }
 
 export function isSubscriptionUsable(
@@ -82,14 +115,19 @@ export async function assertSubscriptionActiveForOrg(
   let sub = await getOrgSubscription(prisma, organizationId);
 
   if (!sub) {
-    const created = await prisma.organizationSubscription.create({
-      data: {
+    // Orgs created before billing shipped have no row yet — start their trial
+    // lazily. Upsert so a concurrent mutation (or stale cached null) can't
+    // trip the unique constraint on organizationId.
+    const created = await prisma.organizationSubscription.upsert({
+      where: { organizationId },
+      create: {
         organizationId,
         planTier: "STARTER",
         status: "TRIALING",
         seatLimit: defaultSeatLimitForTier("STARTER"),
         trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
       },
+      update: {},
       select: {
         planTier: true,
         status: true,
@@ -99,6 +137,7 @@ export async function assertSubscriptionActiveForOrg(
         cancelAtPeriodEnd: true,
       },
     });
+    await invalidateSubscriptionCache(organizationId);
     sub = created;
   }
 

@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in Open CRM, please **do not** open a public issue. Instead, please report it to security@example.com with the following information:
+If you discover a security vulnerability in ClientCore, please **do not** open a public issue. Instead, please report it privately through GitHub's [private vulnerability reporting](https://github.com/JMAN730/OPENCRM/security/advisories/new) (the **Report a vulnerability** button under the repository's **Security** tab) with the following information:
 
 - A clear description of the vulnerability
 - Steps to reproduce the issue
@@ -13,7 +13,7 @@ We will acknowledge receipt of your report within 48 hours and provide a more de
 
 ## Security Best Practices
 
-When deploying Open CRM, please follow these security best practices:
+When deploying ClientCore, please follow these security best practices:
 
 ### Environment Variables
 
@@ -70,7 +70,7 @@ If using optional integrations:
 
 ## Security Headers
 
-Open CRM includes security headers configured in Next.js. Review and customize as needed:
+ClientCore includes security headers configured in Next.js. Review and customize as needed:
 
 - Content Security Policy (CSP)
 - X-Content-Type-Options
@@ -106,4 +106,4 @@ If a security incident occurs:
 
 ## Questions?
 
-If you have security-related questions or concerns, please email security@example.com.
+If you have security-related questions or concerns, please open a private report through GitHub's [private vulnerability reporting](https://github.com/JMAN730/OPENCRM/security/advisories/new).

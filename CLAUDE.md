@@ -112,6 +112,13 @@ TWILIO_PHONE_NUMBER="+15555555555"
 DEEPSEEK_API_KEY="..."
 DEEPSEEK_BASE_URL="https://api.deepseek.com"
 AI_MODEL="deepseek-chat"
+
+# Optional – Stripe billing (subscriptions, plan enforcement)
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."    # signing secret for /api/webhooks/stripe
+STRIPE_PRICE_STARTER="price_..."
+STRIPE_PRICE_PRO="price_..."
+STRIPE_PRICE_BUSINESS="price_..."
 ```
 
 ## Architecture
@@ -137,7 +144,6 @@ Client component → `trpc.<router>.<procedure>` (from `src/app/_trpc/client.ts`
 ```typescript
 // src/server/api/root.ts
 appRouter = {
-  ai:               aiRouter,               // AI lead qualification + email copy generation
   leads:            leadsRouter,            // full CRUD + bulk import + cursor pagination + notes + custom outcomes
   calls:            callsRouter,            // call logging + retrieval + Twilio token
   scraper:          scraperRouter,          // Google Maps lead scraper
@@ -155,7 +161,7 @@ appRouter = {
   outreach:         outreachRouter,         // automated outreach queue (cron worker + review/bulk-send)
   map:              mapRouter,              // lead map (OSM viewport queries, discovery, enrichment)
   trainer:          trainerRouter,          // voice call trainer (ElevenLabs personas + session scoring)
-  billing:          billingRouter,          // Stripe subscriptions + plan limits
+  billing:          billingRouter,          // Stripe subscriptions (checkout, portal, plan limits)
 }
 ```
 
@@ -221,6 +227,7 @@ All caching uses `src/lib/cache.ts` (read-through helper) backed by `src/lib/red
 | Auth snapshot (session user fields) | 60s | `auth:snapshot:{userId}` |
 | Dashboard KPI stats | 60s | `dashboard:kpi:{orgId}` |
 | Team lead scope | 60s | `scope:leads:{orgId}:{userId}` |
+| Billing subscription snapshot | 60s | `billing:sub:{orgId}` |
 
 ### Rate limiting
 
@@ -241,6 +248,8 @@ Used on: `auth.register` (IP), `auth.resetPassword` (IP + email).
 
 All authenticated pages wrap their content in `<DashboardLayout>` (from `src/components/layout/DashboardLayout.tsx`), which renders the `Sidebar` + `Header` + main content area + `Toaster`. Pages live in `src/app/<section>/page.tsx` and import feature components from `src/features/<feature>/components/`.
 
+Inside `DashboardLayout`, page content uses `<PageShell>` (from `src/components/layout/PageShell.tsx`) for the standard `crm-content` wrapper plus optional `title` / `subtitle` / `actions` page head — do not hand-roll `crm-content` / `crm-page-head` markup on new pages. Auth pages (signin, register, reset-password, accept-invite) use `<AuthShell>` + `<AuthCard>` from `src/features/auth/components/AuthShell.tsx`.
+
 ---
 
 ## Feature Map
@@ -257,10 +266,10 @@ All authenticated pages wrap their content in `<DashboardLayout>` (from `src/com
 | Analytics | `/analytics` | `analytics` | analytics dashboards | Implemented |
 | Emails | (in lead modal) | `emails` | `EmailDraftPanel` (CAN-SPAM outreach + tracking) | Implemented |
 | Scripts | `/scripts`, `/dialer`, lead modal | `scripts` | `ScriptsPanel` | Implemented |
-| AI | (in lead modal) | `ai` | lead qualification + email copy | Implemented |
 | Settings | `/settings`, `/settings/scoring` | `auth.*`, `teams.*`, `leads.*Tag`, `billing.*`, `scoring.*` | Profile + Members + Tags + Billing tabs; scoring rules page | Implemented |
 | Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
 | Map | `/map` | `map` | `LeadMap` (OSM lead map: discover businesses, select pins, enrich contact details) | Implemented |
+| Billing | `/settings` (Billing tab) | `billing` | `BillingPanel` (Stripe checkout/portal, plan + seat usage) | Implemented |
 | Trainer | `/trainer` | `trainer` | voice call practice with ElevenLabs personas + AI scorecards | Implemented |
 | Calendar | `/calendar` | `tasks` | task calendar view (standalone page) | Implemented |
 
@@ -542,4 +551,4 @@ Canonical triage roles use default label strings (`needs-triage`, `needs-info`, 
 
 ### Domain docs
 
-Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context layout — `CONTEXT.md` at the repo root; architectural decision records go in `docs/adr/` (created with the first ADR). See `docs/agents/domain.md`.

@@ -603,13 +603,17 @@ export function LeadsList() {
                 New lead
               </button>
             </>
-          ) : (
-            viewToggle
-          )
+          ) : undefined
         }
       >
         {viewMode === "focus" ? (
           <>
+            <div
+              className="crm-page-head-actions"
+              style={{ justifyContent: "flex-end", marginBottom: 12 }}
+            >
+              {viewToggle}
+            </div>
             <LeadsFocusHero
               focusCards={focusCards}
               isLoading={dueTodayQuery.isLoading || overdueQuery.isLoading}

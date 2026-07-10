@@ -10,6 +10,7 @@ import {
 } from "@/features/emails/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
+import { keys } from "@/lib/cacheKeys";
 
 const TRPC_CODE_BY_OUTREACH_CODE: Record<OutreachErrorCode, "BAD_REQUEST" | "CONFLICT" | "NOT_FOUND" | "INTERNAL_SERVER_ERROR"> = {
   NO_EMAIL: "BAD_REQUEST",
@@ -48,7 +49,7 @@ export const emailsRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertWithinRateLimit({
-        key: `email-gen:${ctx.organizationId}:${input.leadId}`,
+        key: keys.emailGenBucket(ctx.organizationId, input.leadId),
         limit: 3,
         windowSeconds: 30,
       });
@@ -95,7 +96,7 @@ export const emailsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertWithinRateLimit({
-        key: `email-send:${ctx.organizationId}`,
+        key: keys.emailSendBucket(ctx.organizationId),
         limit: 20,
         windowSeconds: 60,
       });

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
 import { safeGet, safeSetEx } from "@/lib/redis";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { keys } from "@/lib/cacheKeys";
 
 // Pre-computed bcrypt hash used when the email is not found, so we always
 // spend roughly the same time as a real compare. Prevents user enumeration
@@ -129,7 +130,7 @@ export const authOptions: NextAuthOptions = {
         // key on email alone — sufficient to block credential stuffing on a
         // single account.
         const rl = await rateLimit({
-          key: `auth:signin:${email}`,
+          key: keys.authSigninBucket(email),
           limit: 10,
           windowSeconds: 60,
         });

@@ -6,6 +6,7 @@ import { TEMPLATE_IDS, getTemplate } from "@/features/websites/templates";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
+import { keys } from "@/lib/cacheKeys";
 
 export const websitesRouter = createTRPCRouter({
   getForLead: organizationProcedure
@@ -60,7 +61,7 @@ export const websitesRouter = createTRPCRouter({
     .input(z.object({ leadId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertWithinRateLimit({
-        key: `demo-gen:${ctx.organizationId}:${input.leadId}`,
+        key: keys.demoGenBucket(ctx.organizationId, input.leadId),
         limit: 5,
         windowSeconds: 60,
       });
