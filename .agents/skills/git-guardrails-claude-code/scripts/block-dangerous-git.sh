@@ -5,15 +5,16 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
 # `git` may carry global options before the subcommand (e.g. `-C <path>`,
 # `-c <k=v>`, `--git-dir=...`), flags may be reordered or clustered
-# (`clean -xfd`), and pathspecs may follow a `--` separator.
+# (`clean -xfd`), some options take a separate value token (`-e keep`,
+# `--source HEAD`), and pathspecs may follow a `--` separator.
 S='[[:space:]]'
 W='[^[:space:]]'
 GIT="git($S+-[cC]$S+$W+|$S+--?$W+)*"
-FLAGS="($S+-$W+)*"
+FLAGS="($S+-$W+($S+[^-[:space:]]$W*)?)*"
 
 DANGEROUS_PATTERNS=(
   "$GIT$S+push"
-  "$GIT$S+reset$S+--hard"
+  "$GIT$S+reset$FLAGS$S+--hard"
   "$GIT$S+clean$FLAGS$S+-[A-Za-z]*f"
   "$GIT$S+clean$FLAGS$S+--force"
   "$GIT$S+branch$FLAGS$S+-[A-Za-z]*D"
