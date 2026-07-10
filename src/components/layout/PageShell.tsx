@@ -31,7 +31,11 @@ export function PageShell({
           {actions != null ? <div className="crm-page-head-actions">{actions}</div> : null}
         </div>
       ) : null}
-      <div className={cn(contentClassName)}>{children}</div>
+      {contentClassName != null ? (
+        <div className={contentClassName}>{children}</div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
