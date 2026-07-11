@@ -282,12 +282,14 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </button>
         <div style={{ width: 1, height: 20, background: "var(--crm-border)", margin: "0 4px" }} />
         <button
-          className="crm-btn"
+          className="crm-btn crm-ai-trigger"
           aria-pressed={openPanel === "ai"}
+          aria-label="Open Opulence"
+          title="Open Opulence"
           onClick={() => toggle("ai")}
         >
           <Sparkles size={14} />
-          Opulence
+          <span className="crm-ai-trigger-label">Opulence</span>
           <span className="crm-kbd">⌘J</span>
         </button>
 

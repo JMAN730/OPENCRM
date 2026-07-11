@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Full-screen clay-paper backdrop for the auth flow (sign-in, register,
+ * Full-screen glass backdrop for the auth flow (sign-in, register,
  * reset-password, accept-invite). Applies the `.crm-app` token scope so the
- * clay palette is available outside DashboardLayout.
+ * CRM palette is available outside DashboardLayout.
  */
 export function AuthShell({
   children,
@@ -14,7 +15,15 @@ export function AuthShell({
   children?: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("crm-app crm-auth-shell", className)}>{children}</div>;
+  return (
+    <div className={cn("crm-app crm-auth-shell", className)}>
+      <Link href="/" className="crm-auth-brand" aria-label="ClientCore home">
+        <span className="crm-auth-brand-mark" aria-hidden="true">C</span>
+        <span>ClientCore</span>
+      </Link>
+      <div className="crm-auth-stage">{children}</div>
+    </div>
+  );
 }
 
 export function AuthCard({
