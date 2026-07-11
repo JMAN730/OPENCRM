@@ -9,6 +9,7 @@ import {
   sendDraft,
 } from "@/features/emails/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
+import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
 import { keys } from "@/lib/cacheKeys";
 
 const TRPC_CODE_BY_OUTREACH_CODE: Record<OutreachErrorCode, "BAD_REQUEST" | "CONFLICT" | "NOT_FOUND" | "INTERNAL_SERVER_ERROR"> = {
@@ -21,6 +22,7 @@ const TRPC_CODE_BY_OUTREACH_CODE: Record<OutreachErrorCode, "BAD_REQUEST" | "CON
 };
 
 function toTRPCError(err: unknown, fallbackMessage: string): TRPCError {
+  if (err instanceof TRPCError) return err;
   if (err instanceof OutreachEmailError) {
     return new TRPCError({ code: TRPC_CODE_BY_OUTREACH_CODE[err.code], message: err.message });
   }
@@ -34,11 +36,7 @@ export const emailsRouter = createTRPCRouter({
   getDraftForLead: organizationProcedure
     .input(z.object({ leadId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
-        select: { id: true },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
+      await requireVisibleLead(ctx, input.leadId, { select: { id: true } });
 
       return ctx.prisma.emailDraft.findFirst({
         where: { leadId: input.leadId, organizationId: ctx.organizationId },
@@ -56,10 +54,7 @@ export const emailsRouter = createTRPCRouter({
         windowSeconds: 30,
       });
 
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, organizationId: ctx.organizationId },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
+      const lead = await requireVisibleLead(ctx, input.leadId);
 
       try {
         return await generateDraftForLead(ctx.prisma, lead, {
@@ -79,7 +74,11 @@ export const emailsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       const draft = await ctx.prisma.emailDraft.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
+        where: {
+          id: input.id,
+          organizationId: ctx.organizationId,
+          lead: await visibleLeadWhere(ctx),
+        },
         select: { id: true, status: true },
       });
       if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
@@ -103,6 +102,16 @@ export const emailsRouter = createTRPCRouter({
       });
 
       try {
+        const draft = await ctx.prisma.emailDraft.findFirst({
+          where: {
+            id: input.id,
+            organizationId: ctx.organizationId,
+            lead: await visibleLeadWhere(ctx),
+          },
+          select: { id: true },
+        });
+        if (!draft) throw new TRPCError({ code: "NOT_FOUND", message: "Draft not found." });
+
         return await sendDraft(ctx.prisma, {
           draftId: input.id,
           organizationId: ctx.organizationId,
@@ -117,7 +126,11 @@ export const emailsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const draft = await ctx.prisma.emailDraft.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
+        where: {
+          id: input.id,
+          organizationId: ctx.organizationId,
+          lead: await visibleLeadWhere(ctx),
+        },
         select: { id: true, status: true },
       });
       if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
