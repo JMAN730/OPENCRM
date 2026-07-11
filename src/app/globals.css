@@ -2364,3 +2364,529 @@
   .crm-pipeline-kpi:nth-child(2) { border-right: 0; }
   .crm-pipeline-kpi:nth-child(3) { border-right: 1px solid var(--crm-border-soft); }
 }
+
+/* =========================================================
+   ClientCore glass system
+   ========================================================= */
+
+.crm-app {
+  --crm-bg: oklch(95.5% 0.018 228);
+  --crm-canvas:
+    linear-gradient(135deg, oklch(96% 0.032 165) 0%, transparent 52%),
+    linear-gradient(315deg, oklch(96% 0.026 28) 0%, transparent 48%),
+    linear-gradient(180deg, oklch(97% 0.018 246), oklch(93.5% 0.018 226));
+  --crm-surface: oklch(100% 0 0 / 0.68);
+  --crm-surface-strong: oklch(100% 0 0 / 0.88);
+  --crm-surface-2: oklch(97% 0.012 230 / 0.54);
+  --crm-surface-hover: oklch(100% 0 0 / 0.8);
+  --crm-control: oklch(100% 0 0 / 0.72);
+  --crm-border: oklch(100% 0 0 / 0.76);
+  --crm-border-soft: oklch(100% 0 0 / 0.5);
+  --crm-border-strong: oklch(73% 0.025 235 / 0.58);
+  --crm-fg: oklch(22% 0.026 242);
+  --crm-fg-muted: oklch(46% 0.026 240);
+  --crm-fg-faint: oklch(60% 0.022 238);
+  --crm-accent: oklch(56% 0.17 256);
+  --crm-accent-hover: oklch(51% 0.18 256);
+  --crm-accent-soft: oklch(91% 0.055 252 / 0.76);
+  --crm-accent-fg: oklch(40% 0.15 256);
+  --crm-pos: oklch(53% 0.14 158);
+  --crm-pos-soft: oklch(93% 0.045 158 / 0.8);
+  --crm-neg: oklch(56% 0.19 24);
+  --crm-neg-soft: oklch(94% 0.045 24 / 0.8);
+  --crm-warn: oklch(62% 0.14 75);
+  --crm-warn-soft: oklch(95% 0.055 82 / 0.82);
+  --crm-hot: oklch(61% 0.19 38);
+  --crm-hot-soft: oklch(95% 0.05 42 / 0.82);
+  --crm-cool: oklch(56% 0.12 210);
+  --crm-cool-soft: oklch(93% 0.045 210 / 0.82);
+  --crm-shadow-card:
+    inset 0 1px 0 oklch(100% 0 0 / 0.72),
+    0 14px 38px -28px oklch(28% 0.05 238 / 0.42),
+    0 2px 8px -5px oklch(28% 0.04 238 / 0.18);
+  --crm-shadow-soft:
+    inset 0 1px 0 oklch(100% 0 0 / 0.74),
+    0 18px 42px -26px oklch(28% 0.05 238 / 0.4);
+  --crm-shadow-pop:
+    inset 0 1px 0 oklch(100% 0 0 / 0.8),
+    0 28px 70px -30px oklch(22% 0.055 238 / 0.48),
+    0 8px 24px -16px oklch(22% 0.04 238 / 0.24);
+  --crm-shadow-modal:
+    inset 0 1px 0 oklch(100% 0 0 / 0.72),
+    0 34px 90px -28px oklch(18% 0.05 238 / 0.5);
+  --crm-blur: blur(18px) saturate(135%);
+  --crm-blur-strong: blur(24px) saturate(145%);
+
+  --background: oklch(98% 0.008 235 / 0.78);
+  --foreground: oklch(22% 0.026 242);
+  --card: oklch(100% 0 0 / 0.72);
+  --card-foreground: oklch(22% 0.026 242);
+  --popover: oklch(100% 0 0 / 0.9);
+  --popover-foreground: oklch(22% 0.026 242);
+  --primary: oklch(56% 0.17 256);
+  --primary-foreground: #ffffff;
+  --secondary: oklch(96% 0.018 235 / 0.72);
+  --secondary-foreground: oklch(28% 0.03 242);
+  --muted: oklch(95% 0.016 235 / 0.72);
+  --muted-foreground: oklch(48% 0.025 240);
+  --accent: oklch(92% 0.05 252 / 0.72);
+  --accent-foreground: oklch(38% 0.14 256);
+  --border: oklch(100% 0 0 / 0.72);
+  --input: oklch(72% 0.025 235 / 0.52);
+  --ring: oklch(56% 0.17 256 / 0.72);
+
+  background-color: var(--crm-bg);
+  background-image: var(--crm-canvas);
+  background-attachment: fixed;
+  color-scheme: light;
+}
+
+.dark .crm-app {
+  --crm-bg: oklch(11% 0.025 235);
+  --crm-canvas:
+    linear-gradient(135deg, oklch(18% 0.055 175) 0%, transparent 52%),
+    linear-gradient(315deg, oklch(18% 0.045 12) 0%, transparent 46%),
+    linear-gradient(180deg, oklch(13% 0.038 248), oklch(9.5% 0.028 226));
+  --crm-surface: oklch(20% 0.03 238 / 0.62);
+  --crm-surface-strong: oklch(20% 0.03 238 / 0.84);
+  --crm-surface-2: oklch(15% 0.028 235 / 0.58);
+  --crm-surface-hover: oklch(28% 0.034 236 / 0.72);
+  --crm-control: oklch(24% 0.034 238 / 0.7);
+  --crm-border: oklch(100% 0 0 / 0.13);
+  --crm-border-soft: oklch(100% 0 0 / 0.08);
+  --crm-border-strong: oklch(100% 0 0 / 0.22);
+  --crm-fg: oklch(94% 0.012 230);
+  --crm-fg-muted: oklch(73% 0.02 232);
+  --crm-fg-faint: oklch(57% 0.02 232);
+  --crm-accent: oklch(72% 0.15 252);
+  --crm-accent-hover: oklch(77% 0.14 252);
+  --crm-accent-soft: oklch(28% 0.1 252 / 0.7);
+  --crm-accent-fg: oklch(84% 0.1 250);
+  --crm-pos: oklch(72% 0.15 158);
+  --crm-pos-soft: oklch(24% 0.065 158 / 0.7);
+  --crm-neg: oklch(72% 0.18 24);
+  --crm-neg-soft: oklch(24% 0.075 24 / 0.7);
+  --crm-warn: oklch(79% 0.13 78);
+  --crm-warn-soft: oklch(25% 0.07 78 / 0.7);
+  --crm-hot: oklch(74% 0.19 38);
+  --crm-hot-soft: oklch(25% 0.075 38 / 0.7);
+  --crm-cool: oklch(74% 0.12 210);
+  --crm-cool-soft: oklch(24% 0.06 210 / 0.7);
+  --crm-shadow-card:
+    inset 0 1px 0 oklch(100% 0 0 / 0.09),
+    0 18px 46px -30px oklch(0% 0 0 / 0.78),
+    0 2px 10px -6px oklch(0% 0 0 / 0.58);
+  --crm-shadow-soft:
+    inset 0 1px 0 oklch(100% 0 0 / 0.1),
+    0 20px 50px -28px oklch(0% 0 0 / 0.78);
+  --crm-shadow-pop:
+    inset 0 1px 0 oklch(100% 0 0 / 0.12),
+    0 30px 80px -28px oklch(0% 0 0 / 0.86),
+    0 8px 26px -14px oklch(0% 0 0 / 0.62);
+  --crm-shadow-modal:
+    inset 0 1px 0 oklch(100% 0 0 / 0.12),
+    0 36px 96px -24px oklch(0% 0 0 / 0.88);
+
+  --background: oklch(18% 0.03 238 / 0.72);
+  --foreground: oklch(94% 0.012 230);
+  --card: oklch(20% 0.03 238 / 0.74);
+  --card-foreground: oklch(94% 0.012 230);
+  --popover: oklch(18% 0.03 238 / 0.92);
+  --popover-foreground: oklch(94% 0.012 230);
+  --primary: oklch(72% 0.15 252);
+  --primary-foreground: oklch(14% 0.035 244);
+  --secondary: oklch(25% 0.035 238 / 0.72);
+  --secondary-foreground: oklch(92% 0.012 230);
+  --muted: oklch(24% 0.032 238 / 0.7);
+  --muted-foreground: oklch(70% 0.02 232);
+  --accent: oklch(30% 0.08 252 / 0.72);
+  --accent-foreground: oklch(88% 0.07 250);
+  --border: oklch(100% 0 0 / 0.13);
+  --input: oklch(100% 0 0 / 0.18);
+  --ring: oklch(72% 0.15 252 / 0.72);
+
+  color-scheme: dark;
+}
+
+.crm-sidebar,
+.crm-topbar,
+.crm-auth-card,
+.crm-card,
+.crm-drawer,
+.crm-modal,
+.crm-outcome-pop,
+.crm-pipeline-kpi-strip,
+.focus-shell,
+.focus-management,
+.focus-all-leads {
+  -webkit-backdrop-filter: var(--crm-blur);
+  backdrop-filter: var(--crm-blur);
+}
+
+.crm-sidebar {
+  background: var(--crm-surface-2);
+  border-right-color: var(--crm-border);
+  box-shadow: inset -1px 0 0 var(--crm-border-soft), 18px 0 48px -42px oklch(25% 0.04 238 / 0.52);
+}
+
+.crm-topbar {
+  background: color-mix(in oklch, var(--crm-surface-strong) 78%, transparent);
+  border-bottom-color: var(--crm-border);
+  box-shadow: 0 12px 34px -30px oklch(20% 0.05 238 / 0.5);
+}
+
+.crm-card,
+.crm-auth-card,
+.crm-drawer,
+.crm-modal,
+.crm-pipeline-kpi-strip,
+.crm-pipeline-col,
+.crm-pipeline-lead,
+.crm-pipeline-lost-lane,
+.crm-pipeline-lost-card,
+.focus-shell,
+.focus-management,
+.focus-all-leads,
+.focus-spot-card,
+.focus-card {
+  border-color: var(--crm-border);
+  box-shadow: var(--crm-shadow-card);
+}
+
+.crm-card,
+.crm-auth-card,
+.crm-drawer,
+.crm-modal,
+.crm-pipeline-kpi-strip,
+.crm-pipeline-lost-lane,
+.focus-shell,
+.focus-management,
+.focus-all-leads {
+  background: var(--crm-surface);
+}
+
+.crm-pipeline-col,
+.focus-fallback,
+.crm-table thead th,
+.crm-table-v1 thead th {
+  background: var(--crm-surface-2);
+}
+
+.crm-pipeline-lead,
+.crm-pipeline-lost-card,
+.focus-spot-card,
+.focus-card,
+.crm-table.leads thead th {
+  background: var(--crm-surface-strong);
+}
+
+.crm-card.flush,
+.crm-pipeline-kpi-strip,
+.focus-shell,
+.focus-management,
+.focus-all-leads {
+  overflow: hidden;
+}
+
+.crm-btn,
+.crm-chip,
+.crm-pipeline-chip,
+.crm-tabs,
+.crm-pipeline-tabs,
+.crm-nav-search {
+  background: var(--crm-control);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.38);
+}
+
+.crm-btn:hover,
+.crm-chip:hover,
+.crm-pipeline-chip:hover {
+  background: var(--crm-surface-hover);
+}
+
+.crm-btn.primary {
+  background: var(--crm-accent);
+  border-color: color-mix(in oklch, var(--crm-accent) 76%, white);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.24), 0 10px 26px -16px var(--crm-accent);
+}
+
+.crm-btn.primary:hover {
+  background: var(--crm-accent-hover);
+  border-color: var(--crm-accent-hover);
+}
+
+.crm-app [data-slot="input"],
+.crm-app textarea,
+.crm-app select {
+  background: var(--crm-control);
+  border-color: var(--crm-border-strong);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.34);
+}
+
+.crm-app [data-slot="popover"],
+.crm-app [data-slot="dropdown-menu-content"],
+.crm-app [role="menu"],
+.crm-sidebar .crm-card,
+.crm-topbar .crm-card {
+  background: var(--crm-surface-strong);
+  -webkit-backdrop-filter: var(--crm-blur-strong);
+  backdrop-filter: var(--crm-blur-strong);
+  border-color: var(--crm-border);
+  box-shadow: var(--crm-shadow-pop);
+}
+
+.crm-drawer-backdrop,
+.crm-modal-backdrop,
+.crm-sidebar-backdrop {
+  background: oklch(12% 0.03 238 / 0.36);
+  -webkit-backdrop-filter: blur(7px) saturate(115%);
+  backdrop-filter: blur(7px) saturate(115%);
+}
+
+.crm-auth-shell {
+  position: relative;
+  overflow: hidden;
+  padding: 32px;
+}
+
+.crm-auth-brand {
+  position: absolute;
+  top: 28px;
+  left: 32px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--crm-fg);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.crm-auth-brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid oklch(100% 0 0 / 0.35);
+  border-radius: 8px;
+  background: var(--crm-accent);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.28), 0 10px 24px -16px var(--crm-accent);
+  color: var(--crm-fg-onaccent);
+  font-family: var(--crm-font-mono);
+  font-size: 13px;
+}
+
+.crm-auth-stage {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.crm-auth-card {
+  max-width: 420px;
+  padding: 34px 30px;
+  border-radius: 18px;
+  box-shadow: var(--crm-shadow-pop);
+}
+
+.crm-auth-card [data-slot="button"]:not([class*="text-destructive"]) {
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.18);
+}
+
+.crm-auth-card [data-slot="input"] {
+  min-height: 38px;
+}
+
+.crm-auth-card-head h1 {
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.crm-page-title,
+.crm-card-head h3,
+.crm-pipeline-lead-name {
+  letter-spacing: 0;
+}
+
+/* ClientCore-owned marketing surface. Prospect demo sites stay isolated. */
+.clientcore-landing {
+  --landing-glass: oklch(100% 0 0 / 0.07);
+  --landing-glass-strong: oklch(100% 0 0 / 0.11);
+  --landing-border: oklch(100% 0 0 / 0.14);
+  --landing-accent: oklch(72% 0.14 252);
+  --landing-accent-2: oklch(72% 0.11 180);
+  --landing-warm: oklch(72% 0.14 32);
+  background-color: oklch(10% 0.025 235);
+  background-image:
+    linear-gradient(135deg, oklch(18% 0.06 175) 0%, transparent 48%),
+    linear-gradient(315deg, oklch(18% 0.05 18) 0%, transparent 44%),
+    linear-gradient(180deg, oklch(13% 0.04 250), oklch(8% 0.025 225));
+  background-attachment: fixed;
+}
+
+.clientcore-landing .landing-nav,
+.clientcore-landing .landing-footer,
+.clientcore-landing .landing-band {
+  border-color: var(--landing-border);
+  background: oklch(11% 0.03 235 / 0.58);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+.clientcore-landing .landing-hero-ambient,
+.clientcore-landing .landing-cta-ambient {
+  background: linear-gradient(180deg, oklch(67% 0.13 180 / 0.14), transparent 72%);
+}
+
+.clientcore-landing .landing-cta-ambient {
+  background: linear-gradient(0deg, oklch(70% 0.13 30 / 0.12), transparent 74%);
+}
+
+.clientcore-landing .landing-dashboard-aura {
+  border-radius: 18px;
+  background: linear-gradient(90deg, oklch(70% 0.13 180 / 0.2), oklch(70% 0.14 252 / 0.2), oklch(70% 0.13 32 / 0.16));
+}
+
+.clientcore-landing .landing-dashboard-shell,
+.clientcore-landing .landing-glass-card,
+.clientcore-landing .landing-price-card,
+.clientcore-landing .landing-faq {
+  border-color: var(--landing-border);
+  background: var(--landing-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  backdrop-filter: blur(18px) saturate(135%);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.08), 0 24px 64px -44px oklch(0% 0 0 / 0.9);
+}
+
+.clientcore-landing .landing-dashboard-shell {
+  background: oklch(15% 0.035 238 / 0.72);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 42px 110px -54px oklch(64% 0.12 220 / 0.52);
+}
+
+.clientcore-landing .landing-glass-card:hover,
+.clientcore-landing .landing-faq[open] {
+  border-color: oklch(76% 0.1 190 / 0.42);
+  background: var(--landing-glass-strong);
+}
+
+.clientcore-landing .landing-price-card.is-highlighted {
+  border-color: oklch(76% 0.11 190 / 0.52);
+  background: oklch(72% 0.1 190 / 0.1);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.12), 0 28px 72px -44px oklch(70% 0.12 190 / 0.7);
+}
+
+.clientcore-landing .landing-primary-action,
+.clientcore-landing .landing-brand-mark,
+.clientcore-landing .landing-step-index {
+  border: 1px solid oklch(100% 0 0 / 0.16);
+  background: var(--landing-accent);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.22), 0 12px 30px -18px var(--landing-accent);
+}
+
+.clientcore-landing .landing-secondary-action,
+.clientcore-landing .landing-pill {
+  border-color: var(--landing-border);
+  background: var(--landing-glass-strong);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  backdrop-filter: blur(16px) saturate(130%);
+}
+
+.clientcore-landing .landing-pill,
+.clientcore-landing .landing-icon-tile,
+.clientcore-landing .landing-check {
+  color: oklch(80% 0.11 180);
+}
+
+.clientcore-landing .landing-icon-tile {
+  border: 1px solid oklch(80% 0.1 180 / 0.18);
+  background: oklch(70% 0.1 180 / 0.12);
+}
+
+.clientcore-landing .landing-chart-bar {
+  background: linear-gradient(180deg, var(--landing-accent-2), var(--landing-accent));
+}
+
+@media (max-width: 900px) {
+  .crm-kpi-grid,
+  .crm-kpi-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .crm-grid-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .crm-grid-row > .crm-card {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .crm-content {
+    gap: 16px;
+    padding: 22px 16px 48px;
+  }
+
+  .crm-page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .crm-page-head-actions {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .crm-kpi-grid,
+  .crm-kpi-grid-4 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .crm-grid-row {
+    gap: 12px;
+  }
+
+  .crm-grid-row > .crm-card.flush {
+    overflow-x: auto;
+  }
+
+  .crm-grid-row > .crm-card.flush > .crm-table {
+    min-width: 620px;
+  }
+
+  .crm-auth-shell {
+    align-items: flex-start;
+    padding: 88px 16px 24px;
+  }
+
+  .crm-auth-brand {
+    top: 28px;
+    left: 20px;
+  }
+
+  .crm-auth-card {
+    padding: 28px 22px;
+  }
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .crm-sidebar,
+  .crm-topbar,
+  .crm-card,
+  .crm-auth-card,
+  .crm-drawer,
+  .crm-modal {
+    background: var(--crm-surface-strong);
+  }
+
+  .clientcore-landing .landing-nav,
+  .clientcore-landing .landing-glass-card,
+  .clientcore-landing .landing-price-card,
+  .clientcore-landing .landing-faq {
+    background: oklch(12% 0.03 235 / 0.95);
+  }
+}
