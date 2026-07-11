@@ -72,7 +72,7 @@ fn start_server(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     }
 
     // Store the SQLite database in AppData so it persists across app updates.
-    let db_path = data_dir.join("opencrm.db");
+    let db_path = data_dir.join("clientcore.db");
 
     // Seed from the bundled copy on first run.
     if !db_path.exists() {
@@ -96,7 +96,7 @@ fn start_server(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
         .env("NODE_ENV", "production")
         .env("DATABASE_URL", &database_url)
         .env("NEXTAUTH_URL", &nextauth_url)
-        .env("NEXTAUTH_SECRET", "opencrm-desktop-secret")
+        .env("NEXTAUTH_SECRET", "clientcore-desktop-secret")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
