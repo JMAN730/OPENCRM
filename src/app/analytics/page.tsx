@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageShell } from "@/components/layout/PageShell";
 import { trpc } from "@/app/_trpc/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -183,14 +184,7 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardLayout>
-      <div className="crm-content">
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">Analytics</h1>
-            <div className="crm-page-sub">30-day pipeline and activity overview</div>
-          </div>
-        </div>
-
+      <PageShell title="Analytics" subtitle="30-day pipeline and activity overview">
         {/* ── KPI strip ── */}
         <div className="crm-kpi-grid">
           <KpiCard label="Total leads" value={fmt(kpis?.totalLeads ?? 0)} sub="all time" />
@@ -397,7 +391,7 @@ export default function AnalyticsPage() {
             </table>
           </div>
         )}
-      </div>
+      </PageShell>
     </DashboardLayout>
   );
 }

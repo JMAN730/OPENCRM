@@ -1,5 +1,5 @@
 {
-  "name": "opencrm",
+  "name": "clientcore",
   "version": "0.1.0",
   "description": "A self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.",
   "author": "JMAN730",
@@ -78,9 +78,7 @@
     "react-dom": "19.2.4",
     "react-hook-form": "^7.72.1",
     "react-leaflet": "^5.0.0",
-    "react-markdown": "^9.1.0",
     "read-excel-file": "^9.0.9",
-    "remark-gfm": "^4.0.1",
     "resend": "^6.12.4",
     "shadcn": "^4.2.0",
     "sonner": "^2.0.7",

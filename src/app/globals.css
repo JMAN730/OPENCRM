@@ -135,26 +135,27 @@
 }
 
 /* ============================================================
-   OpenCRM Design System — Soft / Notion-Pitch flavored
+   ClientCore Design System — Soft / Notion-Pitch flavored
    ============================================================ */
 
 .crm-app {
-  --crm-bg: oklch(98.6% 0.006 80);
-  --crm-surface: #ffffff;
-  --crm-surface-2: oklch(97.5% 0.006 80);
-  --crm-surface-hover: oklch(96% 0.008 80);
-  --crm-border: oklch(91% 0.008 80);
-  --crm-border-soft: oklch(94% 0.006 80);
-  --crm-border-strong: oklch(82% 0.012 80);
+  /* Warm clay palette — aligned with public/landing.html paper tones */
+  --crm-bg: #e8dfd0;
+  --crm-surface: #f4eee2;
+  --crm-surface-2: #efe8db;
+  --crm-surface-hover: #ebe3d4;
+  --crm-border: rgba(120, 100, 75, 0.14);
+  --crm-border-soft: rgba(120, 100, 75, 0.09);
+  --crm-border-strong: rgba(90, 75, 55, 0.24);
 
-  --crm-fg: oklch(22% 0.012 70);
-  --crm-fg-muted: oklch(48% 0.012 70);
-  --crm-fg-faint: oklch(64% 0.012 70);
+  --crm-fg: #1a1714;
+  --crm-fg-muted: #756c5e;
+  --crm-fg-faint: #9a9185;
   --crm-fg-onaccent: #ffffff;
 
   --crm-accent: oklch(58% 0.18 280);
   --crm-accent-hover: oklch(54% 0.18 280);
-  --crm-accent-soft: oklch(95% 0.04 280);
+  --crm-accent-soft: oklch(94% 0.04 280);
   --crm-accent-fg: oklch(40% 0.16 280);
 
   --crm-pos: oklch(58% 0.14 155);
@@ -168,16 +169,37 @@
   --crm-cool: oklch(60% 0.13 220);
   --crm-cool-soft: oklch(95% 0.03 220);
 
-  --crm-shadow-modal: 0 32px 80px -20px oklch(20% 0.012 70 / 0.32), 0 8px 24px -8px oklch(20% 0.012 70 / 0.18);
+  /* Clay depth */
+  --crm-clay-light: rgba(255, 252, 245, 0.9);
+  --crm-clay-dark: rgba(130, 110, 85, 0.26);
+  --crm-shadow-clay:
+    10px 10px 26px var(--crm-clay-dark),
+    -8px -8px 22px var(--crm-clay-light),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.72);
+  --crm-shadow-clay-sm:
+    5px 5px 14px var(--crm-clay-dark),
+    -4px -4px 12px var(--crm-clay-light),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.58);
+  --crm-shadow-clay-inset:
+    inset 5px 5px 12px rgba(130, 110, 85, 0.14),
+    inset -4px -4px 10px rgba(255, 252, 245, 0.75);
+  --crm-shadow-clay-pressed:
+    inset 3px 3px 8px rgba(130, 110, 85, 0.18),
+    inset -2px -2px 6px rgba(255, 252, 245, 0.55);
 
-  --crm-shadow-card: 0 1px 0 oklch(85% 0.012 80 / 0.5);
-  --crm-shadow-soft: 0 1px 2px oklch(20% 0.012 70 / 0.04), 0 4px 12px -4px oklch(20% 0.012 70 / 0.05);
-  --crm-shadow-pop: 0 12px 32px -10px oklch(20% 0.012 70 / 0.18), 0 2px 6px -2px oklch(20% 0.012 70 / 0.06);
+  --crm-shadow-modal:
+    0 32px 80px -20px rgba(40, 32, 22, 0.28),
+    0 8px 24px -8px rgba(40, 32, 22, 0.16),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.5);
+  --crm-shadow-card: var(--crm-shadow-clay-sm);
+  --crm-shadow-soft: var(--crm-shadow-clay-sm);
+  --crm-shadow-pop: var(--crm-shadow-clay);
 
-  --crm-radius-sm: 6px;
-  --crm-radius: 10px;
-  --crm-radius-lg: 14px;
-  --crm-radius-xl: 20px;
+  --crm-radius-sm: 10px;
+  --crm-radius: 14px;
+  --crm-radius-md: 16px;
+  --crm-radius-lg: 22px;
+  --crm-radius-xl: 28px;
 
   --crm-pad-card: 20px;
   --crm-row-h: 44px;
@@ -186,7 +208,10 @@
   --crm-font-mono: var(--font-geist-mono, "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace);
   --crm-font-display: var(--crm-font-sans);
 
-  background: var(--crm-bg);
+  background:
+    radial-gradient(transparent 0, transparent 1px, rgba(120, 108, 90, 0.028) 1px, transparent 2px),
+    linear-gradient(165deg, #efe8db 0%, var(--crm-bg) 42%, #e5dcd0 100%);
+  background-size: 3px 3px, 100% 100%;
   color: var(--crm-fg);
   font-family: var(--crm-font-sans);
   font-size: 14px;
@@ -196,58 +221,71 @@
 }
 
 /* ============================================================
-   Dark-mode overrides for the OpenCRM design system
+   Dark-mode overrides for the ClientCore design system
    Applied when next-themes adds .dark to <html>
    ============================================================ */
 
 .dark .crm-app {
-  /* Surfaces — deep navy/indigo palette (ClientCore style) */
-  --crm-bg:             oklch(9.5% 0.042 265);
-  --crm-surface:        oklch(13.5% 0.050 265);
-  --crm-surface-2:      oklch(11.5% 0.046 265);
-  --crm-surface-hover:  oklch(18% 0.060 265);
-  --crm-bg-card:        oklch(13.5% 0.050 265);
+  /* Surfaces — deep warm clay */
+  --crm-bg:             oklch(16% 0.018 70);
+  --crm-surface:        oklch(21% 0.022 70);
+  --crm-surface-2:      oklch(18% 0.020 70);
+  --crm-surface-hover:  oklch(24% 0.024 70);
+  --crm-bg-card:        oklch(21% 0.022 70);
 
-  /* Borders */
-  --crm-border:         oklch(26% 0.055 265);
-  --crm-border-soft:    oklch(21% 0.050 265);
-  --crm-border-strong:  oklch(38% 0.065 265);
+  --crm-border:         oklch(32% 0.022 70 / 0.55);
+  --crm-border-soft:    oklch(28% 0.020 70 / 0.4);
+  --crm-border-strong:  oklch(40% 0.028 70 / 0.65);
 
-  /* Foreground */
-  --crm-fg:             oklch(94% 0.010 265);
-  --crm-fg-muted:       oklch(66% 0.018 265);
-  --crm-fg-faint:       oklch(48% 0.016 265);
+  --crm-fg:             oklch(94% 0.010 80);
+  --crm-fg-muted:       oklch(72% 0.018 80);
+  --crm-fg-faint:       oklch(56% 0.016 80);
   --crm-fg-onaccent:    #ffffff;
 
-  /* Accent — vivid purple */
-  --crm-accent:         oklch(56% 0.26 280);
-  --crm-accent-hover:   oklch(62% 0.26 280);
-  --crm-accent-soft:    oklch(19% 0.10 280);
-  --crm-accent-fg:      oklch(78% 0.20 280);
+  --crm-accent:         oklch(62% 0.22 280);
+  --crm-accent-hover:   oklch(66% 0.22 280);
+  --crm-accent-soft:    oklch(24% 0.08 280);
+  --crm-accent-fg:      oklch(80% 0.18 280);
 
-  /* Semantic colours */
   --crm-pos:            oklch(68% 0.16 150);
-  --crm-pos-soft:       oklch(16% 0.07 150);
+  --crm-pos-soft:       oklch(20% 0.06 150);
   --crm-neg:            oklch(64% 0.20 25);
-  --crm-neg-soft:       oklch(16% 0.08 25);
+  --crm-neg-soft:       oklch(20% 0.07 25);
   --crm-warn:           oklch(76% 0.14 70);
-  --crm-warn-soft:      oklch(17% 0.07 70);
+  --crm-warn-soft:      oklch(22% 0.06 70);
   --crm-hot:            oklch(70% 0.22 35);
-  --crm-hot-soft:       oklch(17% 0.09 35);
+  --crm-hot-soft:       oklch(22% 0.08 35);
   --crm-cool:           oklch(68% 0.14 220);
-  --crm-cool-soft:      oklch(16% 0.06 220);
+  --crm-cool-soft:      oklch(20% 0.05 220);
 
-  /* Shadows */
+  --crm-clay-light:     rgba(255, 248, 235, 0.06);
+  --crm-clay-dark:      rgba(0, 0, 0, 0.42);
+  --crm-shadow-clay:
+    10px 10px 28px var(--crm-clay-dark),
+    -6px -6px 18px var(--crm-clay-light),
+    inset 1px 1px 0 rgba(255, 248, 235, 0.08);
+  --crm-shadow-clay-sm:
+    5px 5px 16px var(--crm-clay-dark),
+    -3px -3px 10px var(--crm-clay-light),
+    inset 1px 1px 0 rgba(255, 248, 235, 0.06);
+  --crm-shadow-clay-inset:
+    inset 5px 5px 14px rgba(0, 0, 0, 0.28),
+    inset -3px -3px 10px rgba(255, 248, 235, 0.04);
+  --crm-shadow-clay-pressed:
+    inset 4px 4px 10px rgba(0, 0, 0, 0.32),
+    inset -2px -2px 6px rgba(255, 248, 235, 0.03);
+
   --crm-shadow-modal:
     0 32px 80px -20px oklch(0% 0 0 / 0.72),
     0 8px 24px -8px oklch(0% 0 0 / 0.52);
-  --crm-shadow-card:    0 1px 0 oklch(0% 0 0 / 0.35);
-  --crm-shadow-soft:
-    0 1px 2px oklch(0% 0 0 / 0.28),
-    0 4px 12px -4px oklch(0% 0 0 / 0.34);
-  --crm-shadow-pop:
-    0 12px 32px -10px oklch(0% 0 0 / 0.60),
-    0 2px 6px -2px oklch(0% 0 0 / 0.40);
+  --crm-shadow-card:    var(--crm-shadow-clay-sm);
+  --crm-shadow-soft:    var(--crm-shadow-clay-sm);
+  --crm-shadow-pop:     var(--crm-shadow-clay);
+
+  background:
+    radial-gradient(transparent 0, transparent 1px, rgba(255, 248, 235, 0.02) 1px, transparent 2px),
+    linear-gradient(165deg, oklch(18% 0.020 70) 0%, var(--crm-bg) 45%, oklch(14% 0.016 70) 100%);
+  background-size: 3px 3px, 100% 100%;
 }
 
 /* Fix gradient backgrounds that mix with white (looks wrong on dark surfaces) */
@@ -300,8 +338,9 @@
 }
 
 .crm-sidebar {
-  border-right: 1px solid var(--crm-border);
-  background: var(--crm-surface-2);
+  border-right: 1px solid var(--crm-border-soft);
+  background: linear-gradient(180deg, var(--crm-surface) 0%, var(--crm-surface-2) 100%);
+  box-shadow: 6px 0 18px rgba(130, 110, 85, 0.08);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -334,6 +373,7 @@
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: var(--crm-shadow-clay-sm);
 }
 .crm-brand-mark::after {
   content: "";
@@ -407,10 +447,14 @@
   color: var(--crm-fg);
 }
 .crm-nav-item[aria-current="page"] {
-  background: var(--crm-surface);
+  background: linear-gradient(145deg, #f7f2ea 0%, var(--crm-surface) 100%);
   color: var(--crm-fg);
   font-weight: 500;
-  box-shadow: var(--crm-shadow-card);
+  box-shadow: var(--crm-shadow-clay-sm);
+  border: 1px solid var(--crm-border-soft);
+}
+.dark .crm-nav-item[aria-current="page"] {
+  background: linear-gradient(145deg, oklch(25% 0.022 70) 0%, var(--crm-surface) 100%);
 }
 .crm-nav-item[aria-current="page"] .crm-nav-icon {
   color: var(--crm-accent-fg);
@@ -505,17 +549,25 @@
   flex-direction: column;
 }
 
+.crm-main-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .crm-topbar {
   height: 56px;
-  border-bottom: 1px solid var(--crm-border);
+  border-bottom: 1px solid var(--crm-border-soft);
   display: flex;
   align-items: center;
   padding: 0 28px;
   gap: 16px;
-  background: var(--crm-bg);
+  background: color-mix(in srgb, var(--crm-surface) 82%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   position: sticky;
   top: 0;
   z-index: 5;
+  box-shadow: 0 6px 18px rgba(130, 110, 85, 0.06);
 }
 .crm-crumbs {
   display: flex;
@@ -540,26 +592,51 @@
   height: 32px;
   padding: 0 12px;
   border-radius: var(--crm-radius-sm);
-  border: 1px solid var(--crm-border);
-  background: var(--crm-surface);
+  border: 1px solid var(--crm-border-soft);
+  background: linear-gradient(145deg, #f7f2ea 0%, var(--crm-surface) 100%);
   font-size: 13px;
   color: var(--crm-fg);
-  transition: background 0.08s, border-color 0.08s, transform 0.08s;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
   white-space: nowrap;
   cursor: pointer;
   font-family: var(--crm-font-sans);
+  box-shadow: var(--crm-shadow-clay-sm);
 }
-.crm-btn:hover { background: var(--crm-surface-hover); }
-.crm-btn:active { transform: translateY(0.5px); }
+.crm-btn:hover {
+  background: linear-gradient(145deg, #faf6ef 0%, var(--crm-surface-hover) 100%);
+}
+.dark .crm-btn {
+  background: linear-gradient(145deg, oklch(25% 0.022 70) 0%, var(--crm-surface) 100%);
+}
+.dark .crm-btn:hover {
+  background: linear-gradient(145deg, oklch(27% 0.022 70) 0%, var(--crm-surface-hover) 100%);
+}
+.crm-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--crm-shadow-clay-pressed);
+}
 .crm-btn.primary {
-  background: var(--crm-accent);
+  background: linear-gradient(145deg, oklch(62% 0.18 280) 0%, var(--crm-accent) 100%);
   color: var(--crm-fg-onaccent);
-  border-color: var(--crm-accent);
-  box-shadow: 0 1px 0 oklch(0% 0 0 / 0.06) inset, 0 1px 2px oklch(20% 0.05 280 / 0.18);
+  border-color: transparent;
+  box-shadow:
+    5px 5px 14px rgba(88, 60, 140, 0.28),
+    -3px -3px 10px rgba(255, 252, 245, 0.35),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.22);
 }
-.crm-btn.primary:hover { background: var(--crm-accent-hover); border-color: var(--crm-accent-hover); }
-.crm-btn.ghost { border-color: transparent; background: transparent; color: var(--crm-fg-muted); }
-.crm-btn.ghost:hover { background: var(--crm-surface-hover); color: var(--crm-fg); }
+.crm-btn.primary:hover { background: linear-gradient(145deg, oklch(64% 0.18 280) 0%, var(--crm-accent-hover) 100%); }
+.crm-btn.primary:active { box-shadow: var(--crm-shadow-clay-pressed); }
+.crm-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--crm-fg-muted);
+  box-shadow: none;
+}
+.crm-btn.ghost:hover {
+  background: var(--crm-surface-hover);
+  color: var(--crm-fg);
+  box-shadow: var(--crm-shadow-clay-sm);
+}
 .crm-btn.icon { width: 32px; padding: 0; justify-content: center; }
 .crm-btn .crm-kbd {
   font-family: var(--crm-font-mono);
@@ -607,12 +684,122 @@
   align-items: center;
 }
 
+/* ===== Clay surfaces inside app (shadcn primitives) ===== */
+.crm-auth-shell input:not([type="checkbox"]):not([type="radio"]),
+.crm-auth-shell textarea,
+.crm-auth-shell select {
+  background: #f7f2ea;
+  border: 1px solid rgba(120, 100, 75, 0.14);
+  border-radius: var(--crm-radius-sm, 10px);
+  box-shadow: var(--crm-shadow-clay-inset, inset 5px 5px 12px rgba(130, 110, 85, 0.14));
+}
+
+.dark .crm-auth-shell input:not([type="checkbox"]):not([type="radio"]),
+.dark .crm-auth-shell textarea,
+.dark .crm-auth-shell select {
+  background: oklch(21% 0.022 70);
+  border-color: oklch(32% 0.022 70 / 0.55);
+}
+
+.crm-app [data-slot="card"] {
+  background: linear-gradient(145deg, #f7f2ea 0%, var(--crm-surface) 55%, #ebe4d6 100%);
+  border: 1px solid var(--crm-border-soft);
+  box-shadow: var(--crm-shadow-clay-sm);
+  --tw-ring-color: transparent;
+}
+
+.dark .crm-app [data-slot="card"] {
+  background: linear-gradient(145deg, oklch(23% 0.022 70) 0%, var(--crm-surface) 100%);
+}
+
+.crm-app input:not([type="checkbox"]):not([type="radio"]),
+.crm-app textarea,
+.crm-app select,
+.crm-clay-input {
+  background: var(--crm-surface);
+  border: 1px solid var(--crm-border-soft);
+  border-radius: var(--crm-radius-sm);
+  box-shadow: var(--crm-shadow-clay-inset);
+}
+
+.crm-app input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+.crm-app textarea:focus-visible,
+.crm-app select:focus-visible,
+.crm-clay-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--crm-accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+/* ===== Auth shell (clay, matches landing paper) ===== */
+.crm-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background:
+    radial-gradient(transparent 0, transparent 1px, rgba(120, 108, 90, 0.028) 1px, transparent 2px),
+    linear-gradient(165deg, #efe8db 0%, #e8dfd0 42%, #e5dcd0 100%);
+  background-size: 3px 3px, 100% 100%;
+  color: var(--crm-fg, #1a1714);
+}
+
+.dark .crm-auth-shell {
+  background:
+    radial-gradient(transparent 0, transparent 1px, rgba(255, 248, 235, 0.02) 1px, transparent 2px),
+    linear-gradient(165deg, oklch(18% 0.020 70) 0%, oklch(16% 0.018 70) 100%);
+  color: oklch(94% 0.01 80);
+}
+
+.crm-auth-card {
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.75rem;
+  border-radius: var(--crm-radius-xl, 28px);
+  border: 1px solid rgba(120, 100, 75, 0.12);
+  background: linear-gradient(145deg, #f7f2ea 0%, #f4eee2 55%, #ebe4d6 100%);
+  box-shadow:
+    10px 10px 26px rgba(130, 110, 85, 0.26),
+    -8px -8px 22px rgba(255, 252, 245, 0.9),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.dark .crm-auth-card {
+  border-color: oklch(32% 0.022 70 / 0.55);
+  background: linear-gradient(145deg, oklch(23% 0.022 70) 0%, oklch(21% 0.022 70) 100%);
+  box-shadow:
+    10px 10px 28px rgba(0, 0, 0, 0.42),
+    -6px -6px 18px rgba(255, 248, 235, 0.06),
+    inset 1px 1px 0 rgba(255, 248, 235, 0.08);
+}
+
+.crm-auth-card-head {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.crm-auth-card-head h1 {
+  margin: 0;
+  font-family: var(--crm-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: inherit;
+}
+
+.crm-auth-card-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--crm-fg-muted, #756c5e);
+}
+
 .crm-tabs {
   display: inline-flex;
   background: var(--crm-surface-2);
-  border: 1px solid var(--crm-border);
-  border-radius: var(--crm-radius-sm);
-  padding: 2px;
+  border: 1px solid var(--crm-border-soft);
+  border-radius: var(--crm-radius-md);
+  padding: 3px;
+  box-shadow: var(--crm-shadow-clay-inset);
 }
 .crm-tabs button {
   padding: 5px 12px;
@@ -626,19 +813,25 @@
   font: inherit;
 }
 .crm-tabs button[aria-pressed="true"] {
-  background: var(--crm-surface);
+  background: linear-gradient(145deg, #f7f2ea 0%, var(--crm-surface) 100%);
   color: var(--crm-fg);
-  box-shadow: var(--crm-shadow-card);
+  box-shadow: var(--crm-shadow-clay-sm);
+}
+.dark .crm-tabs button[aria-pressed="true"] {
+  background: linear-gradient(145deg, oklch(25% 0.022 70) 0%, var(--crm-surface) 100%);
 }
 
 /* ===== Cards ===== */
 .crm-card {
-  background: var(--crm-surface);
-  border: 1px solid var(--crm-border);
+  background: linear-gradient(145deg, #f7f2ea 0%, var(--crm-surface) 55%, #ebe4d6 100%);
+  border: 1px solid var(--crm-border-soft);
   border-radius: var(--crm-radius-lg);
   padding: var(--crm-pad-card);
   position: relative;
-  box-shadow: var(--crm-shadow-card);
+  box-shadow: var(--crm-shadow-clay-sm);
+}
+.dark .crm-card {
+  background: linear-gradient(145deg, oklch(23% 0.022 70) 0%, var(--crm-surface) 100%);
 }
 .crm-card.flush { padding: 0; overflow: hidden; }
 .crm-card-head {
@@ -651,41 +844,6 @@
 .crm-card-head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--crm-fg); letter-spacing: -0.005em; }
 .crm-card-head .crm-sub { color: var(--crm-fg-faint); font-size: 12px; }
 .crm-card-head .crm-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-
-/* ===== Auth shell ===== */
-.crm-app.crm-auth-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.crm-auth-card {
-  width: 100%;
-  max-width: 400px;
-  background: var(--crm-surface);
-  border: 1px solid var(--crm-border);
-  border-radius: var(--crm-radius-xl);
-  padding: 32px 28px;
-  box-shadow: var(--crm-shadow-pop);
-}
-.crm-auth-card-head {
-  text-align: center;
-  margin-bottom: 24px;
-}
-.crm-auth-card-head h1 {
-  margin: 0;
-  font-family: var(--crm-font-display);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--crm-fg);
-}
-.crm-auth-card-head p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--crm-fg-muted);
-}
 
 /* ===== KPI ===== */
 .crm-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -1216,69 +1374,6 @@
   to   { opacity: 1; transform: translateY(0)  scale(1); }
 }
 @keyframes demo-marquee { to { transform: translateX(-33.333%); } }
-@keyframes crm-dot-pulse {
-  0%, 60%, 100% { opacity: 0.2; transform: scale(0.85); }
-  30%            { opacity: 1;   transform: scale(1); }
-}
-.crm-typing-dot {
-  display: inline-block;
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: crm-dot-pulse 1.2s ease-in-out infinite;
-}
-.crm-typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.crm-typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-/* ── Markdown rendering inside the Opulence chat ── */
-.crm-md { font-size: 13px; line-height: 1.55; color: var(--crm-fg); }
-.crm-md > :first-child { margin-top: 0; }
-.crm-md > :last-child { margin-bottom: 0; }
-.crm-md p { margin: 0 0 8px; }
-.crm-md ul, .crm-md ol { margin: 0 0 8px; padding-left: 18px; }
-.crm-md li { margin: 2px 0; }
-.crm-md li > p { margin: 0; }
-.crm-md strong { font-weight: 600; color: var(--crm-fg); }
-.crm-md h1, .crm-md h2, .crm-md h3, .crm-md h4 {
-  font-size: 13px; font-weight: 600; margin: 10px 0 6px; color: var(--crm-fg);
-}
-.crm-md a { color: var(--crm-accent); text-decoration: underline; text-underline-offset: 2px; }
-.crm-md code {
-  font-family: var(--crm-font-mono);
-  font-size: 12px;
-  background: var(--crm-surface-hover);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-.crm-md pre {
-  background: var(--crm-surface-hover);
-  border: 1px solid var(--crm-border-soft);
-  border-radius: var(--crm-radius-sm, 6px);
-  padding: 10px 12px;
-  overflow-x: auto;
-  margin: 0 0 8px;
-}
-.crm-md pre code { background: none; padding: 0; }
-.crm-md table { border-collapse: collapse; width: 100%; margin: 0 0 8px; font-size: 12px; }
-.crm-md th, .crm-md td { border: 1px solid var(--crm-border-soft); padding: 4px 8px; text-align: left; }
-.crm-md th { background: var(--crm-surface-2); font-weight: 600; }
-.crm-md blockquote {
-  margin: 0 0 8px; padding-left: 10px;
-  border-left: 2px solid var(--crm-border); color: var(--crm-fg-muted);
-}
-
-/* ── Streaming skeleton lines (shown before first token arrives) ── */
-.crm-skeleton-line {
-  height: 9px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--crm-surface-2) 25%, var(--crm-surface-hover) 50%, var(--crm-surface-2) 75%);
-  background-size: 200% 100%;
-  animation: crm-shimmer 1.3s ease-in-out infinite;
-}
-@keyframes crm-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 
 .crm-modal-head {
   padding: 18px 20px 14px;
@@ -2761,17 +2856,6 @@
 
   .crm-grid-row > .crm-card.flush > .crm-table {
     min-width: 620px;
-  }
-
-  .crm-ai-trigger {
-    width: 32px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .crm-ai-trigger-label,
-  .crm-ai-trigger .crm-kbd {
-    display: none;
   }
 
   .crm-auth-shell {

@@ -78,7 +78,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+      select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       id: "u1",
@@ -127,7 +127,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: "u1" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+      select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       name: "Updated Name",

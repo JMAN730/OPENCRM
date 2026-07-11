@@ -724,12 +724,8 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId: lead.id });
       void utils.leads.getActivities.invalidate({ leadId: lead.id });
-      if (data.needsPhotos && data.id) {
-        window.dispatchEvent(
-          new CustomEvent("opulence:request-photos", {
-            detail: { websiteId: data.id, businessName: lead.company ?? fullNameOf(lead) },
-          })
-        );
+      if (data.needsPhotos) {
+        toast.info("Demo generated, but no photos were found automatically.");
       }
     },
     onError: (error: { message: string }) => toast.error(error.message),
@@ -1896,7 +1892,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
-            <DemoSiteSection leadId={lead.id} leadName={lead.company ?? fullNameOf(lead)} sectionRef={demoSectionRef} />
+            <DemoSiteSection leadId={lead.id} sectionRef={demoSectionRef} />
 
             <div
               style={{
@@ -2107,7 +2103,7 @@ function CreateLeadTaskDialog({
   );
 }
 
-function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; leadName: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
+function DemoSiteSection({ leadId, sectionRef }: { leadId: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
   const utils = trpc.useUtils();
   const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
   const [isDownloading, setIsDownloading] = useState(false);
@@ -2117,12 +2113,8 @@ function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; lea
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId });
       void utils.leads.getActivities.invalidate({ leadId });
-      if (data.needsPhotos && data.id) {
-        window.dispatchEvent(
-          new CustomEvent("opulence:request-photos", {
-            detail: { websiteId: data.id, businessName: leadName },
-          })
-        );
+      if (data.needsPhotos) {
+        toast.info("Demo generated, but no photos were found automatically.");
       }
     },
     onError: (error: { message: string }) => toast.error(error.message),

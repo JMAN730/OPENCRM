@@ -43,6 +43,11 @@ model User {
   image         String?
   password      String?
   role          UserRole  @default(USER)
+  // Platform-level "master account" flag, orthogonal to the org-scoped `role`.
+  // When true, the user can read across every organization via the read-only
+  // `platform` router (super-admin monitoring console). Never granted through
+  // the app UI — set out-of-band via `scripts/grant-superadmin.ts`.
+  isSuperAdmin  Boolean   @default(false)
   loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
   // Bumped whenever credentials change (password reset / email change) so
   // JWTs minted before the change are rejected on their next refresh (CWE-613).
