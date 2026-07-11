@@ -17,6 +17,7 @@ import { trainerRouter } from "@/features/trainer/server/router";
 import { outreachRouter } from "@/features/outreach/server/router";
 import { mapRouter } from "@/features/map/server/router";
 import { billingRouter } from "@/features/billing/server/router";
+import { platformRouter } from "@/features/admin/server/router";
 
 export const appRouter = createTRPCRouter({
   leads: leadsRouter,
@@ -37,6 +38,7 @@ export const appRouter = createTRPCRouter({
   outreach: outreachRouter,
   map: mapRouter,
   billing: billingRouter,
+  platform: platformRouter,
 });
 
 export type AppRouter = typeof appRouter;

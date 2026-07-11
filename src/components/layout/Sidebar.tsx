@@ -19,6 +19,7 @@ import {
   ScrollText,
   Dumbbell,
   Send,
+  ShieldAlert,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
@@ -75,6 +76,7 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
   const userRole = (session?.user as { role?: string })?.role ?? "";
+  const isSuperAdmin = (session?.user as { isSuperAdmin?: boolean })?.isSuperAdmin === true;
 
   const { data: counts } = trpc.dashboard.sidebarCounts.useQuery(
     undefined,
@@ -146,6 +148,24 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
           })}
         </div>
       ))}
+
+      {isSuperAdmin && (
+        <div>
+          {!collapsed && <div className="crm-nav-section">Platform</div>}
+          <Link
+            href="/admin"
+            className={`crm-nav-item${collapsed ? " collapsed" : ""}`}
+            aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+            title={collapsed ? "Admin" : undefined}
+            onClick={onClose}
+          >
+            <span className="crm-nav-icon">
+              <ShieldAlert size={16} />
+            </span>
+            {!collapsed && <span>Admin</span>}
+          </Link>
+        </div>
+      )}
 
       <div className="crm-sidebar-footer" ref={menuRef} style={{ position: "relative" }}>
         {/* Avatar — navigates to profile/settings */}

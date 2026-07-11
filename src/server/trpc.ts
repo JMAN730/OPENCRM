@@ -43,9 +43,18 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       if (token?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: String(token.id) },
-          select: { id: true, email: true, name: true, image: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+          select: { id: true, email: true, name: true, image: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
         });
-        if (dbUser) {
+        // Mirror the sessionVersion revocation check the jwt callback runs
+        // (CWE-613). getToken only decodes the cookie, so without this a token
+        // minted before a credential change (password reset / email change)
+        // would still authenticate here — including for the cross-org platform
+        // router — until it expires. Legacy tokens lacking sessionVersion are
+        // allowed, matching the primary path.
+        const tokenVersion = token.sessionVersion;
+        const sessionVersionMismatch =
+          typeof tokenVersion === "number" && tokenVersion !== (dbUser?.sessionVersion ?? 0);
+        if (dbUser && !sessionVersionMismatch) {
           const role: UserRole = isUserRole(dbUser.role) ? dbUser.role : "USER";
           session = {
             user: {
@@ -54,6 +63,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
               name: dbUser.name ?? undefined,
               image: dbUser.image ?? undefined,
               role,
+              isSuperAdmin: dbUser.isSuperAdmin === true,
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
               loadingAnimationMode: dbUser.loadingAnimationMode,
@@ -104,6 +114,21 @@ const enforceUserIsAuthed = t.procedure.use(({ ctx, next }) => {
 });
 
 export const protectedProcedure = enforceUserIsAuthed;
+
+// Platform "master account" gate. Independent of org context: a super admin
+// reads across all organizations, so this extends protectedProcedure rather
+// than organizationProcedure. Read-only monitoring routers use this.
+const enforceSuperAdmin = enforceUserIsAuthed.use(({ ctx, next }) => {
+  if ((ctx.session.user as { isSuperAdmin?: boolean }).isSuperAdmin !== true) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Platform administrator privileges required.",
+    });
+  }
+  return next({ ctx });
+});
+
+export const superAdminProcedure = enforceSuperAdmin;
 
 const enforceUserHasOrg = enforceUserIsAuthed.use(({ ctx, next }) => {
   const { organizationId } = ctx.session.user;

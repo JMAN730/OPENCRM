@@ -65,6 +65,7 @@ describe("SignIn Page Authentication Flow", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
+        isSuperAdmin: false,
         organizationId: "org-1",
         teamId: null,
         loadingAnimationMode: "ALWAYS",
@@ -133,6 +134,7 @@ describe("SignIn Page Authentication Flow", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
+        isSuperAdmin: false,
         organizationId: "org-1",
         teamId: null,
         loadingAnimationMode: "ALWAYS",
@@ -166,6 +168,7 @@ describe("SignIn Page Authentication Flow", () => {
       user: {
         id: "user-1",
         role: "ADMIN",
+        isSuperAdmin: false,
         organizationId: "org-1",
         teamId: null,
         loadingAnimationMode: "ALWAYS",
