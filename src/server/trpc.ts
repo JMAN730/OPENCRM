@@ -43,9 +43,18 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       if (token?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: String(token.id) },
-          select: { id: true, email: true, name: true, image: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+          select: { id: true, email: true, name: true, image: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
         });
-        if (dbUser) {
+        // Mirror the sessionVersion revocation check the jwt callback runs
+        // (CWE-613). getToken only decodes the cookie, so without this a token
+        // minted before a credential change (password reset / email change)
+        // would still authenticate here — including for the cross-org platform
+        // router — until it expires. Legacy tokens lacking sessionVersion are
+        // allowed, matching the primary path.
+        const tokenVersion = token.sessionVersion;
+        const sessionVersionMismatch =
+          typeof tokenVersion === "number" && tokenVersion !== (dbUser?.sessionVersion ?? 0);
+        if (dbUser && !sessionVersionMismatch) {
           const role: UserRole = isUserRole(dbUser.role) ? dbUser.role : "USER";
           session = {
             user: {

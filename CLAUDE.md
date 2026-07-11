@@ -198,7 +198,7 @@ assertCanGrantRole(actor, targetRole)  // throws if actor cannot grant targetRol
 
 `UserRole` hierarchy: `ADMIN` > `MANAGER` > `USER`.
 
-**Platform super-admin ("master account").** `User.isSuperAdmin` is a platform-level flag, orthogonal to the org `role`. It gates `superAdminProcedure` (in `src/server/trpc.ts`), used only by the read-only `platform` router for cross-org monitoring at `/admin`. The flag is **never** settable through the app UI — grant it out-of-band with `npx tsx scripts/grant-superadmin.ts <email>` (append `--revoke` to remove). It flows through the auth snapshot → JWT → session like `role`, so changes propagate within the 60s snapshot TTL (the grant script also bumps `sessionVersion` for immediate effect). Never add a mutation to the `platform` router — monitoring must not alter tenant data.
+**Platform super-admin ("master account").** `User.isSuperAdmin` is a platform-level flag, orthogonal to the org `role`. It gates `superAdminProcedure` (in `src/server/trpc.ts`), used only by the read-only `platform` router for cross-org monitoring at `/admin`. The flag is **never** settable through the app UI — grant it out-of-band with `npx tsx scripts/grant-superadmin.ts <email>` (append `--revoke` to remove). It flows through the auth snapshot → JWT → session like `role`, so changes propagate within the 60s snapshot TTL (the grant script invalidates the user's auth snapshot so it takes effect on the next refresh without a re-login — it deliberately does **not** bump `sessionVersion`, which is the credential-revocation counter and would log the user out). Never add a mutation to the `platform` router — monitoring must not alter tenant data.
 
 ### Multi-tenancy
 

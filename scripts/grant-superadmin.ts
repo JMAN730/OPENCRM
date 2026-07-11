@@ -7,10 +7,15 @@
  *   npx tsx scripts/grant-superadmin.ts <email>            # grant
  *   npx tsx scripts/grant-superadmin.ts <email> --revoke   # revoke
  *
- * Bumping sessionVersion forces the user's existing JWTs to re-hydrate on their
- * next request, so the new flag takes effect without a manual re-login.
+ * Invalidating the cached auth snapshot forces the user's existing JWTs to
+ * re-hydrate from the DB on their next session refresh, so the new flag takes
+ * effect without a manual re-login. (We deliberately do NOT bump sessionVersion
+ * here: that counter is the credential-revocation signal, and bumping it would
+ * make the jwt callback treat the change as a revoked session and log the user
+ * out — this is a role-like permission change, not a credential change.)
  */
 import { prisma } from "@/lib/prisma";
+import { invalidateAuthSnapshot } from "@/lib/auth";
 
 async function main() {
   const email = process.argv[2]?.toLowerCase().trim();
@@ -23,7 +28,7 @@ async function main() {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, email: true, sessionVersion: true, isSuperAdmin: true },
+    select: { id: true, email: true, isSuperAdmin: true },
   });
 
   if (!user) {
@@ -33,13 +38,13 @@ async function main() {
 
   const updated = await prisma.user.update({
     where: { id: user.id },
-    data: {
-      isSuperAdmin: !revoke,
-      // Invalidate outstanding sessions so the change propagates immediately.
-      sessionVersion: { increment: 1 },
-    },
+    data: { isSuperAdmin: !revoke },
     select: { email: true, isSuperAdmin: true },
   });
+
+  // Bust the cached auth snapshot so the next session refresh re-reads the flag
+  // from the DB (within the 60s TTL even if Redis is down and this no-ops).
+  await invalidateAuthSnapshot(user.id);
 
   console.log(
     `${updated.isSuperAdmin ? "Granted" : "Revoked"} platform admin for ${updated.email}.`,
