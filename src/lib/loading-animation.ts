@@ -1,5 +1,5 @@
-export const LOADING_ANIMATION_MODE_KEY = "opencrm:loading-animation-mode";
-export const LOADING_ANIMATION_LAST_SHOWN_KEY = "opencrm:loading-animation-last-shown";
+export const LOADING_ANIMATION_MODE_KEY = "clientcore:loading-animation-mode";
+export const LOADING_ANIMATION_LAST_SHOWN_KEY = "clientcore:loading-animation-last-shown";
 
 export type LoadingAnimationMode = "ALWAYS" | "ONCE_DAILY" | "OFF";
 

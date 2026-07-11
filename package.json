@@ -1,5 +1,5 @@
 {
-  "name": "opencrm",
+  "name": "clientcore",
   "version": "0.1.0",
   "description": "A self-hosted CRM for sales teams with lead management, team-aware permissions, task tracking, call logging, and a Google Maps scraper import flow.",
   "author": "JMAN730",
