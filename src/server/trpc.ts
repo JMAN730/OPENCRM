@@ -43,7 +43,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
       if (token?.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: String(token.id) },
-          select: { id: true, email: true, name: true, image: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true },
+          select: { id: true, email: true, name: true, image: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true },
         });
         if (dbUser) {
           const role: UserRole = isUserRole(dbUser.role) ? dbUser.role : "USER";
@@ -54,6 +54,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
               name: dbUser.name ?? undefined,
               image: dbUser.image ?? undefined,
               role,
+              isSuperAdmin: dbUser.isSuperAdmin === true,
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
               loadingAnimationMode: dbUser.loadingAnimationMode,
@@ -104,6 +105,21 @@ const enforceUserIsAuthed = t.procedure.use(({ ctx, next }) => {
 });
 
 export const protectedProcedure = enforceUserIsAuthed;
+
+// Platform "master account" gate. Independent of org context: a super admin
+// reads across all organizations, so this extends protectedProcedure rather
+// than organizationProcedure. Read-only monitoring routers use this.
+const enforceSuperAdmin = enforceUserIsAuthed.use(({ ctx, next }) => {
+  if ((ctx.session.user as { isSuperAdmin?: boolean }).isSuperAdmin !== true) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Platform administrator privileges required.",
+    });
+  }
+  return next({ ctx });
+});
+
+export const superAdminProcedure = enforceSuperAdmin;
 
 const enforceUserHasOrg = enforceUserIsAuthed.use(({ ctx, next }) => {
   const { organizationId } = ctx.session.user;

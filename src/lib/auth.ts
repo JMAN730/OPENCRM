@@ -20,6 +20,7 @@ type CachedUser = {
   name: string | null;
   email: string | null;
   role: UserRole;
+  isSuperAdmin: boolean;
   organizationId: string | null;
   teamId: string | null;
   loadingAnimationMode: LoadingAnimationMode;
@@ -54,6 +55,8 @@ async function readCachedUser(userId: string): Promise<CachedUser | null> {
     if (typeof parsed.sessionVersion !== "number") return null;
     return {
       ...parsed,
+      // Default missing flag to false so pre-feature cache entries fail closed.
+      isSuperAdmin: parsed.isSuperAdmin === true,
       loadingAnimationMode: normalizeLoadingAnimationMode(parsed.loadingAnimationMode),
     };
   } catch {
@@ -77,7 +80,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+    select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
   });
   if (!dbUser) return null;
 
@@ -86,6 +89,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
     name: dbUser.name,
     email: dbUser.email,
     role: normalizeRole(dbUser.role),
+    isSuperAdmin: dbUser.isSuperAdmin === true,
     organizationId: dbUser.organizationId,
     teamId: dbUser.teamId,
     loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
@@ -167,6 +171,7 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.isSuperAdmin = token.isSuperAdmin ?? false;
         session.user.organizationId = token.organizationId;
         session.user.teamId = token.teamId ?? null;
         session.user.loadingAnimationMode = token.loadingAnimationMode ?? "ALWAYS";
@@ -179,13 +184,14 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: (user.email ?? "").toLowerCase() || undefined },
-            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+            select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
           });
           if (dbUser) {
             token.id = dbUser.id;
             token.name = dbUser.name ?? undefined;
             token.email = dbUser.email ?? undefined;
             token.role = normalizeRole(dbUser.role);
+            token.isSuperAdmin = dbUser.isSuperAdmin === true;
             token.organizationId = dbUser.organizationId;
             token.teamId = dbUser.teamId;
             token.loadingAnimationMode = normalizeLoadingAnimationMode(dbUser.loadingAnimationMode);
@@ -195,6 +201,7 @@ export const authOptions: NextAuthOptions = {
               name: dbUser.name,
               email: dbUser.email,
               role: normalizeRole(dbUser.role),
+              isSuperAdmin: dbUser.isSuperAdmin === true,
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
               loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
@@ -232,6 +239,7 @@ export const authOptions: NextAuthOptions = {
           token.name = snapshot.name ?? undefined;
           token.email = snapshot.email ?? undefined;
           token.role = snapshot.role;
+          token.isSuperAdmin = snapshot.isSuperAdmin === true;
           token.organizationId = snapshot.organizationId;
           token.teamId = snapshot.teamId;
           token.loadingAnimationMode = snapshot.loadingAnimationMode;

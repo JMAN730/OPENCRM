@@ -7,6 +7,7 @@ export type MockSessionUser = {
   name: string;
   organizationId: string | null;
   role: string;
+  isSuperAdmin: boolean;
 };
 
 export function createTestSession(overrides: Partial<MockSessionUser> = {}) {
@@ -17,6 +18,7 @@ export function createTestSession(overrides: Partial<MockSessionUser> = {}) {
       name: "Test User",
       organizationId: "org-1",
       role: "ADMIN",
+      isSuperAdmin: false,
       image: null,
       ...overrides,
     },
@@ -93,8 +95,11 @@ export function createMockPrisma() {
     organization: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
     organizationSubscription: {
+      groupBy: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue({
         planTier: "PRO",
         status: "ACTIVE",
@@ -155,6 +160,7 @@ export function createMockPrisma() {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     },
     activity: {
       create: vi.fn().mockResolvedValue({}),

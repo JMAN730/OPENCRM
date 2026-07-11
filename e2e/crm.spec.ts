@@ -160,6 +160,7 @@ async function seedAuthenticatedSession(context: BrowserContext, user: SessionUs
       email: user.email,
       name: user.name,
       role: user.role,
+      isSuperAdmin: false,
       organizationId: user.organizationId,
       teamId: user.teamId,
       loadingAnimationMode: "ALWAYS",

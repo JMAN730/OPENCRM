@@ -162,6 +162,7 @@ appRouter = {
   map:              mapRouter,              // lead map (OSM viewport queries, discovery, enrichment)
   trainer:          trainerRouter,          // voice call trainer (ElevenLabs personas + session scoring)
   billing:          billingRouter,          // Stripe subscriptions (checkout, portal, plan limits)
+  platform:         platformRouter,         // super-admin cross-org monitoring (read-only, NOT org-scoped)
 }
 ```
 
@@ -196,6 +197,8 @@ assertCanGrantRole(actor, targetRole)  // throws if actor cannot grant targetRol
 ```
 
 `UserRole` hierarchy: `ADMIN` > `MANAGER` > `USER`.
+
+**Platform super-admin ("master account").** `User.isSuperAdmin` is a platform-level flag, orthogonal to the org `role`. It gates `superAdminProcedure` (in `src/server/trpc.ts`), used only by the read-only `platform` router for cross-org monitoring at `/admin`. The flag is **never** settable through the app UI — grant it out-of-band with `npx tsx scripts/grant-superadmin.ts <email>` (append `--revoke` to remove). It flows through the auth snapshot → JWT → session like `role`, so changes propagate within the 60s snapshot TTL (the grant script also bumps `sessionVersion` for immediate effect). Never add a mutation to the `platform` router — monitoring must not alter tenant data.
 
 ### Multi-tenancy
 
@@ -270,6 +273,7 @@ Inside `DashboardLayout`, page content uses `<PageShell>` (from `src/components/
 | Outreach | `/outreach` | `outreach` | `OutreachQueue` (review + bulk-send auto-generated drafts) | Implemented |
 | Map | `/map` | `map` | `LeadMap` (OSM lead map: discover businesses, select pins, enrich contact details) | Implemented |
 | Billing | `/settings` (Billing tab) | `billing` | `BillingPanel` (Stripe checkout/portal, plan + seat usage) | Implemented |
+| Platform Admin | `/admin` | `platform` | super-admin monitoring console (all orgs / teams / users) | Implemented |
 | Trainer | `/trainer` | `trainer` | voice call practice with ElevenLabs personas + AI scorecards | Implemented |
 | Calendar | `/calendar` | `tasks` | task calendar view (standalone page) | Implemented |
 
@@ -290,6 +294,7 @@ Inside `DashboardLayout`, page content uses `<PageShell>` (from `src/components/
 | `map` | `discoveryCategories`, `leadsInBounds`, `missingCoordinatesCount`, `geocodeMissing`, `discoverBusinesses`, `enrich`, `enrichmentStatus` |
 | `trainer` | `listPersonas`, `createPersona`, `updatePersona`, `deletePersona`, `startSession`, `scoreSession`, `getSessions`, `pickableLeads` |
 | `billing` | `getSubscription`, `createCheckoutSession`, `createPortalSession` |
+| `platform` | `overview`, `organizations`, `users`, `organizationDetail` (all read-only, super-admin only) |
 
 ---
 
