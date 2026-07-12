@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
 import { safeGet, safeSetEx } from "@/lib/redis";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { provisionUserWithOrganization } from "@/features/auth/server/provision";
 import { keys } from "@/lib/cacheKeys";
 
 // Pre-computed bcrypt hash used when the email is not found, so we always
@@ -167,6 +168,36 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days — persists across browser close
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") return true;
+
+      // Google marks whether it verified the address. Refuse unverified
+      // emails — otherwise anyone controlling an unverified Google account
+      // for victim@example.com could take over that CRM account.
+      const emailVerified = (profile as { email_verified?: boolean } | undefined)
+        ?.email_verified;
+      if (emailVerified !== true) return false;
+
+      const email = (user.email ?? "").toLowerCase().trim();
+      if (!email) return false;
+
+      try {
+        const existing = await prisma.user.findUnique({ where: { email } });
+        if (existing) return true;
+
+        // First-time Google sign-in: provision an organization + ADMIN user,
+        // same as credentials registration but without a password.
+        await provisionUserWithOrganization({
+          prisma,
+          name: user.name?.trim() || email,
+          email,
+        });
+        return true;
+      } catch (err) {
+        console.error("[auth] Google sign-in provisioning error:", err);
+        return false;
+      }
+    },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id;

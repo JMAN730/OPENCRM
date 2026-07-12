@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
+import { GoogleSignInButton } from "@/features/auth/components/GoogleSignInButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { X, UserPlus, ArrowLeft } from "lucide-react";
@@ -320,6 +321,9 @@ export default function SignInPage() {
         title="Sign In"
         description="Enter your email and password to access your account"
       >
+        <div className="mb-4">
+          <GoogleSignInButton />
+        </div>
         <form onSubmit={handleSignIn}>
           <div className="space-y-4">
             {error && (

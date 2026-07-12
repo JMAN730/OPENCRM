@@ -6,9 +6,7 @@ import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/
 import { sendPasswordResetEmail } from "@/lib/email";
 import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
 import { invalidateAuthSnapshot } from "@/lib/auth";
-import { createStripeCustomer } from "@/features/billing/server/stripe";
-import { TRIAL_DAYS } from "@/features/billing/server/plans";
-import { defaultSeatLimitForTier } from "@/features/billing/server/enforcement";
+import { provisionUserWithOrganization } from "./provision";
 import { keys } from "@/lib/cacheKeys";
 
 const loadingAnimationModeSchema = z.enum(["ALWAYS", "ONCE_DAILY", "OFF"]);
@@ -132,49 +130,14 @@ export const authRouter = createTRPCRouter({
       }
 
       const hashed = await bcrypt.hash(input.password, 12);
-      const orgName =
-        input.organizationName?.trim() || `${input.name}'s Organization`;
-      const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
-      const organization = await ctx.prisma.organization.create({
-        data: {
-          name: orgName,
-          subscription: {
-            create: {
-              planTier: "STARTER",
-              status: "TRIALING",
-              seatLimit: defaultSeatLimitForTier("STARTER"),
-              trialEndsAt,
-            },
-          },
-        },
+      await provisionUserWithOrganization({
+        prisma: ctx.prisma,
+        name: input.name,
+        email,
+        passwordHash: hashed,
+        organizationName: input.organizationName,
       });
-
-      await ctx.prisma.user.create({
-        data: {
-          name: input.name,
-          email,
-          password: hashed,
-          organizationId: organization.id,
-          role: "ADMIN",
-        },
-      });
-
-      try {
-        const customerId = await createStripeCustomer({
-          organizationId: organization.id,
-          organizationName: orgName,
-          email,
-        });
-        if (customerId) {
-          await ctx.prisma.organizationSubscription.update({
-            where: { organizationId: organization.id },
-            data: { stripeCustomerId: customerId },
-          });
-        }
-      } catch (err) {
-        console.error("[auth.register] Stripe customer creation failed", err);
-      }
 
       return { ok: true };
     }),

@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const { mockPrisma, mockProvision } = vi.hoisted(() => ({
   mockPrisma: {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
     },
   },
+  mockProvision: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/features/auth/server/provision", () => ({
+  provisionUserWithOrganization: mockProvision,
+}));
 
 import { authOptions } from "./auth";
 import bcrypt from "bcryptjs";
@@ -226,6 +230,109 @@ describe("jwt callback", () => {
     } as never);
 
     expect(token).toBeDefined(); // doesn't throw
+    consoleSpy.mockRestore();
+  });
+});
+
+describe("signIn callback (Google OAuth)", () => {
+  const signInCallback = authOptions.callbacks!.signIn!;
+
+  it("allows non-Google providers through without provisioning", async () => {
+    const result = await signInCallback({
+      user: { id: "u1", email: "x@y.com" },
+      account: { provider: "credentials" },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockProvision).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects Google sign-in when the email is not verified", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: false },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("rejects Google sign-in when the profile has no email", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: null, name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("allows an existing user to sign in with Google without re-provisioning", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "X@Y.COM", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "x@y.com" },
+    });
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("provisions an organization and user for a first-time Google sign-in", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockResolvedValueOnce({ userId: "u-new" });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "New@Y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockProvision).toHaveBeenCalledWith({
+      prisma: mockPrisma,
+      name: "New User",
+      email: "new@y.com",
+    });
+  });
+
+  it("falls back to the email as the name when Google returns no name", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockResolvedValueOnce({ userId: "u-new" });
+
+    await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: null },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(mockProvision).toHaveBeenCalledWith({
+      prisma: mockPrisma,
+      name: "new@y.com",
+      email: "new@y.com",
+    });
+  });
+
+  it("denies sign-in (does not throw) when provisioning fails", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockRejectedValueOnce(new Error("db down"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
     consoleSpy.mockRestore();
   });
 });

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell, AuthCard } from "@/features/auth/components/AuthShell";
+import { GoogleSignInButton } from "@/features/auth/components/GoogleSignInButton";
 import Link from "next/link";
 import { trpc } from "@/app/_trpc/client";
 
@@ -68,6 +69,10 @@ export default function RegisterPage() {
           </div>
           <h1 className="text-xl font-semibold">Create your account</h1>
           <p className="text-sm text-muted-foreground">Get started with ClientCore</p>
+        </div>
+
+        <div className="mb-4">
+          <GoogleSignInButton />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
