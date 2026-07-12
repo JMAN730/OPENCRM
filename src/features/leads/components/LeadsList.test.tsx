@@ -83,7 +83,10 @@ vi.mock("@/hooks/use-debounce", () => ({
 
 vi.mock("./ImportLeadsDialog", () => ({
   ImportLeadsDialog: ({ onImported }: { onImported: () => void }) => (
-    <button onClick={onImported}>Import</button>
+    <div>
+      <div>Import dialog loaded</div>
+      <button onClick={onImported}>Confirm import</button>
+    </div>
   ),
 }));
 
@@ -476,12 +479,23 @@ describe("LeadsList", () => {
     expect(mockReplace).toHaveBeenCalledWith("/leads");
   });
 
-  it("opens the lead details modal from the ?leadId route flag", () => {
+  it("opens the lead details modal from the ?leadId route flag", async () => {
     searchParamLeadId = "lead-1";
 
     render(<LeadsList />);
 
-    expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
+    expect(await screen.findByText("Lead modal for lead-1")).toBeInTheDocument();
+  });
+
+  it("lazy-loads the import dialog only after clicking the Import trigger", async () => {
+    render(<LeadsList />);
+
+    expect(screen.getByRole("button", { name: /import/i })).toBeInTheDocument();
+    expect(screen.queryByText("Import dialog loaded")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /import/i }));
+
+    expect(await screen.findByText("Import dialog loaded")).toBeInTheDocument();
   });
 
   it("preserves the selected layout when clearing the ?new=1 route flag", () => {

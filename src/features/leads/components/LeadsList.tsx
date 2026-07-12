@@ -5,12 +5,12 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { ImportLeadsDialog } from "./ImportLeadsDialog";
+import { LazyImportLeadsDialog } from "./LazyImportLeadsDialog";
 import { AddLeadForm } from "./lead-list/AddLeadForm";
 import { LeadBulkActionBar } from "./lead-list/LeadBulkActionBar";
 import { LeadCardList } from "./lead-list/LeadCardList";
-import { LeadModal } from "./lead-list/LeadModal";
 import { LeadsFocusHero } from "./lead-list/LeadsFocusHero";
 import { LeadsManagementBar } from "./lead-list/LeadsManagementBar";
 import { LeadsTable } from "./lead-list/LeadsTable";
@@ -34,6 +34,14 @@ import {
   type LeadVisibleColumn,
   type ScoringRuleConfig,
 } from "./lead-list/shared";
+
+// Lazy-load the lead details modal so its code stays out of the route's
+// first-load bundle; the conditional render below defers the chunk fetch
+// until a lead is first opened.
+const LeadModal = dynamic(
+  () => import("./lead-list/LeadModal").then((m) => ({ default: m.LeadModal })),
+  { ssr: false },
+);
 
 type LeadsViewMode = "focus" | "classic";
 
@@ -598,7 +606,7 @@ export function LeadsList() {
           viewMode === "classic" ? (
             <>
               {viewToggle}
-              <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
+              <LazyImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
               <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
                 New lead
               </button>
@@ -642,7 +650,7 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
+              importAction={<LazyImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
               isExporting={isExporting}
               members={assignableUsers}
               orgTags={orgTags}

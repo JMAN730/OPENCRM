@@ -147,10 +147,11 @@ function normalizeRow(row: Record<string, unknown>): ParsedLead {
 
 interface Props {
   onImported: () => void;
+  defaultOpen?: boolean;
 }
 
-export function ImportLeadsDialog({ onImported }: Props) {
-  const [open, setOpen] = useState(false);
+export function ImportLeadsDialog({ onImported, defaultOpen }: Props) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [rows, setRows] = useState<ParsedLead[]>([]);
   const [fileName, setFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
