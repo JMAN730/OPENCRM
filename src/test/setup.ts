@@ -20,6 +20,32 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
     IntersectionObserverStub as unknown as typeof IntersectionObserver
 }
 
+// jsdom doesn't ship ResizeObserver, but @tanstack/react-virtual observes the
+// scroll element and measured rows with one. A no-op stub keeps the virtualized
+// lead lists rendering; row sizes fall back to the virtualizer's estimates.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  ;(globalThis as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
+    ResizeObserverStub as unknown as typeof ResizeObserver
+}
+
+// jsdom performs no layout, so every element reports offsetWidth/offsetHeight
+// of 0. The virtualized lead lists size their viewport from the scroll
+// element's offset dimensions; report a laptop-ish viewport so a realistic
+// window of rows mounts in tests. No component branches on a 0 offset size.
+Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+  configurable: true,
+  get: () => 1200,
+})
+Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+  configurable: true,
+  get: () => 800,
+})
+
 // jsdom doesn't ship PointerEvent, but @base-ui/react components fire one on
 // click/keypress. Polyfill it to a MouseEvent-shaped class so click handlers run.
 if (typeof globalThis.PointerEvent === 'undefined') {

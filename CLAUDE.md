@@ -455,7 +455,7 @@ Every feature router under `src/features/*/server/` has a co-located `router.tes
 
 Coverage thresholds (vitest.config.ts): 60% lines/functions, 50% branches for routers and scraper utilities.
 
-Test mocks include: ioredis (graceful failure), IntersectionObserver, PointerEvent (jsdom gaps).
+Test mocks include: ioredis (graceful failure), IntersectionObserver, ResizeObserver, PointerEvent, and fixed element offset sizes for virtualization (jsdom gaps).
 
 ---
 

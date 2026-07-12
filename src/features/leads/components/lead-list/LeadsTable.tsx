@@ -1,5 +1,6 @@
 "use client";
 
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDown,
   ArrowUp,
@@ -32,6 +33,7 @@ import {
   type ScoringRuleConfig,
 } from "./shared";
 import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
+import { useLeadListScrollAnchor } from "./useLeadListScrollAnchor";
 import { formatLocation } from "@/features/leads/location";
 
 const ALL_COLUMNS = ["Lead", "Company", "Location", "Owner", "Stage", "Score", "Touches", "Next action", "Last touch"] as const;
@@ -155,6 +157,29 @@ export function LeadsTable({
   const show = (col: ColumnName) => visibleColumns.has(col);
 
   const colSpan = 2 + ALL_COLUMNS.filter((c) => visibleColumns.has(c)).length;
+
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const listRendered = !isLoading && filteredLeads.length > 0;
+  const { scrollElement, scrollMargin } = useLeadListScrollAnchor(tbodyRef, listRendered);
+
+  // Rows are near-uniform, so no per-row measurement — a fixed estimate with
+  // top/bottom spacer rows keeps the <table> semantics intact.
+  const virtualizer = useVirtualizer<HTMLElement, HTMLTableRowElement>({
+    count: filteredLeads.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 64,
+    overscan: 5,
+    scrollMargin,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const topPad =
+    virtualItems.length > 0 ? virtualItems[0].start - virtualizer.options.scrollMargin : 0;
+  const bottomPad =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() -
+        (virtualItems[virtualItems.length - 1].end - virtualizer.options.scrollMargin)
+      : 0;
 
   const renderSortHeader = (label: string, key: LeadSortKey) => {
     const active = sortBy.key === key;
@@ -407,7 +432,7 @@ export function LeadsTable({
             <th />
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={tbodyRef}>
           {isLoading ? (
             <tr>
               <td colSpan={colSpan} style={{ textAlign: "center", padding: 32, color: "var(--crm-fg-faint)" }}>
@@ -421,7 +446,15 @@ export function LeadsTable({
               </td>
             </tr>
           ) : (
-            filteredLeads.map((lead) => {
+            <>
+              {/* Spacer rows need a cell — a cell-less <tr> can collapse to 0 height. */}
+              {topPad > 0 ? (
+                <tr aria-hidden>
+                  <td colSpan={colSpan} style={{ height: topPad, padding: 0, border: 0 }} />
+                </tr>
+              ) : null}
+              {virtualItems.map((item) => {
+              const lead = filteredLeads[item.index];
               const name = fullNameOf(lead);
               const checked = selectedIds.has(lead.id);
               const score = scoreOf(lead, scoringRules);
@@ -430,7 +463,7 @@ export function LeadsTable({
               const reviews = reviewSummary(lead);
 
               return (
-                <tr key={lead.id} className={checked ? "selected" : ""} onClick={() => onOpenLead(lead)}>
+                <tr key={lead.id} data-lead-row className={checked ? "selected" : ""} onClick={() => onOpenLead(lead)}>
                   <td
                     className="cb"
                     onClick={(event) => {
@@ -553,7 +586,13 @@ export function LeadsTable({
                   </td>
                 </tr>
               );
-            })
+              })}
+              {bottomPad > 0 ? (
+                <tr aria-hidden>
+                  <td colSpan={colSpan} style={{ height: bottomPad, padding: 0, border: 0 }} />
+                </tr>
+              ) : null}
+            </>
           )}
         </tbody>
       </table>

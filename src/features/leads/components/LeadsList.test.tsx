@@ -788,6 +788,73 @@ describe("LeadsList", () => {
     });
   });
 
+  it("virtualizes the focus card list so only a window of a 100-lead page mounts", () => {
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    render(<LeadsList />);
+
+    const cardCount = document.querySelectorAll(".focus-card").length;
+    expect(cardCount).toBeGreaterThan(0);
+    expect(cardCount).toBeLessThan(100);
+  });
+
+  it("swaps the mounted window as the scroll container scrolls", async () => {
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    // Wrap in the dashboard's scroll pane so the list anchors to it, the
+    // same element it scrolls inside in production.
+    render(
+      <div className="crm-main-scroll">
+        <LeadsList />
+      </div>,
+    );
+
+    expect(screen.getByText("Company 1")).toBeInTheDocument();
+
+    const scroller = document.querySelector(".crm-main-scroll") as HTMLElement;
+    scroller.scrollTop = 5000;
+    fireEvent.scroll(scroller);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Company 1")).not.toBeInTheDocument();
+    });
+    const cardCount = document.querySelectorAll(".focus-card").length;
+    expect(cardCount).toBeGreaterThan(0);
+    expect(cardCount).toBeLessThan(100);
+  });
+
+  it("virtualizes the classic table so only a window of a 100-lead page mounts", () => {
+    searchParamView = "classic";
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    render(<LeadsList />);
+
+    const rowCount = document.querySelectorAll("tbody tr[data-lead-row]").length;
+    expect(rowCount).toBeGreaterThan(0);
+    expect(rowCount).toBeLessThan(100);
+  });
+
   it("renders a focus fallback when task signals fail without breaking the lead list", () => {
     dueTodayState = { data: [], isLoading: false, isError: true };
     overdueState = { data: [], isLoading: false, isError: true };
