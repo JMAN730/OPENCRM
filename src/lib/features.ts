@@ -11,3 +11,15 @@
  * See https://github.com/JMAN730/OPENCRM/issues/258.
  */
 export const TRAINER_ENABLED = false;
+
+/**
+ * Browser dialer (`/dialer`). Disabled until the feature is finished.
+ * See https://github.com/JMAN730/OPENCRM/pull/266.
+ */
+export const DIALER_ENABLED = false;
+
+/**
+ * Sales scripts (`/scripts`). Disabled until the feature is finished.
+ * See https://github.com/JMAN730/OPENCRM/pull/266.
+ */
+export const SCRIPTS_ENABLED = false;
