@@ -404,7 +404,6 @@ Practice calls against AI personas powered by ElevenLabs Conversational AI.
 - **Components**: in `src/components/ui/` — thin wrappers around `@base-ui/react` (MUI Base UI) primitives. The `shadcn` CLI is present in package.json for scaffolding helpers but the runtime primitives are Base UI, not Radix. Reuse the existing components in `src/components/ui/` before adding new ones.
 - **Icons**: lucide-react
 - **Toast notifications**: sonner (`toast.success()`, `toast.error()`)
-- **Animation**: framer-motion (used sparingly)
 - **Forms**: react-hook-form + Zod resolvers
 - **`cn()` utility**: `src/lib/utils.ts` — combines `clsx` + `tailwind-merge`
 - **Path alias**: `@/` maps to `src/`
