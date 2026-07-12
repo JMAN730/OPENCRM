@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import SignInPage from "../page";
-import { signIn, getSession } from "next-auth/react";
+import { signIn, getSession, getProviders } from "next-auth/react";
 
 // Mock Next.js router
 const mockPush = vi.fn();
@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("next-auth/react", () => ({
   signIn: vi.fn(),
   getSession: vi.fn(),
+  getProviders: vi.fn().mockResolvedValue(null),
   useSession: () => ({ data: null, status: "unauthenticated" }),
 }));
 
@@ -45,6 +46,7 @@ global.ResizeObserver = class {
 
 const mockSignIn = vi.mocked(signIn);
 const mockGetSession = vi.mocked(getSession);
+const mockGetProviders = vi.mocked(getProviders);
 
 describe("SignIn Page Authentication Flow", () => {
   beforeEach(() => {
@@ -189,5 +191,33 @@ describe("SignIn Page Authentication Flow", () => {
     });
 
     expect(localStorage.getItem("crm_saved_users")).toBeNull();
+  });
+});
+
+describe("SignIn Page Google OAuth integration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("shows the Google sign-in button when the provider is configured", async () => {
+    mockGetProviders.mockResolvedValueOnce({ google: { id: "google" } } as never);
+
+    render(<SignInPage />);
+
+    expect(
+      await screen.findByRole("button", { name: /continue with google/i })
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the Google sign-in button when the provider is not configured", async () => {
+    mockGetProviders.mockResolvedValueOnce(null);
+
+    render(<SignInPage />);
+
+    await waitFor(() => expect(mockGetProviders).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /continue with google/i })
+    ).not.toBeInTheDocument();
   });
 });
