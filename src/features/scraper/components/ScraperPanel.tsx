@@ -12,13 +12,15 @@ export function ScraperPanel() {
   const utils = trpc.useUtils();
   const config = trpc.scraper.config.useQuery();
   const jobs = trpc.scraper.list.useQuery(undefined, {
+    // No active job → no polling. An idle tab must make zero requests;
+    // manual refresh and mutation invalidation cover the rest.
     refetchInterval: (query) => {
       const data = query.state.data;
       return (data as Array<{ status: string }> | undefined)?.some(
         (j) => j.status === "RUNNING" || j.status === "PENDING",
       )
         ? 2000
-        : 10_000;
+        : false;
     },
   });
 
