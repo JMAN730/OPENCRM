@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const { mockPrisma, mockCreateStripeCustomer } = vi.hoisted(() => ({
   mockPrisma: {
-    organization: { create: vi.fn() },
     user: { create: vi.fn() },
     organizationSubscription: { update: vi.fn() },
   },
@@ -17,45 +16,14 @@ import { provisionUserWithOrganization } from "./provision";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockPrisma.organization.create.mockResolvedValue({ id: "org-1" });
-  mockPrisma.user.create.mockResolvedValue({ id: "u-1" });
+  mockPrisma.user.create.mockResolvedValue({ id: "u-1", organizationId: "org-1" });
   mockCreateStripeCustomer.mockResolvedValue(null);
 });
 
 const prisma = mockPrisma as never;
 
 describe("provisionUserWithOrganization", () => {
-  it("creates an organization with a STARTER trial subscription", async () => {
-    await provisionUserWithOrganization({ prisma, name: "Jane", email: "jane@x.com" });
-
-    expect(mockPrisma.organization.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: "Jane's Organization",
-        subscription: {
-          create: expect.objectContaining({
-            planTier: "STARTER",
-            status: "TRIALING",
-            trialEndsAt: expect.any(Date),
-          }),
-        },
-      }),
-    });
-  });
-
-  it("uses the provided organization name when given", async () => {
-    await provisionUserWithOrganization({
-      prisma,
-      name: "Jane",
-      email: "jane@x.com",
-      organizationName: "Acme Inc.",
-    });
-
-    expect(mockPrisma.organization.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ name: "Acme Inc." }),
-    });
-  });
-
-  it("creates an ADMIN user in the new organization", async () => {
+  it("atomically creates the user with a nested organization and STARTER trial", async () => {
     const result = await provisionUserWithOrganization({
       prisma,
       name: "Jane",
@@ -66,11 +34,40 @@ describe("provisionUserWithOrganization", () => {
       data: {
         name: "Jane",
         email: "jane@x.com",
-        organizationId: "org-1",
         role: "ADMIN",
+        organization: {
+          create: expect.objectContaining({
+            name: "Jane's Organization",
+            subscription: {
+              create: expect.objectContaining({
+                planTier: "STARTER",
+                status: "TRIALING",
+                trialEndsAt: expect.any(Date),
+              }),
+            },
+          }),
+        },
       },
+      select: { id: true, organizationId: true },
     });
     expect(result).toEqual({ userId: "u-1", organizationId: "org-1" });
+  });
+
+  it("uses the provided organization name when given", async () => {
+    await provisionUserWithOrganization({
+      prisma,
+      name: "Jane",
+      email: "jane@x.com",
+      organizationName: "Acme Inc.",
+    });
+
+    expect(mockPrisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organization: { create: expect.objectContaining({ name: "Acme Inc." }) },
+        }),
+      })
+    );
   });
 
   it("stores the password hash when provided (credentials registration)", async () => {
@@ -81,9 +78,11 @@ describe("provisionUserWithOrganization", () => {
       passwordHash: "$2a$hash",
     });
 
-    expect(mockPrisma.user.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ password: "$2a$hash" }),
-    });
+    expect(mockPrisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ password: "$2a$hash" }),
+      })
+    );
   });
 
   it("saves the Stripe customer id on the subscription when Stripe is configured", async () => {

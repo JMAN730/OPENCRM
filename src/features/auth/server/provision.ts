@@ -27,39 +27,43 @@ export async function provisionUserWithOrganization({
   const orgName = organizationName?.trim() || `${name}'s Organization`;
   const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
-  const organization = await prisma.organization.create({
-    data: {
-      name: orgName,
-      subscription: {
-        create: {
-          planTier: "STARTER",
-          status: "TRIALING",
-          seatLimit: defaultSeatLimitForTier("STARTER"),
-          trialEndsAt,
-        },
-      },
-    },
-  });
-
+  // Single nested create keeps org + subscription + user atomic — a
+  // concurrent duplicate sign-in that loses the unique-email race leaves
+  // no orphaned Organization behind.
   const user = await prisma.user.create({
     data: {
       name,
       email,
       ...(passwordHash !== undefined && { password: passwordHash }),
-      organizationId: organization.id,
       role: "ADMIN",
+      organization: {
+        create: {
+          name: orgName,
+          subscription: {
+            create: {
+              planTier: "STARTER",
+              status: "TRIALING",
+              seatLimit: defaultSeatLimitForTier("STARTER"),
+              trialEndsAt,
+            },
+          },
+        },
+      },
     },
+    select: { id: true, organizationId: true },
   });
+  // organizationId is non-null by construction (nested create above).
+  const organizationId = user.organizationId as string;
 
   try {
     const customerId = await createStripeCustomer({
-      organizationId: organization.id,
+      organizationId,
       organizationName: orgName,
       email,
     });
     if (customerId) {
       await prisma.organizationSubscription.update({
-        where: { organizationId: organization.id },
+        where: { organizationId },
         data: { stripeCustomerId: customerId },
       });
     }
@@ -67,5 +71,5 @@ export async function provisionUserWithOrganization({
     console.error("[auth.provision] Stripe customer creation failed", err);
   }
 
-  return { userId: user.id, organizationId: organization.id };
+  return { userId: user.id, organizationId };
 }

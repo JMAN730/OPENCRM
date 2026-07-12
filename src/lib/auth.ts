@@ -185,6 +185,17 @@ export const authOptions: NextAuthOptions = {
         const existing = await prisma.user.findUnique({ where: { email } });
         if (existing) return true;
 
+        // Provisioning creates an org + trial + Stripe customer, so treat it
+        // like registration and rate-limit it. Keyed on email — NextAuth
+        // doesn't expose the request IP here (same constraint as the
+        // credentials authorize() above).
+        const rl = await rateLimit({
+          key: keys.authOauthProvisionBucket(email),
+          limit: 5,
+          windowSeconds: 60 * 60,
+        });
+        if (!rl.ok) return false;
+
         // First-time Google sign-in: provision an organization + ADMIN user,
         // same as credentials registration but without a password.
         await provisionUserWithOrganization({

@@ -18,6 +18,7 @@ export const keys = {
 
   // ── Rate-limit buckets ───────────────────────────────────────────────
   authSigninBucket: (email: string) => `auth:signin:${email}`,
+  authOauthProvisionBucket: (email: string) => `auth:oauth-provision:${email}`,
   authRegisterIpBucket: (ip: string) => `auth:register:ip:${ip}`,
   authResetEmailBucket: (email: string) => `auth:reset:email:${email}`,
   authResetIpBucket: (ip: string) => `auth:reset:ip:${ip}`,

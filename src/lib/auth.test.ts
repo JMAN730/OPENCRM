@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrisma, mockProvision } = vi.hoisted(() => ({
+const { mockPrisma, mockProvision, mockRateLimit } = vi.hoisted(() => ({
   mockPrisma: {
     user: {
       findUnique: vi.fn(),
@@ -8,18 +8,21 @@ const { mockPrisma, mockProvision } = vi.hoisted(() => ({
     },
   },
   mockProvision: vi.fn(),
+  mockRateLimit: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/features/auth/server/provision", () => ({
   provisionUserWithOrganization: mockProvision,
 }));
+vi.mock("@/lib/rateLimit", () => ({ rateLimit: mockRateLimit }));
 
 import { authOptions } from "./auth";
 import bcrypt from "bcryptjs";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRateLimit.mockResolvedValue({ ok: true, remaining: 9, resetAt: 0 });
 });
 
 // authOptions.callbacks should always be defined; capture them with non-null assertions.
@@ -319,6 +322,32 @@ describe("signIn callback (Google OAuth)", () => {
       name: "new@y.com",
       email: "new@y.com",
     });
+  });
+
+  it("rate-limits first-time provisioning per email", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockRateLimit.mockResolvedValueOnce({ ok: false, remaining: 0, resetAt: 0 });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("does not consume the rate limit for existing users signing in", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
   });
 
   it("denies sign-in (does not throw) when provisioning fails", async () => {
