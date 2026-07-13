@@ -1,1 +1,4 @@
 *.sh text eol=lf
+
+# Bundle-size fixtures are gzip-measured byte-for-byte; keep LF on every platform
+scripts/bundle-size/__fixtures__/** text eol=lf
