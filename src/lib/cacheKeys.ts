@@ -24,6 +24,7 @@ export const keys = {
   authResetConfirmIpBucket: (ip: string) => `auth:reset-confirm:ip:${ip}`,
   acceptInviteIpBucket: (ip: string) => `auth:accept-invite:ip:${ip}`,
   emailSendBucket: (organizationId: string) => `email-send:${organizationId}`,
+  smsSendBucket: (organizationId: string) => `sms-send:${organizationId}`,
   emailGenBucket: (organizationId: string, leadId: string) => `email-gen:${organizationId}:${leadId}`,
   demoGenBucket: (organizationId: string, leadId: string) => `demo-gen:${organizationId}:${leadId}`,
   emailTrackIpBucket: (ip: string) => `email-track:${ip}`,

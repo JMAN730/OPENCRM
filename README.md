@@ -91,6 +91,22 @@ docker compose --profile proxy up --build -d
 
 The migration container runs `prisma db push` before the app starts so the schema stays aligned with the current Prisma model.
 
+### SMS outreach
+
+One-off SMS drafts are available from a lead record when the lead has a phone number. Draft generation uses a static template, includes the latest generated demo-site link when available, and always includes the fixed opt-out line. Users may edit a draft, but sending is always a separate confirmed action.
+
+SMS sending requires these server-side values:
+
+```dotenv
+TWILIO_ACCOUNT_SID="AC..."
+TWILIO_AUTH_TOKEN="..."
+TWILIO_MESSAGING_SERVICE_SID="MG..."
+SENDER_NAME="Your Business"
+NEXT_PUBLIC_APP_URL="https://crm.example.com"
+```
+
+Create the Messaging Service in Twilio and enable Advanced Opt-Out before enabling production sending. Complete any required sender/campaign registration for your jurisdiction and use case. If the three Twilio SMS values are absent, the lead panel reports that SMS is not configured and the rest of OpenCRM continues normally.
+
 ## Project structure
 
 ```text

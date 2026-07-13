@@ -219,6 +219,20 @@ export function createMockPrisma() {
     emailOptOut: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    smsDraft: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      delete: vi.fn(),
+    },
+    smsEvent: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    phoneOptOut: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     outreachJob: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),

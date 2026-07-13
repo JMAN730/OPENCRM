@@ -60,6 +60,9 @@ vi.mock("@/app/_trpc/client", () => ({
       emails: {
         getDraftForLead: { invalidate: vi.fn() },
       },
+      sms: {
+        getDraftForLead: { invalidate: vi.fn() },
+      },
       scripts: {
         getAll: { invalidate: vi.fn() },
       },
@@ -178,6 +181,23 @@ vi.mock("@/app/_trpc/client", () => ({
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
     },
+    sms: {
+      getDraftForLead: {
+        useQuery: vi.fn(() => ({
+          data: { configured: false, draft: null },
+          isLoading: false,
+        })),
+      },
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      updateDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      send: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
     scripts: {
       getAll: {
         useQuery: vi.fn(() => ({ data: scriptsMock, isLoading: false })),
@@ -275,6 +295,12 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("shows the SMS panel for a lead with a phone number", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByText("Twilio SMS not configured")).toBeInTheDocument();
   });
 
   it("opens scripts from the shared scripts data source", () => {
