@@ -247,11 +247,211 @@ const LANDSCAPING_PACK: TemplatePack = {
   },
 };
 
+const TREE_REMOVAL_PACK: TemplatePack = {
+  id: "tree-removal",
+  label: "Tree Removal",
+  categories: ["Tree Removal", "Tree Service", "Arborist"],
+  theme: {
+    accent: "#d96c1f",
+    accentDark: "#a8511a",
+    deep: "#20180f",
+    ink: "#151009",
+    paper: "#faf6ef",
+    paperAlt: "#f1e9dc",
+  },
+  photos: [
+    "/demo-packs/tree-removal/hero.jpg",
+    "/demo-packs/tree-removal/work-1.jpg",
+    "/demo-packs/tree-removal/work-2.jpg",
+    "/demo-packs/tree-removal/work-3.jpg",
+    "/demo-packs/tree-removal/work-4.jpg",
+    "/demo-packs/tree-removal/work-5.jpg",
+  ],
+  copy: {
+    specialtyFallback: "Tree removal",
+    servicesKickerLabel: "SERVICES",
+    servicesTitle: "What comes down.",
+    whyKickerLabel: "WHY US",
+    whyTitleLines: ["Big trees.", "Zero", "guesswork."],
+    whyAccentLine: 1,
+    galleryKickerLabel: "THE TAKEDOWNS",
+    galleryTitle: "Watch the big ones drop.",
+    galleryBody:
+      "Climbs, controlled rigging, storm cleanup, and stump grinding — jobs from assessment to raked-clean yard.",
+    galleryNavLabel: "Our Work",
+    galleryTileLabels: ["Takedown day", "Clean site after"],
+    reviewsKickerLabel: "WHAT NEIGHBORS SAY",
+    reviewsTitle: "Solid as oak.",
+    contactKickerLabel: "FAST ASSESSMENT",
+    contactTitle: "Down safe. Gone fast.",
+    serviceCardBlurb:
+      "Insured climbers, controlled rigging, and a raked-clean yard when the last limb is hauled off.",
+    whyPhotoCaption: "Mid-takedown",
+    stats: [
+      { value: "Insured", label: "Climbers & rigging" },
+      { value: "24/7", label: "Storm response" },
+      { value: "Stump", label: "Grinding included" },
+      { value: "Free", label: "Assessments" },
+    ],
+  },
+};
+
+const CLEANING_PACK: TemplatePack = {
+  id: "cleaning",
+  label: "Cleaning",
+  categories: ["Cleaning", "Cleaning Service", "House Cleaning", "Maid Service"],
+  theme: {
+    accent: "#0f8577",
+    accentDark: "#0a6157",
+    deep: "#0e2b27",
+    ink: "#0b1d1a",
+    paper: "#f8fbfa",
+    paperAlt: "#e9f4f1",
+  },
+  photos: [
+    "/demo-packs/cleaning/hero.jpg",
+    "/demo-packs/cleaning/work-1.jpg",
+    "/demo-packs/cleaning/work-2.jpg",
+    "/demo-packs/cleaning/work-3.jpg",
+    "/demo-packs/cleaning/work-4.jpg",
+    "/demo-packs/cleaning/work-5.jpg",
+  ],
+  copy: {
+    specialtyFallback: "Cleaning",
+    servicesKickerLabel: "SERVICES",
+    servicesTitle: "What we clean.",
+    whyKickerLabel: "WHY US",
+    whyTitleLines: ["Walk in.", "Breathe", "easier."],
+    whyAccentLine: 1,
+    galleryKickerLabel: "SPOTLESS",
+    galleryTitle: "Every corner counts.",
+    galleryBody:
+      "Kitchens, baths, floors, and the corners nobody else reaches — the detail passes that make the difference.",
+    galleryNavLabel: "Our Work",
+    galleryTileLabels: ["Fresh finish", "Detail work"],
+    reviewsKickerLabel: "WHAT CLIENTS SAY",
+    reviewsTitle: "Squeaky clean.",
+    contactKickerLabel: "BOOK A CLEAN",
+    contactTitle: "Come home to done.",
+    serviceCardBlurb:
+      "Vetted cleaners, consistent checklists, and supplies included — recurring or one-time.",
+    whyPhotoCaption: "Detail pass",
+    stats: [
+      { value: "Vetted", label: "Cleaners" },
+      { value: "Supplies", label: "Included" },
+      { value: "Flexible", label: "Scheduling" },
+      { value: "100%", label: "Satisfaction goal" },
+    ],
+  },
+};
+
+const CONCRETE_PACK: TemplatePack = {
+  id: "concrete",
+  label: "Concrete",
+  categories: ["Concrete", "Concrete Contractor", "Concrete Company"],
+  theme: {
+    accent: "#b07310",
+    accentDark: "#845608",
+    deep: "#1e2226",
+    ink: "#14171a",
+    paper: "#f7f6f3",
+    paperAlt: "#ebe9e3",
+  },
+  photos: [
+    "/demo-packs/concrete/hero.jpg",
+    "/demo-packs/concrete/work-1.jpg",
+    "/demo-packs/concrete/work-2.jpg",
+    "/demo-packs/concrete/work-3.jpg",
+    "/demo-packs/concrete/work-4.jpg",
+    "/demo-packs/concrete/work-5.jpg",
+  ],
+  copy: {
+    specialtyFallback: "Concrete work",
+    servicesKickerLabel: "SERVICES",
+    servicesTitle: "Poured to last.",
+    whyKickerLabel: "WHY US",
+    whyTitleLines: ["Formed right.", "Poured", "once."],
+    whyAccentLine: 1,
+    galleryKickerLabel: "THE POURS",
+    galleryTitle: "Flatwork that stays flat.",
+    galleryBody:
+      "Driveways, slabs, patios, and footings — graded, formed, poured, and finished by the same crew.",
+    galleryNavLabel: "Projects",
+    galleryTileLabels: ["Fresh pour", "Finished slab"],
+    reviewsKickerLabel: "WHAT BUILDERS SAY",
+    reviewsTitle: "Set in stone.",
+    contactKickerLabel: "FLAT QUOTES",
+    contactTitle: "Get it poured.",
+    serviceCardBlurb:
+      "Graded, formed, and finished by one crew — surfaces that cure clean and stay crack-free longer.",
+    whyPhotoCaption: "Screed work",
+    stats: [
+      { value: "Licensed", label: "And bonded" },
+      { value: "Rebar", label: "Reinforced" },
+      { value: "On-time", label: "Pours" },
+      { value: "Free", label: "Quotes" },
+    ],
+  },
+};
+
+const FENCING_PACK: TemplatePack = {
+  id: "fencing",
+  label: "Fencing",
+  categories: ["Fencing Companies", "Fencing", "Fence Installation", "Fence Company"],
+  theme: {
+    accent: "#a4552a",
+    accentDark: "#7c3f1e",
+    deep: "#221a14",
+    ink: "#171310",
+    paper: "#faf7f2",
+    paperAlt: "#f2ece2",
+  },
+  photos: [
+    "/demo-packs/fencing/hero.jpg",
+    "/demo-packs/fencing/work-1.jpg",
+    "/demo-packs/fencing/work-2.jpg",
+    "/demo-packs/fencing/work-3.jpg",
+    "/demo-packs/fencing/work-4.jpg",
+    "/demo-packs/fencing/work-5.jpg",
+  ],
+  copy: {
+    specialtyFallback: "Fencing",
+    servicesKickerLabel: "SERVICES",
+    servicesTitle: "Good fences, fast.",
+    whyKickerLabel: "WHY US",
+    whyTitleLines: ["Straight lines.", "Square", "posts."],
+    whyAccentLine: 1,
+    galleryKickerLabel: "THE LINES",
+    galleryTitle: "Walk the fence line.",
+    galleryBody:
+      "Privacy, picket, and ranch runs with gates that swing true — installs and repairs across the area.",
+    galleryNavLabel: "Our Work",
+    galleryTileLabels: ["Fresh install", "Gate detail"],
+    reviewsKickerLabel: "WHAT NEIGHBORS SAY",
+    reviewsTitle: "Neighbors approve.",
+    contactKickerLabel: "LINE QUOTES",
+    contactTitle: "Stake it out.",
+    serviceCardBlurb:
+      "Posts set in concrete, lines leveled end to end, and gates hung to swing true for years.",
+    whyPhotoCaption: "Post day",
+    stats: [
+      { value: "Wood & vinyl", label: "Options" },
+      { value: "Level", label: "End to end" },
+      { value: "Gates", label: "Built to swing" },
+      { value: "Free", label: "Quotes" },
+    ],
+  },
+};
+
 /** Niche packs; GENERIC_PACK is the fallback and not listed here. */
 export const TEMPLATE_PACKS: TemplatePack[] = [
   MOBILE_MECHANICS_PACK,
   POWER_WASHING_PACK,
   LANDSCAPING_PACK,
+  TREE_REMOVAL_PACK,
+  CLEANING_PACK,
+  CONCRETE_PACK,
+  FENCING_PACK,
 ];
 
 export function packForCategory(category: string | null | undefined): TemplatePack {
