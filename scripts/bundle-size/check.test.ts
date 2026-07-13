@@ -38,18 +38,47 @@ describe("checkBundleSizes", () => {
 
   it("reports a route missing from the build as an explicit failure", async () => {
     const [report] = await checkBundleSizes(fixtureBuildDirectory, {
-      "/tasks": 1,
+      "/missing": 1,
     });
 
     expect(report).toEqual({
-      route: "/tasks",
+      route: "/missing",
       measuredBytes: null,
       measuredKb: null,
       ceilingKb: 1,
       status: "missing",
       passed: false,
-      error: "No client-reference manifest found for /tasks",
+      error: "No client-reference manifest found for /missing",
     });
+  });
+
+  it("reports a missing referenced chunk without rejecting the batch", async () => {
+    const missingChunkPath = path.join(
+      fixtureBuildDirectory,
+      "static/chunks/missing.js",
+    );
+
+    await expect(
+      checkBundleSizes(fixtureBuildDirectory, { "/tasks": 1 }),
+    ).resolves.toEqual([
+      {
+        route: "/tasks",
+        measuredBytes: null,
+        measuredKb: null,
+        ceilingKb: 1,
+        status: "missing",
+        passed: false,
+        error: `Missing chunk for /tasks: ${missingChunkPath}`,
+      },
+    ]);
+  });
+
+  it("includes Turbopack entryJSFiles in route totals", async () => {
+    const [report] = await checkBundleSizes(fixtureBuildDirectory, {
+      "/leads": 1,
+    });
+
+    expect(report.measuredBytes).toBe(166);
   });
 
   it("keeps gzip sizing stable for the fixed fixture chunks", async () => {

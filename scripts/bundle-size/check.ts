@@ -6,6 +6,7 @@ const BYTES_PER_KILOBYTE = 1024;
 
 type ClientReferenceManifest = {
   clientModules: Record<string, { chunks?: unknown }>;
+  entryJSFiles?: Record<string, unknown>;
 };
 
 type BuildManifest = {
@@ -29,6 +30,25 @@ export async function checkBundleSizes(
   ceilings: BundleSizeCeilings,
 ): Promise<RouteBundleReport[]> {
   const rootChunks = await readRootChunks(buildDirectory);
+  const rootChunkSet = new Set(rootChunks);
+  let rootBytes: number;
+
+  try {
+    rootBytes = await gzipSize(buildDirectory, rootChunkSet);
+  } catch (error) {
+    if (!isMissingFile(error)) {
+      throw error;
+    }
+
+    return Object.entries(ceilings).map(([route, ceilingKb]) =>
+      missingReport(
+        route,
+        ceilingKb,
+        routeManifestPath(buildDirectory, route),
+        error,
+      ),
+    );
+  }
 
   return Promise.all(
     Object.entries(ceilings).map(async ([route, ceilingKb]) => {
@@ -36,11 +56,11 @@ export async function checkBundleSizes(
 
       try {
         const manifest = await readClientReferenceManifest(manifestPath, route);
-        const routeChunks = clientChunks(manifest);
-        const measuredBytes = await gzipSize(
-          buildDirectory,
-          new Set([...rootChunks, ...routeChunks]),
+        const routeChunks = new Set(
+          clientChunks(manifest).filter((chunk) => !rootChunkSet.has(chunk)),
         );
+        const routeBytes = await gzipSize(buildDirectory, routeChunks);
+        const measuredBytes = rootBytes + routeBytes;
         const passed = measuredBytes <= ceilingKb * BYTES_PER_KILOBYTE;
 
         return {
@@ -52,16 +72,8 @@ export async function checkBundleSizes(
           passed,
         };
       } catch (error) {
-        if (isMissingFile(error, manifestPath)) {
-          return {
-            route,
-            measuredBytes: null,
-            measuredKb: null,
-            ceilingKb,
-            status: "missing",
-            passed: false,
-            error: `No client-reference manifest found for ${route}`,
-          };
+        if (isMissingFile(error)) {
+          return missingReport(route, ceilingKb, manifestPath, error);
         }
 
         throw error;
@@ -112,18 +124,27 @@ async function readClientReferenceManifest(
 }
 
 function clientChunks(manifest: ClientReferenceManifest): string[] {
-  return Object.values(manifest.clientModules).flatMap((clientModule) => {
-    if (!Array.isArray(clientModule.chunks)) {
-      return [];
-    }
+  const moduleChunks = Object.values(manifest.clientModules).flatMap(
+    (clientModule) => normalizeClientChunks(clientModule.chunks),
+  );
+  const entryChunks = Object.values(manifest.entryJSFiles ?? {}).flatMap(
+    normalizeClientChunks,
+  );
 
-    return clientModule.chunks
-      .filter(
-        (chunk): chunk is string =>
-          typeof chunk === "string" && chunk.endsWith(".js"),
-      )
-      .map((chunk) => chunk.replace(/^\/_next\//, ""));
-  });
+  return [...moduleChunks, ...entryChunks];
+}
+
+function normalizeClientChunks(chunks: unknown): string[] {
+  if (!Array.isArray(chunks)) {
+    return [];
+  }
+
+  return chunks
+    .filter(
+      (chunk): chunk is string =>
+        typeof chunk === "string" && chunk.endsWith(".js"),
+    )
+    .map((chunk) => chunk.replace(/^\/_next\//, ""));
 }
 
 async function gzipSize(
@@ -151,15 +172,30 @@ function routeManifestPath(buildDirectory: string, route: string): string {
   );
 }
 
-function isMissingFile(
-  error: unknown,
-  expectedPath: string,
-): error is NodeJS.ErrnoException {
+function missingReport(
+  route: string,
+  ceilingKb: number,
+  manifestPath: string,
+  error: NodeJS.ErrnoException,
+): RouteBundleReport {
+  return {
+    route,
+    measuredBytes: null,
+    measuredKb: null,
+    ceilingKb,
+    status: "missing",
+    passed: false,
+    error:
+      error.path === manifestPath
+        ? `No client-reference manifest found for ${route}`
+        : `Missing chunk for ${route}: ${error.path ?? "unknown path"}`,
+  };
+}
+
+function isMissingFile(error: unknown): error is NodeJS.ErrnoException {
   return (
     error instanceof Error &&
     "code" in error &&
-    error.code === "ENOENT" &&
-    "path" in error &&
-    error.path === expectedPath
+    error.code === "ENOENT"
   );
 }
