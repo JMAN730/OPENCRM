@@ -5,7 +5,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
-import { Suspense, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useState, useRef, useEffect, useCallback, useId, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -92,6 +92,74 @@ function leadName(lead: TaskItem["lead"]) {
   return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—";
 }
 
+// ── Modal Overlay (shared dialog behaviors: focus, Escape, backdrop close) ────
+
+function ModalOverlay({
+  ariaLabel,
+  onClose,
+  overlayStyle,
+  panelStyle,
+  children,
+}: {
+  ariaLabel: string;
+  onClose: () => void;
+  overlayStyle: React.CSSProperties;
+  panelStyle: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the dialog on open, restore it on close.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
+  // Escape closes; Tab cycles focus within the dialog.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        tabIndex={-1}
+        style={{ outline: "none", ...panelStyle }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── Task Form (used in Create and Edit dialogs) ───────────────────────────────
 
 type TaskFormData = {
@@ -135,6 +203,7 @@ type TaskDialogProps = {
 
 function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDialogProps) {
   const [form, setForm] = useState<TaskFormData>(initial);
+  const fieldId = useId();
 
   function set<K extends keyof TaskFormData>(key: K, val: TaskFormData[K]) {
     setForm((f) => ({ ...f, [key]: val }));
@@ -155,17 +224,21 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
   const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--crm-fg-muted)", marginBottom: 4, display: "block" };
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
+    <ModalOverlay
+      ariaLabel={mode === "create" ? "New Task" : "Edit Task"}
+      onClose={onClose}
+      overlayStyle={{
+        position: "fixed", inset: 0, zIndex: 100,
+        background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      panelStyle={{
         background: "var(--crm-bg-card)", borderRadius: 12, width: "100%", maxWidth: 540,
         margin: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto",
-      }}>
+      }}
+    >
         <div style={{ padding: "20px 24px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{mode === "create" ? "New Task" : "Edit Task"}</h2>
-          <button type="button" onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+          <button type="button" onClick={onClose} aria-label="Close dialog" style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex" }}>
             <X size={18} style={{ color: "var(--crm-fg-muted)" }} />
           </button>
         </div>
@@ -173,8 +246,9 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Title */}
           <div>
-            <label style={labelStyle}>Title *</label>
+            <label htmlFor={`${fieldId}-title`} style={labelStyle}>Title *</label>
             <input
+              id={`${fieldId}-title`}
               autoFocus
               value={form.title}
               onChange={(e) => set("title", e.target.value)}
@@ -187,8 +261,9 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
 
           {/* Description */}
           <div>
-            <label style={labelStyle}>Description</label>
+            <label htmlFor={`${fieldId}-description`} style={labelStyle}>Description</label>
             <textarea
+              id={`${fieldId}-description`}
               value={form.description}
               onChange={(e) => set("description", e.target.value)}
               placeholder="Optional details…"
@@ -200,8 +275,9 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
 
           {/* Assign To */}
           <div>
-            <label style={labelStyle}>Assigned To</label>
+            <label htmlFor={`${fieldId}-assignee`} style={labelStyle}>Assigned To</label>
             <select
+              id={`${fieldId}-assignee`}
               value={form.assignedToId}
               onChange={(e) => set("assignedToId", e.target.value)}
               style={fieldStyle}
@@ -226,28 +302,28 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
           {/* Due Date + Time */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={labelStyle}>Due Date</label>
-              <input type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} style={fieldStyle} disabled={pending} />
+              <label htmlFor={`${fieldId}-due-date`} style={labelStyle}>Due Date</label>
+              <input id={`${fieldId}-due-date`} type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} style={fieldStyle} disabled={pending} />
             </div>
             <div>
-              <label style={labelStyle}>Due Time</label>
-              <input type="time" value={form.dueTime} onChange={(e) => set("dueTime", e.target.value)} style={fieldStyle} disabled={pending} />
+              <label htmlFor={`${fieldId}-due-time`} style={labelStyle}>Due Time</label>
+              <input id={`${fieldId}-due-time`} type="time" value={form.dueTime} onChange={(e) => set("dueTime", e.target.value)} style={fieldStyle} disabled={pending} />
             </div>
           </div>
 
           {/* Priority + Status */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={labelStyle}>Priority</label>
-              <select value={form.priority} onChange={(e) => set("priority", e.target.value as TaskFormData["priority"])} style={fieldStyle} disabled={pending}>
+              <label htmlFor={`${fieldId}-priority`} style={labelStyle}>Priority</label>
+              <select id={`${fieldId}-priority`} value={form.priority} onChange={(e) => set("priority", e.target.value as TaskFormData["priority"])} style={fieldStyle} disabled={pending}>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Status</label>
-              <select value={form.status} onChange={(e) => set("status", e.target.value as TaskFormData["status"])} style={fieldStyle} disabled={pending}>
+              <label htmlFor={`${fieldId}-status`} style={labelStyle}>Status</label>
+              <select id={`${fieldId}-status`} value={form.status} onChange={(e) => set("status", e.target.value as TaskFormData["status"])} style={fieldStyle} disabled={pending}>
                 <option value="PENDING">Pending</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="COMPLETED">Completed</option>
@@ -262,8 +338,7 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -271,14 +346,18 @@ function TaskDialog({ mode, initial, members, pending, onSave, onClose }: TaskDi
 
 function DeleteConfirm({ taskTitle, onConfirm, onClose, pending }: { taskTitle: string; onConfirm: () => void; onClose: () => void; pending: boolean }) {
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 110, background: "rgba(0,0,0,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
+    <ModalOverlay
+      ariaLabel="Delete Task"
+      onClose={onClose}
+      overlayStyle={{
+        position: "fixed", inset: 0, zIndex: 110, background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      panelStyle={{
         background: "var(--crm-bg-card)", borderRadius: 12, padding: 28, maxWidth: 400,
         width: "calc(100% - 32px)", boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
-      }}>
+      }}
+    >
         <div style={{ display: "flex", gap: 14, marginBottom: 16 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Trash2 size={18} style={{ color: "#ef4444" }} />
@@ -299,8 +378,7 @@ function DeleteConfirm({ taskTitle, onConfirm, onClose, pending }: { taskTitle: 
             {pending ? "Deleting…" : "Delete"}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -417,6 +495,7 @@ function TaskRow({
           ref={btnRef}
           type="button"
           onClick={openMenu}
+          aria-label="Task actions"
           style={{ border: "none", background: "none", cursor: "pointer", padding: 4, borderRadius: 4, display: "flex", color: "var(--crm-fg-muted)" }}
         >
           <span style={{ display: "flex", gap: 2 }}>
@@ -478,11 +557,11 @@ function CalendarView({ tasks, onTaskClick }: { tasks: TaskItem[]; onTaskClick: 
     <div>
       {/* Calendar header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <button type="button" onClick={() => setCurrentMonth((m) => subMonths(m, 1))} className="crm-btn" style={{ padding: "4px 10px" }}>
+        <button type="button" onClick={() => setCurrentMonth((m) => subMonths(m, 1))} aria-label="Previous month" className="crm-btn" style={{ padding: "4px 10px" }}>
           <ChevronLeft size={16} />
         </button>
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{format(currentMonth, "MMMM yyyy")}</h3>
-        <button type="button" onClick={() => setCurrentMonth((m) => addMonths(m, 1))} className="crm-btn" style={{ padding: "4px 10px" }}>
+        <button type="button" onClick={() => setCurrentMonth((m) => addMonths(m, 1))} aria-label="Next month" className="crm-btn" style={{ padding: "4px 10px" }}>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -560,17 +639,21 @@ function TaskDetailSidebar({ task, onEdit, onDelete, onComplete, onClose }: {
   onClose: () => void;
 }) {
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
-    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{
+    <ModalOverlay
+      ariaLabel="Task Details"
+      onClose={onClose}
+      overlayStyle={{
+        position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
+      }}
+      panelStyle={{
         background: "var(--crm-bg-card)", width: "100%", maxWidth: 380, height: "100%",
         borderLeft: "1px solid var(--crm-border)", boxShadow: "-12px 0 40px rgba(0,0,0,0.1)",
         display: "flex", flexDirection: "column", overflowY: "auto",
-      }}>
+      }}
+    >
         <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--crm-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Task Details</h3>
-          <button type="button" onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", display: "flex" }}>
+          <button type="button" onClick={onClose} aria-label="Close details" style={{ border: "none", background: "none", cursor: "pointer", display: "flex" }}>
             <X size={18} style={{ color: "var(--crm-fg-muted)" }} />
           </button>
         </div>
@@ -612,12 +695,11 @@ function TaskDetailSidebar({ task, onEdit, onDelete, onComplete, onClose }: {
           <button type="button" className="crm-btn" style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={() => onEdit(task)}>
             <Pencil size={13} /> Edit
           </button>
-          <button type="button" onClick={() => onDelete(task)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fef2f2", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <button type="button" onClick={() => onDelete(task)} aria-label="Delete task" style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fef2f2", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
             <Trash2 size={13} />
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

@@ -17,7 +17,7 @@ import {
   Minus,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import Link from "next/link";
 import { formatPhone } from "@/lib/phone";
@@ -231,18 +231,24 @@ function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoadin
           </div>
         </div>
         <div className="crm-legend">
-          {enriched.map((d, i) => {
+          {enriched.map((d) => {
             const isExcluded = excluded.has(d.key);
             const pct = visibleTotal > 0 && !isExcluded
               ? ((d.count / visibleTotal) * 100).toFixed(1)
               : "—";
             return (
-              <div
-                key={i}
+              <button
+                key={d.key}
+                type="button"
                 className="crm-legend-row"
                 onClick={() => toggle(d.key)}
+                aria-pressed={!isExcluded}
                 title={isExcluded ? "Click to include" : "Click to exclude"}
-                style={{ cursor: "pointer", opacity: isExcluded ? 0.38 : 1, transition: "opacity 0.15s" }}
+                style={{
+                  cursor: "pointer", opacity: isExcluded ? 0.38 : 1, transition: "opacity 0.15s",
+                  width: "100%", border: 0, background: "transparent",
+                  font: "inherit", color: "inherit", textAlign: "left",
+                }}
               >
                 <span className="crm-swatch" style={{
                   background: isExcluded ? "var(--crm-fg-faint)" : d.color,
@@ -252,7 +258,7 @@ function PhoneReachCard({ data, isLoading }: { data: PhoneReachEntry[]; isLoadin
                 <span style={{ textDecoration: isExcluded ? "line-through" : "none" }}>{d.label}</span>
                 <span className="crm-pct">{pct}</span>
                 <span className="crm-count">{d.count}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -328,7 +334,10 @@ function TasksCard() {
   const { data, isLoading } = trpc.tasks.getAll.useQuery({ limit: 50 });
   const utils = trpc.useUtils();
   const update = trpc.tasks.update.useMutation({
-    onSuccess: () => utils.tasks.getAll.invalidate(),
+    onSuccess: () => {
+      void utils.tasks.getAll.invalidate();
+      void utils.dashboard.getKpiStats.invalidate();
+    },
   });
 
   const taskList = data?.items ?? [];
@@ -496,7 +505,7 @@ function TeamStatsTab() {
               </tr>
             </thead>
             <tbody>
-              {memberStats
+              {[...memberStats]
                 .sort((a, b) => (b.callCount ?? 0) - (a.callCount ?? 0))
                 .map((m) => (
                   <tr key={m.userId}>
@@ -638,7 +647,7 @@ function MyStatsTab() {
               </tr>
             </thead>
             <tbody>
-              {teamStats.memberStats
+              {[...teamStats.memberStats]
                 .sort((a, b) => (b.callCount ?? 0) - (a.callCount ?? 0))
                 .map((m) => (
                   <tr key={m.userId}>
@@ -678,14 +687,26 @@ function MyStatsTab() {
 /* ── Main Dashboard Page ── */
 type DashboardTab = "overview" | "team" | "my-stats";
 
+// Time-of-day greeting resolved only on the client — the server renders a
+// stable fallback so SSR markup never depends on the server clock.
+const subscribeToGreeting = () => () => {};
+const getGreetingSnapshot = () => {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+};
+const getServerGreetingSnapshot = () => "Welcome";
+
 export default function DashboardPageClient() {
   const { data: session } = useSession();
   const { data: stats, isLoading: statsLoading } = trpc.dashboard.getKpiStats.useQuery();
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greeting = useSyncExternalStore(
+    subscribeToGreeting,
+    getGreetingSnapshot,
+    getServerGreetingSnapshot,
+  );
 
   const followupsDue = stats?.followupsDue ?? 0;
   const callsToday = stats?.callsToday ?? 0;
