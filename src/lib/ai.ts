@@ -1,5 +1,7 @@
 import OpenAI from "openai";
+import { z } from "zod";
 import type { Lead } from "@prisma/client";
+import { nicheForCategory } from "@/features/websites/packs";
 
 export interface DemoContent {
   headline: string;
@@ -36,7 +38,7 @@ function leadDisplayName(lead: Lead) {
 
 function fallbackDemoContent(lead: Lead): DemoContent {
   const name = leadDisplayName(lead);
-  const niche = lead.source ?? "local service";
+  const niche = nicheForCategory(lead.category) ?? "local service";
   const city = lead.city ?? "the local area";
   const phone = lead.phone ? ` Call ${lead.phone} to talk through availability and next steps.` : "";
   const websiteNote = lead.website ? " The demo can be refined around the services and tone already shown online." : "";
@@ -106,12 +108,39 @@ const DEMO_SCHEMA = {
   },
 } as const;
 
+const demoContentSchema = z.object({
+  headline: z.string().min(1),
+  subheadline: z.string().min(1),
+  services: z.array(z.string().min(1)).min(4).max(8),
+  local_seo_headline: z.string().min(1),
+  cta: z.string().min(1),
+  contact_heading: z.string().min(1),
+  contact_body: z.string().min(1),
+  testimonials: z
+    .array(z.object({ quote: z.string().min(1), author: z.string().min(1) }))
+    .min(2)
+    .max(3),
+  city_body_copy: z.string().min(1),
+});
+
+/**
+ * Never throws: any API, JSON, or schema failure degrades to deterministic
+ * fallback copy so a Demo Site always exists (see ADR 0001).
+ */
 export async function generateDemoContent(lead: Lead): Promise<DemoContent> {
   if (!process.env.DEEPSEEK_API_KEY) {
     return fallbackDemoContent(lead);
   }
+  try {
+    return await generateDemoContentFromModel(lead);
+  } catch (err) {
+    console.warn(`Demo copy generation failed for lead ${lead.id}; using fallback copy.`, err);
+    return fallbackDemoContent(lead);
+  }
+}
 
-  const niche = lead.source ?? "local business";
+async function generateDemoContentFromModel(lead: Lead): Promise<DemoContent> {
+  const niche = nicheForCategory(lead.category) ?? "local business";
   const city = lead.city ?? "the local area";
 
   const completion = await client().chat.completions.create({
@@ -147,11 +176,11 @@ export async function generateDemoContent(lead: Lead): Promise<DemoContent> {
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) throw new Error("DeepSeek returned no demo content.");
-  try {
-    return JSON.parse(raw) as DemoContent;
-  } catch {
-    throw new Error("DeepSeek returned invalid demo JSON.");
+  const parsed = demoContentSchema.safeParse(JSON.parse(raw));
+  if (!parsed.success) {
+    throw new Error(`DeepSeek demo content failed validation: ${parsed.error.message}`);
   }
+  return parsed.data;
 }
 
 const EMAIL_SCHEMA = {
@@ -165,7 +194,7 @@ const EMAIL_SCHEMA = {
 } as const;
 
 export async function generateEmailCopy(lead: Lead): Promise<EmailCopy> {
-  const niche = lead.source ?? "local business";
+  const niche = nicheForCategory(lead.category) ?? "local business";
   const city = lead.city ?? "your area";
 
   const completion = await client().chat.completions.create({

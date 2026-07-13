@@ -83,4 +83,36 @@ describe("buildDemoView", () => {
       "https://www.google.com/maps?q=Acme%20Auto%20Austin&output=embed",
     );
   });
+
+  it("resolves the generic pack for unknown categories and exposes its theme", () => {
+    const view = buildDemoView({ ...base, category: "Underwater basket weaving" });
+    expect(view.packId).toBe("generic");
+    expect(view.theme.accent).toBeTruthy();
+  });
+
+  it("falls back to the pack's curated photos when the lead has none", () => {
+    const view = buildDemoView({ ...base, content: makeContent({ photos: [] }) });
+    expect(view.photos.length).toBeGreaterThan(0);
+    expect(view.photos[0]).toMatch(/^\//);
+  });
+
+  it("shows the real Google rating when the scraper captured it", () => {
+    const view = buildDemoView({ ...base, rating: 4.8, reviewCount: 127 });
+    expect(view.reviewsBadge).toEqual({
+      score: "4.8",
+      stars: "★★★★★",
+      note: "127 Google reviews",
+    });
+  });
+
+  it("rounds partial ratings into the star row", () => {
+    const view = buildDemoView({ ...base, rating: 3.4, reviewCount: 12 });
+    expect(view.reviewsBadge.score).toBe("3.4");
+    expect(view.reviewsBadge.stars).toBe("★★★☆☆");
+  });
+
+  it("keeps the neutral demo badge without a rating", () => {
+    const view = buildDemoView({ ...base, rating: null, reviewCount: null });
+    expect(view.reviewsBadge).toEqual({ score: "5.0", stars: "★★★★★", note: "Demo reviews" });
+  });
 });

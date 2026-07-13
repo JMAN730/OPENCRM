@@ -96,9 +96,8 @@ STRIPE_PRICE_BUSINESS="price_..."
 ELEVENLABS_API_KEY="..."
 ELEVENLABS_AGENT_ID="agent_..."
 
-# Optional – Demo site photos (Google Places → Pexels fallback)
+# Optional – Demo site photos (Google Places; curated pack photos otherwise)
 GOOGLE_PLACES_API_KEY="..."
-PEXELS_API_KEY="..."
 
 # Optional – Twilio (browser dialer)
 TWILIO_ACCOUNT_SID="..."
@@ -154,7 +153,7 @@ appRouter = {
   teams:            teamsRouter,            // team CRUD + memberships + email-token invitations
   scoring:          scoringRouter,          // lead-scoring rule CRUD
   scripts:          scriptsRouter,          // sales-script CRUD
-  websites:         websitesRouter,         // template-based + AI per-lead site generator
+  websites:         websitesRouter,         // per-lead demo sites (Template Packs + AI copy)
   emails:           emailsRouter,           // CAN-SPAM outreach email drafts + send (Resend) + tracking
   pipeline:         pipelineRouter,         // deal pipeline board (stages + lead placement)
   analytics:        analyticsRouter,        // analytics aggregations for /analytics
@@ -289,7 +288,7 @@ Inside `DashboardLayout`, page content uses `<PageShell>` (from `src/components/
 | `auth` | `register`, `resetPassword`, `confirmResetPassword`, `updateProfile`, `deleteAccount` |
 | `teams` | `list`, `organizationMembers`, `myTeam`, `activityFeed`, `memberDetail`, `create`, `update`, `delete`, `setMembership`, `inviteByEmail`, `listInvitations`, `revokeInvitation`, `getInvitation`, `acceptInvitation` |
 | `scoring` | `getRules`, `upsertRule`, `deleteRule`, `resetToDefaults` |
-| `websites` | `getForLead`, `generate`, `update`, `delete` |
+| `websites` | `getForLead`, `generateAi`, `delete`, `setPhotos` |
 | `outreach` | `stats`, `list`, `retry`, `bulkSend` |
 | `map` | `discoveryCategories`, `leadsInBounds`, `missingCoordinatesCount`, `geocodeMissing`, `discoverBusinesses`, `enrich`, `enrichmentStatus` |
 | `trainer` | `listPersonas`, `createPersona`, `updatePersona`, `deletePersona`, `startSession`, `scoreSession`, `getSessions`, `pickableLeads` |
@@ -369,7 +368,7 @@ Scraper import → `OutreachJob` queue → cron worker → review queue at `/out
 - **Worker** (`src/features/outreach/server/worker.ts`): `processOutreachQueue()` claims PENDING jobs atomically, generates an AI demo site (`generateWebsiteForLead`) and email draft (`generateDraftForLead`) per lead, skips leads with no email / opted out / existing draft, retries failures up to 3 attempts. Never sends — sending is always a user action.
 - **Cron** (`POST /api/cron/outreach`): Bearer `CRON_SECRET` auth (same pattern as the scraper cron); run every 1–5 minutes. Batch size via `OUTREACH_BATCH_SIZE` (default 5).
 - **Shared services**: `src/features/websites/server/service.ts` (`generateWebsiteForLead`) and `src/features/emails/server/service.ts` (`generateDraftForLead`, `sendDraft`, `OutreachEmailError`) are the single code path used by both the tRPC routers and the worker.
-- **Photos**: Google Places photos → Pexels stock fallback (`src/lib/stockPhotos.ts`, `PEXELS_API_KEY`) → Maps-embed fallback.
+- **Photos**: Google Places photos when available; otherwise the demo renders its Template Pack's curated photo set (`src/features/websites/packs.ts`, `public/demo-packs/`).
 - **Email capture**: `scraper.py` extracts emails from the Maps panel, the homepage body (free — already fetched during the website check), and `/contact`-style pages; `importer.ts` sanitizes and maps the CSV `Email` column onto `Lead.email`.
 
 ---

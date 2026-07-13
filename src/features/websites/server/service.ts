@@ -1,7 +1,6 @@
 import { Prisma, type GeneratedWebsite, type Lead, type PrismaClient } from "@prisma/client";
 import { generateDemoContent } from "@/lib/ai";
 import { slugify, uniqueSlug } from "@/lib/slug";
-import { fetchStockPhotos, leadPhotoQuery } from "@/lib/stockPhotos";
 import { logActivity, ActivityType } from "@/server/activity";
 
 /**
@@ -27,7 +26,9 @@ export async function generateWebsiteForLead(
     select: { id: true, slug: true },
   });
 
-  // Photo enrichment: real Places photos → category stock photos → Maps embed
+  // Photos: real Places photos when available; otherwise the demo renders the
+  // Template Pack's curated set (resolved from Lead.category at render time,
+  // so curation improvements apply to existing demos too).
   const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
   const businessName = lead.company ?? [lead.firstName, lead.lastName].filter(Boolean).join(" ");
   let needsPhotos = true;
@@ -37,16 +38,8 @@ export async function generateWebsiteForLead(
     content.photos = await fetchPlacePhotos(businessName, lead.city, googleApiKey);
     if (content.photos.length > 0) needsPhotos = false;
   }
-  if (needsPhotos) {
-    const stock = await fetchStockPhotos(leadPhotoQuery(lead));
-    if (stock.length > 0) {
-      content.photos = stock;
-      needsPhotos = false;
-    }
-  }
-  if (needsPhotos && lead.mapsUrl) {
+  if (lead.mapsUrl) {
     content.googleMapsUrl = lead.mapsUrl;
-    needsPhotos = false;
   }
 
   const jsonContent = content as unknown as Prisma.InputJsonValue;

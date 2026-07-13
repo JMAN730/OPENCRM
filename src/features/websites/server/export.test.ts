@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildDemoExport, renderDemoHtml } from "@/features/websites/server/export";
+import {
+  buildDemoExport,
+  demoExportAssetSources,
+  renderDemoHtml,
+} from "@/features/websites/server/export";
 import type { DemoExportSite } from "@/features/websites/server/export";
+import { packForCategory } from "@/features/websites/packs";
 
 const site: DemoExportSite = {
   title: "Acme Auto - Demo Site",
@@ -29,9 +34,40 @@ describe("demo website export", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("Acme &lt;Auto&gt;");
     expect(html).toContain("assets/logo.png");
-    expect(html).toContain("assets/workshop.jpg");
+    // No lead photos → pack fallback photos, rewritten to bundled asset paths.
+    const pack = packForCategory(site.category);
+    expect(html).toContain(`assets/${pack.photos[0].split("/").filter(Boolean).join("-")}`);
     expect(html).toContain("Oil Changes");
     expect(html).not.toContain("Acme <Auto>");
+  });
+
+  it("themes the CSS from the resolved Template Pack", () => {
+    const html = renderDemoHtml(site);
+    expect(html).toContain(packForCategory(site.category).theme.accent);
+  });
+
+  it("lists the pack's local photos as export asset sources", () => {
+    const pack = packForCategory(site.category);
+    const sources = demoExportAssetSources(site);
+    expect(sources).toContainEqual({
+      source: "public/demo-template/logo.png",
+      target: "assets/logo.png",
+    });
+    expect(sources).toContainEqual({
+      source: `public${pack.photos[0]}`,
+      target: `assets/${pack.photos[0].split("/").filter(Boolean).join("-")}`,
+    });
+  });
+
+  it("leaves remote lead photos untouched and unbundled", () => {
+    const withRemote: DemoExportSite = {
+      ...site,
+      content: { ...site.content, photos: ["https://example.com/p.jpg"] },
+    };
+    const html = renderDemoHtml(withRemote);
+    expect(html).toContain("https://example.com/p.jpg");
+    const sources = demoExportAssetSources(withRemote);
+    expect(sources.every((asset) => !asset.source.includes("example.com"))).toBe(true);
   });
 
   it("builds a zip-friendly file list", () => {

@@ -1,4 +1,5 @@
 import type { DemoContent } from "@/lib/ai";
+import { packForCategory, type PackTheme, type TemplatePack } from "./packs";
 
 /**
  * The single source of truth for what a generated demo site says and shows.
@@ -6,6 +7,9 @@ import type { DemoContent } from "@/lib/ai";
  * export (renderDemoHtml) — are thin adapters over this view: every
  * derivation (headline splitting, tel: links, fallbacks) and every piece of
  * shared copy lives here, so the two sites cannot drift apart.
+ *
+ * Design (theme, section copy, fallback photos) comes from the lead's
+ * Template Pack, resolved from `category` (see packs.ts).
  */
 
 export type DemoViewInput = {
@@ -14,12 +18,17 @@ export type DemoViewInput = {
   city: string | null;
   category: string | null;
   content: DemoContent;
+  /** Real Google rating/review count when the scraper captured them. */
+  rating?: number | null;
+  reviewCount?: number | null;
   /** Optional overrides (the live page passes fresher values than content). */
   photos?: string[];
   googleMapsUrl?: string;
 };
 
 export type DemoView = {
+  packId: string;
+  theme: PackTheme;
   businessName: string;
   /** `tel:` href, or null when the business has no phone. */
   telHref: string | null;
@@ -31,7 +40,7 @@ export type DemoView = {
   services: string[];
   /** Services with the specialty fallback — never empty (marquee, cards). */
   marqueeServices: string[];
-  /** Photos with blanks removed; adapters supply their own placeholder assets. */
+  /** Lead photos, falling back to the pack's curated set; may be empty. */
   photos: string[];
   googleMapsUrl: string | undefined;
   /** Google Maps embed URL for the contact section iframe. */
@@ -41,6 +50,9 @@ export type DemoView = {
   cta: string;
   subheadline: string;
   heroMeta: { label: string; value: string }[];
+  /** Header nav / footer label for the gallery section. */
+  galleryNavLabel: string;
+  galleryTileLabels: [string, string];
   sections: {
     services: SectionHead;
     why: {
@@ -76,16 +88,20 @@ type SectionHead = { kicker: string; title: string; body: string };
 
 export function buildDemoView(input: DemoViewInput): DemoView {
   const { content } = input;
+  const pack: TemplatePack = packForCategory(input.category);
   const businessName = input.businessName || "Demo Site";
-  const specialty = input.category || "Local service";
+  const specialty = input.category || pack.copy.specialtyFallback;
   const serviceArea = input.city || "Local area";
   const phone = input.phone;
-  const photos = (input.photos ?? content.photos ?? []).filter(Boolean);
+  const leadPhotos = (input.photos ?? content.photos ?? []).filter(Boolean);
+  const photos = leadPhotos.length > 0 ? leadPhotos : pack.photos;
   const googleMapsUrl = input.googleMapsUrl ?? content.googleMapsUrl;
   const services = content.services;
   const marqueeServices = services.length > 0 ? services : [specialty];
 
   return {
+    packId: pack.id,
+    theme: pack.theme,
     businessName,
     telHref: phone ? `tel:${phone.replace(/[^0-9+]/g, "")}` : null,
     specialty,
@@ -104,34 +120,41 @@ export function buildDemoView(input: DemoViewInput): DemoView {
       { label: "Area", value: serviceArea },
       { label: "Phone", value: phone ?? "Request a quote" },
     ],
+    galleryNavLabel: pack.copy.galleryNavLabel,
+    galleryTileLabels: pack.copy.galleryTileLabels,
     sections: {
-      services: { kicker: "/ 01 - SERVICES", title: "What we fix.", body: content.city_body_copy },
+      services: {
+        kicker: `/ 01 - ${pack.copy.servicesKickerLabel}`,
+        title: pack.copy.servicesTitle,
+        body: content.city_body_copy,
+      },
       why: {
-        kicker: "/ 02 - WHY US",
-        titleLines: ["Big-shop work.", "Neighborhood", "honesty."],
-        accentLine: 1,
+        kicker: `/ 02 - ${pack.copy.whyKickerLabel}`,
+        titleLines: pack.copy.whyTitleLines,
+        accentLine: pack.copy.whyAccentLine,
         body: `${content.local_seo_headline} ${content.city_body_copy}`,
       },
       gallery: {
-        kicker: "/ 03 - THE SHOP",
-        title: "Drop in. Look around.",
-        body: "A visual-first section for shop photos, work examples, before-and-after projects, or team shots.",
+        kicker: `/ 03 - ${pack.copy.galleryKickerLabel}`,
+        title: pack.copy.galleryTitle,
+        body: pack.copy.galleryBody,
       },
-      reviews: { kicker: "/ 04 - WHAT FOLKS SAY", title: "Receipts." },
-      contact: { kicker: "/ 05 - VISIT", title: "Find us. Book fast.", body: content.contact_body },
+      reviews: {
+        kicker: `/ 04 - ${pack.copy.reviewsKickerLabel}`,
+        title: pack.copy.reviewsTitle,
+      },
+      contact: {
+        kicker: `/ 05 - ${pack.copy.contactKickerLabel}`,
+        title: pack.copy.contactTitle,
+        body: content.contact_body,
+      },
     },
-    serviceCardBlurb:
-      "Straightforward scheduling, clear communication, and work handled by a local team.",
+    serviceCardBlurb: pack.copy.serviceCardBlurb,
     viewServicesLabel: "View services",
-    whyPhotoCaption: "Inside the shop",
-    reviewsBadge: { score: "5.0", stars: "★★★★★", note: "Demo reviews" },
+    whyPhotoCaption: pack.copy.whyPhotoCaption,
+    reviewsBadge: buildReviewsBadge(input.rating, input.reviewCount),
     reviewerLabel: "Local customer",
-    stats: [
-      { value: "Local", label: "Service area" },
-      { value: "Clear", label: "Communication" },
-      { value: "Fast", label: "Customer contact" },
-      { value: "100%", label: "Demo ready" },
-    ],
+    stats: pack.copy.stats,
     testimonials: content.testimonials,
     contactBlocks: [
       { label: "Business", value: businessName, sub: specialty },
@@ -141,12 +164,35 @@ export function buildDemoView(input: DemoViewInput): DemoView {
     footer: {
       tagline: `${specialty} in ${serviceArea}. Demo website, not an official site of this business.`,
       serviceLinks: marqueeServices.slice(0, 4),
-      shopLinks: ["About", "Gallery", "Reviews", "Contact"],
+      shopLinks: ["About", pack.copy.galleryNavLabel, "Reviews", "Contact"],
       contactValue: phone ?? content.cta,
       attribution: "Demo website preview",
       stamp: `${new Date().getFullYear()} · ClientCore`,
     },
   };
+}
+
+/**
+ * Real Google rating when the scraper captured it — the owner recognizes
+ * their own numbers. Neutral demo badge otherwise.
+ */
+function buildReviewsBadge(
+  rating: number | null | undefined,
+  reviewCount: number | null | undefined,
+): DemoView["reviewsBadge"] {
+  if (typeof rating === "number" && Number.isFinite(rating) && rating > 0) {
+    const clamped = Math.min(5, Math.max(0, rating));
+    const filled = Math.round(clamped);
+    return {
+      score: clamped.toFixed(1),
+      stars: "★".repeat(filled) + "☆".repeat(5 - filled),
+      note:
+        typeof reviewCount === "number" && reviewCount > 0
+          ? `${reviewCount} Google reviews`
+          : "Google rating",
+    };
+  }
+  return { score: "5.0", stars: "★★★★★", note: "Demo reviews" };
 }
 
 function splitHeadline(headline: string): string[] {

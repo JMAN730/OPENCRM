@@ -202,6 +202,9 @@ model Lead {
   status              LeadStatus               @default(NOT_CONTACTED)
   temperatureOverride LeadTemperatureOverride?
   source              String?
+  // Business niche (e.g. "Landscaping") — picks the demo Template Pack.
+  // Provenance stays in `source`; do not pack category into it.
+  category            String?
   value               Float?
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?

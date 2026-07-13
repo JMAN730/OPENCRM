@@ -323,6 +323,7 @@ export const mapRouter = createTRPCRouter({
               latitude: biz.lat,
               longitude: biz.lng,
               source,
+              category: input.category ?? null,
               organizationId: ctx.organizationId,
               assignedToId: userId,
             })),
