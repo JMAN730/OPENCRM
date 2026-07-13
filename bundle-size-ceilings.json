@@ -2,7 +2,7 @@
   "policy": "Ratchet ceilings downward as #270 prefetch work lands, toward or below the binding 250 KB gzip budget. Raising a ceiling requires justification in the pull request.",
   "seed": "Initial ceilings are this check's current-main measurement plus 2%, rounded up to the whole KB.",
   "routes": {
-    "/leads": 265,
+    "/leads": 1,
     "/tasks": 244,
     "/dashboard": 243
   }
