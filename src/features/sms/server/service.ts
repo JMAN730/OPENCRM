@@ -33,12 +33,16 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
   const trimmed = raw.trim().replace(EXTENSION_PATTERN, "").trim();
   const digits = trimmed.replace(/\D/g, "");
   let candidate: string | null = null;
-  if (digits.length === 10) candidate = `+1${digits}`;
-  else if (digits.length === 11 && digits.startsWith("1")) candidate = `+${digits}`;
-  else if (trimmed.startsWith("+") && digits.length >= 8 && digits.length <= 15) {
+  // Explicit international prefixes take priority — a "+354…" number with ten
+  // digits must never be reinterpreted as NANP and given a "+1".
+  if (trimmed.startsWith("+") && digits.length >= 8 && digits.length <= 15) {
     candidate = `+${digits}`;
   } else if (trimmed.startsWith("00") && digits.length >= 10 && digits.length <= 17) {
     candidate = `+${digits.slice(2)}`;
+  } else if (digits.length === 10) {
+    candidate = `+1${digits}`;
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    candidate = `+${digits}`;
   }
   return candidate !== null && E164_PATTERN.test(candidate) ? candidate : null;
 }
@@ -46,6 +50,24 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
 function demoUrl(slug: string): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
   return `${base}/demo/${slug}`;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
+
+function isTwilioBlockedRecipient(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 21610
+  );
 }
 
 export async function generateSmsDraftForLead(
@@ -96,15 +118,35 @@ export async function generateSmsDraftForLead(
     return { draftId: updated.id };
   }
 
-  const created = await prisma.smsDraft.create({
-    data: {
-      leadId: lead.id,
-      organizationId: opts.organizationId,
-      websiteId: website.id,
-      toPhone,
-      body,
-    },
-  });
+  let created;
+  try {
+    created = await prisma.smsDraft.create({
+      data: {
+        leadId: lead.id,
+        organizationId: opts.organizationId,
+        websiteId: website.id,
+        toPhone,
+        body,
+      },
+    });
+  } catch (error) {
+    // A concurrent call (worker tick + user click) can win the race between
+    // findFirst and create; the partial unique index on (leadId) WHERE
+    // status = 'DRAFT' turns that into P2002 — converge on the surviving
+    // draft instead of duplicating.
+    if (!isUniqueConstraintError(error)) throw error;
+    const winner = await prisma.smsDraft.findFirst({
+      where: { leadId: lead.id, organizationId: opts.organizationId, status: SmsDraftStatus.DRAFT },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!winner) throw error;
+    const updated = await prisma.smsDraft.update({
+      where: { id: winner.id },
+      data: { body, toPhone, websiteId: website.id },
+    });
+    return { draftId: updated.id };
+  }
   void logActivity(prisma, {
     leadId: lead.id,
     userId: opts.userId,
@@ -177,6 +219,19 @@ export async function sendSmsDraft(
       },
       data: { status: SmsDraftStatus.DRAFT },
     });
+    // Twilio 21610: the recipient unsubscribed at the Messaging Service level.
+    // Mirror it into the org-scoped opt-out list so the draft is not retried
+    // against a number Twilio will always reject.
+    if (isTwilioBlockedRecipient(error)) {
+      await prisma.phoneOptOut.upsert({
+        where: {
+          phone_organizationId: { phone: toPhone, organizationId: opts.organizationId },
+        },
+        create: { phone: toPhone, organizationId: opts.organizationId },
+        update: {},
+      });
+      throw new OutreachSmsError("OPTED_OUT", "This phone number has opted out.");
+    }
     throw new OutreachSmsError(
       "SEND_FAILED",
       error instanceof Error ? error.message : "Failed to send SMS.",

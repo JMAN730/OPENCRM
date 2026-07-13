@@ -7,10 +7,19 @@ type ProvisionInput = {
   prisma: PrismaClient;
   name: string;
   email: string;
+  /** bcrypt hash — omit for OAuth-only accounts */
   passwordHash?: string;
   organizationName?: string;
 };
 
+/**
+ * Create a new Organization (with a 14-day STARTER trial) and its first
+ * ADMIN user. Shared by credentials registration and first-time Google
+ * OAuth sign-in. Stripe customer creation is best-effort.
+ *
+ * Callers must catch Prisma `P2002` errors from this provisioning function
+ * and handle concurrent duplicate-email races gracefully.
+ */
 export async function provisionUserWithOrganization({
   prisma,
   name,
@@ -20,6 +29,10 @@ export async function provisionUserWithOrganization({
 }: ProvisionInput) {
   const orgName = organizationName?.trim() || `${name}'s Organization`;
   const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+
+  // Single nested create keeps org + subscription + user atomic — a
+  // concurrent duplicate sign-in that loses the unique-email race leaves
+  // no orphaned Organization behind.
   const user = await prisma.user.create({
     data: {
       name,
@@ -42,6 +55,7 @@ export async function provisionUserWithOrganization({
     },
     select: { id: true, organizationId: true },
   });
+  // organizationId is non-null by construction (nested create above).
   const organizationId = user.organizationId as string;
 
   try {
@@ -56,8 +70,8 @@ export async function provisionUserWithOrganization({
         data: { stripeCustomerId: customerId },
       });
     }
-  } catch (error) {
-    console.error("[auth.provision] Stripe customer creation failed", error);
+  } catch (err) {
+    console.error("[auth.provision] Stripe customer creation failed", err);
   }
 
   return { userId: user.id, organizationId };

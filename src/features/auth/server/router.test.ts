@@ -321,6 +321,17 @@ describe("authRouter.register", () => {
     expect(prisma.organization.create).not.toHaveBeenCalled();
   });
 
+  it("returns CONFLICT when another registration wins the email race", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockRejectedValue({ code: "P2002" });
+
+    await expect(caller.auth.register(validInput)).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "An account with that email already exists.",
+    });
+  });
+
   it("hashes the password before storing", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.user.findUnique.mockResolvedValue(null);
@@ -356,17 +367,23 @@ describe("authRouter.register", () => {
 
     await caller.auth.register({ ...validInput, organizationName: undefined });
 
-    expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: "Alice's Organization",
-        subscription: expect.objectContaining({
-          create: expect.objectContaining({
-            planTier: "STARTER",
-            status: "TRIALING",
-          }),
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organization: {
+            create: expect.objectContaining({
+              name: "Alice's Organization",
+              subscription: expect.objectContaining({
+                create: expect.objectContaining({
+                  planTier: "STARTER",
+                  status: "TRIALING",
+                }),
+              }),
+            }),
+          },
         }),
-      }),
-    });
+      })
+    );
   });
 
   it("trims provided organizationName", async () => {
@@ -377,14 +394,20 @@ describe("authRouter.register", () => {
 
     await caller.auth.register({ ...validInput, organizationName: "  Acme  " });
 
-    expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: "Acme",
-        subscription: expect.objectContaining({
-          create: expect.objectContaining({ planTier: "STARTER" }),
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organization: {
+            create: expect.objectContaining({
+              name: "Acme",
+              subscription: expect.objectContaining({
+                create: expect.objectContaining({ planTier: "STARTER" }),
+              }),
+            }),
+          },
         }),
-      }),
-    });
+      })
+    );
   });
 
   it("falls back to default org name when organizationName is whitespace-only", async () => {
@@ -395,36 +418,43 @@ describe("authRouter.register", () => {
 
     await caller.auth.register({ ...validInput, organizationName: "   " });
 
-    expect(prisma.organization.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: "Alice's Organization",
-        subscription: expect.objectContaining({
-          create: expect.objectContaining({
-            planTier: "STARTER",
-            status: "TRIALING",
-          }),
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organization: {
+            create: expect.objectContaining({
+              name: "Alice's Organization",
+              subscription: expect.objectContaining({
+                create: expect.objectContaining({
+                  planTier: "STARTER",
+                  status: "TRIALING",
+                }),
+              }),
+            }),
+          },
         }),
-      }),
-    });
+      })
+    );
   });
 
   it("creates user with ADMIN role linked to the new org", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.user.findUnique.mockResolvedValue(null);
-    prisma.organization.create.mockResolvedValue({ id: "org-99", name: "Acme" });
-    prisma.user.create.mockResolvedValue({ id: "u-1" });
+    prisma.user.create.mockResolvedValue({ id: "u-1", organizationId: "org-99" });
     prisma.organizationSubscription.update.mockResolvedValue({});
 
     await caller.auth.register(validInput);
 
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: "Alice",
-        email: "alice@example.com",
-        organizationId: "org-99",
-        role: "ADMIN",
-      }),
-    });
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: "Alice",
+          email: "alice@example.com",
+          role: "ADMIN",
+          organization: { create: expect.objectContaining({ name: "Acme" }) },
+        }),
+      })
+    );
     expect(prisma.organizationSubscription.update).toHaveBeenCalledWith({
       where: { organizationId: "org-99" },
       data: { stripeCustomerId: "cus_test" },

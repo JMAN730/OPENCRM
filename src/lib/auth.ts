@@ -134,12 +134,12 @@ export const authOptions: NextAuthOptions = {
         // IP here (NextAuth doesn't pass the request in App Router), so we
         // key on email alone — sufficient to block credential stuffing on a
         // single account.
-        const rl = await rateLimit({
+        const rateLimitResult = await rateLimit({
           key: keys.authSigninBucket(email),
           limit: 10,
           windowSeconds: 60,
         });
-        if (!rl.ok) {
+        if (!rateLimitResult.ok) {
           // Returning null surfaces as "invalid credentials" on the client,
           // which is the right user-facing message — we don't want to leak
           // that this account is being attacked.
@@ -171,6 +171,9 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return true;
 
+      // Google marks whether it verified the address. Refuse unverified
+      // emails — otherwise anyone controlling an unverified Google account
+      // for victim@example.com could take over that CRM account.
       const emailVerified = (profile as { email_verified?: boolean } | undefined)
         ?.email_verified;
       if (emailVerified !== true) return false;
@@ -182,6 +185,10 @@ export const authOptions: NextAuthOptions = {
         const existing = await prisma.user.findUnique({ where: { email } });
         if (existing) return true;
 
+        // Provisioning creates an org + trial + Stripe customer, so treat it
+        // like registration and rate-limit it. Keyed on email — NextAuth
+        // doesn't expose the request IP here (same constraint as the
+        // credentials authorize() above).
         const rateLimitResult = await rateLimit({
           key: keys.authOauthProvisionBucket(email),
           limit: 5,
@@ -189,20 +196,25 @@ export const authOptions: NextAuthOptions = {
         });
         if (!rateLimitResult.ok) return false;
 
+        // First-time Google sign-in: provision an organization + ADMIN user,
+        // same as credentials registration but without a password.
         try {
           await provisionUserWithOrganization({
             prisma,
             name: user.name?.trim() || email,
             email,
           });
-        } catch (error) {
-          if ((error as { code?: string })?.code !== "P2002") throw error;
-          const concurrentlyProvisionedUser = await prisma.user.findUnique({ where: { email } });
-          if (!concurrentlyProvisionedUser) throw error;
+        } catch (err) {
+          if ((err as { code?: string })?.code !== "P2002") throw err;
+
+          const concurrentlyProvisionedUser = await prisma.user.findUnique({
+            where: { email },
+          });
+          if (!concurrentlyProvisionedUser) throw err;
         }
         return true;
-      } catch (error) {
-        console.error("[auth] Google sign-in provisioning error:", error);
+      } catch (err) {
+        console.error("[auth] Google sign-in provisioning error:", err);
         return false;
       }
     },

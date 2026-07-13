@@ -27,6 +27,10 @@ describe("normalizePhoneNumber", () => {
     ["+1 555 234 5678", "+15552345678"],
     ["+44 20 7946 0958", "+442079460958"],
     ["0044 20 7946 0958", "+442079460958"],
+    // Explicit international prefixes win over the 10/11-digit NANP heuristics:
+    // a "+354…" (Iceland) number with ten digits must not become "+1354…".
+    ["+3541234567", "+3541234567"],
+    ["00354 555 1234", "+3545551234"],
   ])("normalizes %s to %s", (input, expected) => {
     expect(normalizePhoneNumber(input)).toBe(expected);
   });
@@ -112,6 +116,26 @@ describe("generateSmsDraftForLead", () => {
       }),
     ).rejects.toMatchObject({ name: "OutreachSmsError", code: "INVALID_PHONE" });
   });
+
+  it("converges on the winning draft when a concurrent generate hits the unique index", async () => {
+    prisma.smsDraft.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "sms-2" });
+    prisma.smsDraft.create.mockRejectedValue({ code: "P2002" });
+    prisma.smsDraft.update.mockResolvedValue({ id: "sms-2" });
+
+    await expect(
+      generateSmsDraftForLead(prisma as never, lead as never, {
+        organizationId: "org-1",
+        userId: "user-1",
+      }),
+    ).resolves.toEqual({ draftId: "sms-2" });
+
+    expect(prisma.smsDraft.update).toHaveBeenCalledWith({
+      where: { id: "sms-2" },
+      data: expect.objectContaining({ toPhone: "+15551234567" }),
+    });
+  });
 });
 
 describe("sendSmsDraft", () => {
@@ -166,6 +190,24 @@ describe("sendSmsDraft", () => {
     ).rejects.toMatchObject({ name: "OutreachSmsError", code: "NO_PHONE" });
     expect(prisma.smsDraft.updateMany).not.toHaveBeenCalled();
     expect(mockSendSmsMessage).not.toHaveBeenCalled();
+  });
+
+  it("mirrors a Twilio blocked-recipient rejection into the org opt-out list", async () => {
+    mockSendSmsMessage.mockRejectedValue({ code: 21610, message: "Blocked recipient" });
+
+    await expect(
+      sendSmsDraft(prisma as never, { draftId: "sms-1", organizationId: "org-1", userId: "user-1" }),
+    ).rejects.toMatchObject({ name: "OutreachSmsError", code: "OPTED_OUT" });
+
+    expect(prisma.phoneOptOut.upsert).toHaveBeenCalledWith({
+      where: { phone_organizationId: { phone: "+15552345678", organizationId: "org-1" } },
+      create: { phone: "+15552345678", organizationId: "org-1" },
+      update: {},
+    });
+    // The draft is still rolled back so the user can retry a different number.
+    expect(prisma.smsDraft.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "DRAFT" } }),
+    );
   });
 
   it("fails with INVALID_PHONE when the lead's current phone cannot be normalized", async () => {

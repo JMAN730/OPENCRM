@@ -32,9 +32,15 @@ export async function POST(request: Request) {
   });
   if (!draft) return new Response("OK");
 
-  const keyword = (params.Body ?? "").trim().toUpperCase().split(/\s+/)[0] ?? "";
+  // Advanced Opt-Out sends an explicit OptOutType; otherwise fall back to
+  // keyword matching on the first word, ignoring punctuation ("Stop.", "Stop!").
+  const optOutType = (params.OptOutType ?? "").trim().toUpperCase();
+  const keyword = ((params.Body ?? "").trim().toUpperCase().split(/\s+/)[0] ?? "").replace(
+    /[^A-Z]/g,
+    "",
+  );
   let event = "inbound.received";
-  if (STOP_KEYWORDS.has(keyword)) {
+  if (optOutType === "STOP" || (!optOutType && STOP_KEYWORDS.has(keyword))) {
     event = "inbound.stop";
     await prisma.phoneOptOut.upsert({
       where: {
@@ -43,7 +49,7 @@ export async function POST(request: Request) {
       create: { phone, organizationId: draft.organizationId },
       update: {},
     });
-  } else if (START_KEYWORDS.has(keyword)) {
+  } else if (optOutType === "START" || (!optOutType && START_KEYWORDS.has(keyword))) {
     event = "inbound.start";
     await prisma.phoneOptOut.deleteMany({
       where: { phone, organizationId: draft.organizationId },

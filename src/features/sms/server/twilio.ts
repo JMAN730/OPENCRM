@@ -30,7 +30,8 @@ export async function sendSmsMessage(input: {
     throw new Error("Twilio SMS is not configured.");
   }
 
-  const message = await twilio(accountSid, authToken).messages.create({
+  // Bound the user-facing send path instead of relying on the SDK default.
+  const message = await twilio(accountSid, authToken, { timeout: 10_000 }).messages.create({
     to: input.to,
     body: input.body,
     messagingServiceSid,

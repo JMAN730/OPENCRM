@@ -24,6 +24,25 @@ describe("OutreachDraftSummary", () => {
     expect(screen.getByText(/here is your demo website/i)).toBeInTheDocument();
   });
 
+  it("shows the EMAIL channel and subject preview", () => {
+    render(
+      <OutreachDraftSummary
+        draft={{
+          id: "email-1",
+          channel: "EMAIL",
+          subject: "Quick demo for your business",
+          body: "Hey there...",
+          status: "DRAFT",
+          sentAt: null,
+        }}
+        onReview={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("EMAIL")).toBeInTheDocument();
+    expect(screen.getByText("Quick demo for your business")).toBeInTheDocument();
+  });
+
   it("flags a failed SMS as a call-instead signal", () => {
     render(
       <OutreachDraftSummary

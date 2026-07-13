@@ -224,7 +224,7 @@ export function createMockPrisma() {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       update: vi.fn(),
-      updateMany: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       delete: vi.fn(),
     },
     smsEvent: {

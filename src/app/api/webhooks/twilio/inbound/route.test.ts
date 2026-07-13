@@ -42,6 +42,19 @@ describe("Twilio inbound SMS webhook", () => {
     });
   });
 
+  it("returns a controlled 400 for a body formData() cannot parse", async () => {
+    const response = await POST(
+      new Request("https://crm.example.com/api/webhooks/twilio/inbound", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockPrisma.phoneOptOut.upsert).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid Twilio signature", async () => {
     mockValidate.mockReturnValue(false);
     const response = await POST(
@@ -67,6 +80,49 @@ describe("Twilio inbound SMS webhook", () => {
         data: expect.objectContaining({ dedupKey: "inbound:SM-in-1", event: "inbound.stop" }),
       }),
     );
+  });
+
+  it.each(["Stop.", "Stop!", "  stop,  please"])(
+    "treats %s as an opt-out despite punctuation and casing",
+    async (body) => {
+      await POST(request({ From: "+15552345678", Body: body, MessageSid: "SM-in-punct" }));
+
+      expect(mockPrisma.phoneOptOut.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: { phone: "+15552345678", organizationId: "org-1" },
+        }),
+      );
+    },
+  );
+
+  it("honors an explicit Advanced Opt-Out OptOutType over body matching", async () => {
+    await POST(
+      request({
+        From: "+15552345678",
+        Body: "Por favor, no más mensajes",
+        OptOutType: "STOP",
+        MessageSid: "SM-in-oot",
+      }),
+    );
+
+    expect(mockPrisma.phoneOptOut.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: { phone: "+15552345678", organizationId: "org-1" },
+      }),
+    );
+  });
+
+  it("does not opt out on a HELP OptOutType even if the body starts with stop-like text", async () => {
+    await POST(
+      request({
+        From: "+15552345678",
+        Body: "STOP",
+        OptOutType: "HELP",
+        MessageSid: "SM-in-help",
+      }),
+    );
+
+    expect(mockPrisma.phoneOptOut.upsert).not.toHaveBeenCalled();
   });
 
   it("removes the local opt-out on START", async () => {

@@ -34,6 +34,15 @@ describe("smsRouter", () => {
     await expect(caller.sms.getForLead({ leadId: "lead-1" })).resolves.toMatchObject({
       id: "sms-1",
     });
+    expect(prisma.lead.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "lead-1",
+          organizationId: "org-1",
+          assignedToId: { in: ["user-1"] },
+        }),
+      }),
+    );
     expect(prisma.smsDraft.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { leadId: "lead-1", organizationId: "org-1" },
@@ -115,6 +124,23 @@ describe("smsRouter", () => {
       body: "Hi — demo link. Reply STOP to opt out.",
       draftId: "sms-1",
     });
+    // The claim reserves the draft as SENT before the network call, and the
+    // Twilio SID from the send result must be persisted on the draft.
+    expect(prisma.smsDraft.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "sms-1", status: "DRAFT" }),
+        data: { status: "SENT" },
+      }),
+    );
+    expect(prisma.smsDraft.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "sms-1" },
+        data: expect.objectContaining({
+          toPhone: "+15552345678",
+          twilioMessageSid: "SM123",
+        }),
+      }),
+    );
   });
 
   it("prevents a second request from sending a claimed draft", async () => {

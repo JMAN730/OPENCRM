@@ -10,7 +10,10 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     // Only collect tests from source. Excludes Tauri build artifacts and
     // git worktree copies that vitest would otherwise pick up as duplicates.
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'scripts/**/*.{test,spec}.{ts,tsx}',
+    ],
     exclude: [
       'node_modules/**',
       'dist/**',

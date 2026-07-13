@@ -1,10 +1,18 @@
+import { Prisma } from "@prisma/client";
 import { validateTwilioWebhook } from "./twilio";
 
 export async function verifiedTwilioForm(request: Request): Promise<
   | { ok: true; params: Record<string, string> }
   | { ok: false; response: Response }
 > {
-  const form = await request.formData();
+  // Public endpoint: malformed bodies (scanners, health checks) must get a
+  // controlled 400, not an unhandled 500 from formData().
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return { ok: false, response: new Response("Bad Request", { status: 400 }) };
+  }
   const params: Record<string, string> = {};
   form.forEach((value, key) => {
     params[key] = String(value);
@@ -25,7 +33,5 @@ export async function verifiedTwilioForm(request: Request): Promise<
 }
 
 export function isPrismaUniqueError(error: unknown): boolean {
-  return Boolean(
-    error && typeof error === "object" && "code" in error && error.code === "P2002",
-  );
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }

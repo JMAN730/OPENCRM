@@ -395,10 +395,12 @@ enum ActivityType {
   NOTE_DELETED
   EMAIL_DRAFT_CREATED
   EMAIL_SENT
-  SMS_DRAFT_CREATED
-  SMS_SENT
   DEMO_GENERATED
   LEAD_ENRICHED
+  // Declared last to match the DB: ALTER TYPE ... ADD VALUE (20260713060000)
+  // appends to the end of the Postgres enum, and drift checks compare order.
+  SMS_DRAFT_CREATED
+  SMS_SENT
 }
 
 model Activity {
@@ -734,6 +736,9 @@ model EmailOptOut {
 // rules would be mostly nullable.
 enum SmsDraftStatus {
   DRAFT
+  // Kept from the one-off SMS iteration (20260713060000): Postgres enum values
+  // cannot be dropped in place. Unused by the outreach send flow.
+  SENDING
   SENT
   DELIVERED
   FAILED
@@ -756,6 +761,9 @@ model SmsDraft {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  // At most one DRAFT row per lead — enforced by the partial unique index
+  // "SmsDraft_leadId_active_draft_key" in the migration SQL (Prisma cannot
+  // express partial indexes declaratively).
   @@index([leadId])
   @@index([organizationId, createdAt])
   @@index([organizationId, status])

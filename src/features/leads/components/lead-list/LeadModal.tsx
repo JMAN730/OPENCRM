@@ -1908,8 +1908,19 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               }}
             >
               <EmailDraftPanel leadId={lead.id} />
-              <SmsDraftPanel leadId={lead.id} />
             </div>
+
+            {lead.phone ? (
+              <div
+                style={{
+                  marginTop: 18,
+                  paddingTop: 18,
+                  borderTop: "1px solid var(--crm-border)",
+                }}
+              >
+                <SmsDraftPanel leadId={lead.id} />
+              </div>
+            ) : null}
 
             <div>
               <h4>Recent activity</h4>

@@ -63,7 +63,7 @@ type DraftSummary =
       id: string;
       channel: "SMS";
       body: string;
-      status: "DRAFT" | "SENT" | "DELIVERED" | "FAILED";
+      status: "DRAFT" | "SENDING" | "SENT" | "DELIVERED" | "FAILED";
       sentAt: Date | string | null;
     };
 
@@ -324,13 +324,7 @@ export function OutreachQueue() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {item.draft ? (
-                            item.draft.channel === "SMS" ? (
-                              <SmsStatusBadge status={item.draft.status} />
-                            ) : (
-                              <EmailStatusBadge status={item.draft.status} />
-                            )
-                          ) : item.status === "SKIPPED" ? (
+                          {item.status === "SKIPPED" ? (
                             <Badge variant="outline" title={item.skipReason ?? undefined}>
                               {SKIP_LABELS[item.skipReason ?? ""] ?? "Skipped"}
                             </Badge>
@@ -338,6 +332,10 @@ export function OutreachQueue() {
                             <Badge variant="destructive" title={item.error ?? undefined}>
                               Failed
                             </Badge>
+                          ) : item.draft ? (
+                            // The Draft column already shows this draft's own
+                            // status badge — don't repeat it here.
+                            <span className="text-muted-foreground">—</span>
                           ) : (
                             <Badge variant="secondary">{item.status === "PROCESSING" ? "Generating…" : "Queued"}</Badge>
                           )}

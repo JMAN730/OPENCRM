@@ -297,6 +297,25 @@ describe("LeadModal", () => {
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
   });
 
+  it("shows the SMS panel for a lead with a phone number", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByText(/Twilio SMS is not configured/i)).toBeInTheDocument();
+  });
+
+  it("hides the SMS panel for a lead without a phone number", () => {
+    render(
+      <LeadModal
+        lead={{ ...lead, phone: null }}
+        onClose={vi.fn()}
+        onPrev={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/Twilio SMS is not configured/i)).not.toBeInTheDocument();
+  });
+
   it("opens scripts from the shared scripts data source", () => {
     scriptsMock = [
       {
