@@ -180,9 +180,9 @@ appRouter = {
 - **Registration** (`trpc.auth.register`): creates a new `Organization` and `User` (ADMIN role) with a bcrypt-hashed password. Validated via Zod (min 8-char password, valid email, non-empty name). The legacy `POST /api/auth/register` endpoint has been removed.
 - **Password reset** (`trpc.auth.resetPassword` / `trpc.auth.confirmResetPassword`): issues a hashed `PasswordResetToken` (1-hour expiry) and sends an email via `lib/email.ts`. Falls back to logging the reset URL to console when SMTP is not configured.
 - **Credentials provider**: validates email + bcrypt password.
-- **Google OAuth**: enabled when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set.
+- **Google OAuth**: enabled when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set. First-time Google sign-in auto-provisions an `Organization` (14-day STARTER trial) + ADMIN `User` via `provisionUserWithOrganization` (`src/features/auth/server/provision.ts`, shared with `auth.register`); requires Google's `email_verified`, matched to existing accounts by email, and rate-limited per email plus client IP. The "Continue with Google" button (`GoogleSignInButton`) appears on signin/register only when the provider is configured.
 - **Auth snapshot caching**: session data is cached in Redis (60s TTL) to reduce DB round-trips on every request. Cache is bypassed gracefully when Redis is unavailable.
-- **Rate limiting on auth**: `register` and `resetPassword` are rate-limited by IP via `lib/rateLimit.ts`.
+- **Rate limiting on auth**: `register`, `resetPassword`, and the Google OAuth callback are rate-limited by IP via `lib/rateLimit.ts`.
 - All `protectedProcedure` / `organizationProcedure` handlers read `ctx.session.user` (cast to `any` for extended fields where TypeScript doesn't infer them from context).
 
 ### Role-based authorization

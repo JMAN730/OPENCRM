@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
 import { safeGet, safeSetEx } from "@/lib/redis";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { provisionUserWithOrganization } from "@/features/auth/server/provision";
 import { keys } from "@/lib/cacheKeys";
 
 // Pre-computed bcrypt hash used when the email is not found, so we always
@@ -133,12 +134,12 @@ export const authOptions: NextAuthOptions = {
         // IP here (NextAuth doesn't pass the request in App Router), so we
         // key on email alone — sufficient to block credential stuffing on a
         // single account.
-        const rl = await rateLimit({
+        const rateLimitResult = await rateLimit({
           key: keys.authSigninBucket(email),
           limit: 10,
           windowSeconds: 60,
         });
-        if (!rl.ok) {
+        if (!rateLimitResult.ok) {
           // Returning null surfaces as "invalid credentials" on the client,
           // which is the right user-facing message — we don't want to leak
           // that this account is being attacked.
@@ -167,6 +168,56 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days — persists across browser close
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") return true;
+
+      // Google marks whether it verified the address. Refuse unverified
+      // emails — otherwise anyone controlling an unverified Google account
+      // for victim@example.com could take over that CRM account.
+      const emailVerified = (profile as { email_verified?: boolean } | undefined)
+        ?.email_verified;
+      if (emailVerified !== true) return false;
+
+      const email = (user.email ?? "").toLowerCase().trim();
+      if (!email) return false;
+
+      try {
+        const existing = await prisma.user.findUnique({ where: { email } });
+        if (existing) return true;
+
+        // Provisioning creates an org + trial + Stripe customer, so treat it
+        // like registration and rate-limit it. Keyed on email — NextAuth
+        // doesn't expose the request IP here (same constraint as the
+        // credentials authorize() above).
+        const rateLimitResult = await rateLimit({
+          key: keys.authOauthProvisionBucket(email),
+          limit: 5,
+          windowSeconds: 60 * 60,
+        });
+        if (!rateLimitResult.ok) return false;
+
+        // First-time Google sign-in: provision an organization + ADMIN user,
+        // same as credentials registration but without a password.
+        try {
+          await provisionUserWithOrganization({
+            prisma,
+            name: user.name?.trim() || email,
+            email,
+          });
+        } catch (err) {
+          if ((err as { code?: string })?.code !== "P2002") throw err;
+
+          const concurrentlyProvisionedUser = await prisma.user.findUnique({
+            where: { email },
+          });
+          if (!concurrentlyProvisionedUser) throw err;
+        }
+        return true;
+      } catch (err) {
+        console.error("[auth] Google sign-in provisioning error:", err);
+        return false;
+      }
+    },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id;
