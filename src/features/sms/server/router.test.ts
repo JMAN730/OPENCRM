@@ -100,7 +100,7 @@ describe("smsRouter", () => {
         toPhone: "+15552345678",
         body: "Hi — demo link. Reply STOP to opt out.",
         status: "DRAFT",
-        lead: { id: "lead-1", company: "Acme" },
+        lead: { id: "lead-1", company: "Acme", phone: "(555) 234-5678" },
       });
     prisma.smsDraft.update.mockResolvedValue({});
     prisma.smsDraft.updateMany.mockResolvedValue({ count: 1 });
@@ -127,7 +127,7 @@ describe("smsRouter", () => {
         toPhone: "+15552345678",
         body: "Hi - demo link. Reply STOP to opt out.",
         status: "DRAFT",
-        lead: { id: "lead-1", company: "Acme" },
+        lead: { id: "lead-1", company: "Acme", phone: "(555) 234-5678" },
       });
     prisma.smsDraft.updateMany.mockResolvedValue({ count: 0 });
 
@@ -148,7 +148,7 @@ describe("smsRouter", () => {
         toPhone: "+15552345678",
         body: "Hi - demo link. Reply STOP to opt out.",
         status: "DRAFT",
-        lead: { id: "lead-1", company: "Acme" },
+        lead: { id: "lead-1", company: "Acme", phone: "(555) 234-5678" },
       });
     prisma.phoneOptOut.findUnique.mockResolvedValue({ id: "opt-out-1" });
 

@@ -4,7 +4,8 @@ export function isSmsConfigured(): boolean {
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_MESSAGING_SERVICE_SID,
+      process.env.TWILIO_MESSAGING_SERVICE_SID &&
+      process.env.SENDER_NAME?.trim(),
   );
 }
 
