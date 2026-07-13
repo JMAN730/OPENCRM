@@ -1,13 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 
 /**
- * Enqueue leads for automated outreach (demo site + email draft generation).
+ * Enqueue leads for automated outreach (demo site + SMS-first draft generation).
  * Idempotent: `OutreachJob.leadId` is unique and duplicates are skipped, so
  * re-importing the same scraper job can never double-generate.
  *
- * Leads without an email are enqueued too — the worker marks them SKIPPED
- * with a reason so the review queue can report them instead of silently
- * dropping them.
+ * Leads without an email are enqueued too because a phone number is preferred.
+ * The worker marks leads with no usable channel as SKIPPED with a reason so the
+ * review queue can report them instead of silently dropping them.
  */
 export async function enqueueOutreachForLeads(
   prisma: PrismaClient,

@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import twilio from "twilio";
-import { isSmsConfigured, sendSms } from "./twilio";
+import { isSmsConfigured, sendSmsMessage } from "./twilio";
 
-vi.mock("twilio", () => ({ default: vi.fn() }));
+vi.mock("twilio", () => {
+  const mock = vi.fn();
+  return { default: Object.assign(mock, { validateRequest: vi.fn() }) };
+});
 
 const twilioMock = vi.mocked(twilio);
 
@@ -10,6 +13,7 @@ function stubTwilioEnv() {
   vi.stubEnv("TWILIO_ACCOUNT_SID", "AC123");
   vi.stubEnv("TWILIO_AUTH_TOKEN", "token");
   vi.stubEnv("TWILIO_MESSAGING_SERVICE_SID", "MG123");
+  vi.stubEnv("NEXTAUTH_URL", "https://crm.example.com");
 }
 
 describe("isSmsConfigured", () => {
@@ -19,7 +23,7 @@ describe("isSmsConfigured", () => {
 
   it("returns true when the Twilio values and SENDER_NAME are set", () => {
     stubTwilioEnv();
-    vi.stubEnv("SENDER_NAME", "Maya's Web Studio");
+    vi.stubEnv("SENDER_NAME", "Opulence");
 
     expect(isSmsConfigured()).toBe(true);
   });
@@ -34,41 +38,41 @@ describe("isSmsConfigured", () => {
   it("returns false when a Twilio value is missing", () => {
     stubTwilioEnv();
     vi.stubEnv("TWILIO_AUTH_TOKEN", "");
-    vi.stubEnv("SENDER_NAME", "Maya's Web Studio");
+    vi.stubEnv("SENDER_NAME", "Opulence");
 
     expect(isSmsConfigured()).toBe(false);
   });
 });
 
-describe("sendSms", () => {
+describe("sendSmsMessage", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.clearAllMocks();
   });
 
-  it("refuses to send when SENDER_NAME is missing", async () => {
-    stubTwilioEnv();
-    vi.stubEnv("SENDER_NAME", "");
+  it("refuses to send when Twilio is not configured", async () => {
+    vi.stubEnv("TWILIO_ACCOUNT_SID", "");
 
-    await expect(sendSms({ to: "+18135550199", body: "Hello" })).rejects.toThrow(
-      "Twilio SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_MESSAGING_SERVICE_SID, and SENDER_NAME.",
-    );
+    await expect(
+      sendSmsMessage({ to: "+18135550199", body: "Hello", draftId: "sms-1" }),
+    ).rejects.toThrow("Twilio SMS is not configured.");
   });
 
-  it("sends through the Messaging Service and surfaces the message sid", async () => {
+  it("sends through the Messaging Service with a bounded timeout and surfaces the sid", async () => {
     stubTwilioEnv();
-    vi.stubEnv("SENDER_NAME", "Maya's Web Studio");
     const create = vi.fn().mockResolvedValue({ sid: "SM123" });
     twilioMock.mockReturnValue({
       messages: { create },
     } as unknown as ReturnType<typeof twilio>);
 
-    const result = await sendSms({ to: "+18135550199", body: "Hello" });
+    const result = await sendSmsMessage({ to: "+18135550199", body: "Hello", draftId: "sms-1" });
 
     expect(twilioMock).toHaveBeenCalledWith("AC123", "token", { timeout: 10_000 });
     expect(create).toHaveBeenCalledWith({
       to: "+18135550199",
       body: "Hello",
       messagingServiceSid: "MG123",
+      statusCallback: "https://crm.example.com/api/webhooks/twilio/status?draftId=sms-1",
     });
     expect(result).toEqual({ messageSid: "SM123" });
   });

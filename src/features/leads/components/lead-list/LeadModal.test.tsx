@@ -61,7 +61,7 @@ vi.mock("@/app/_trpc/client", () => ({
         getDraftForLead: { invalidate: vi.fn() },
       },
       sms: {
-        getDraftForLead: { invalidate: vi.fn() },
+        getForLead: { invalidate: vi.fn() },
       },
       scripts: {
         getAll: { invalidate: vi.fn() },
@@ -182,16 +182,16 @@ vi.mock("@/app/_trpc/client", () => ({
       },
     },
     sms: {
-      getDraftForLead: {
-        useQuery: vi.fn(() => ({
-          data: { configured: false, draft: null },
-          isLoading: false,
-        })),
+      configuration: {
+        useQuery: vi.fn(() => ({ data: { configured: false } })),
+      },
+      getForLead: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: false })),
       },
       generate: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
-      updateDraft: {
+      updateBody: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       send: {
@@ -300,7 +300,7 @@ describe("LeadModal", () => {
   it("shows the SMS panel for a lead with a phone number", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
-    expect(screen.getByText("Twilio SMS not configured")).toBeInTheDocument();
+    expect(screen.getByText(/Twilio SMS is not configured/i)).toBeInTheDocument();
   });
 
   it("hides the SMS panel for a lead without a phone number", () => {
@@ -313,7 +313,7 @@ describe("LeadModal", () => {
       />,
     );
 
-    expect(screen.queryByText("Twilio SMS not configured")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Twilio SMS is not configured/i)).not.toBeInTheDocument();
   });
 
   it("opens scripts from the shared scripts data source", () => {

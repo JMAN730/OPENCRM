@@ -1,19 +1,15 @@
-import {
-  SmsDraftStatus,
-  type Lead,
-  type PrismaClient,
-} from "@prisma/client";
+import { SmsDraftStatus, type Lead, type PrismaClient } from "@prisma/client";
 import { ActivityType, logActivity } from "@/server/activity";
-import { isSmsConfigured, sendSms } from "@/features/sms/server/twilio";
+import { isSmsConfigured, sendSmsMessage } from "./twilio";
 
 export type SmsErrorCode =
   | "NO_PHONE"
   | "INVALID_PHONE"
   | "OPTED_OUT"
+  | "NO_WEBSITE"
+  | "NOT_CONFIGURED"
   | "NOT_FOUND"
   | "ALREADY_SENT"
-  | "NON_COMPLIANT"
-  | "NOT_CONFIGURED"
   | "SEND_FAILED";
 
 export class OutreachSmsError extends Error {
@@ -26,85 +22,34 @@ export class OutreachSmsError extends Error {
   }
 }
 
-export function normalizePhoneE164(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new OutreachSmsError("NO_PHONE", "Lead has no phone number.");
-  }
+/** Plausible E.164: "+", non-zero leading digit, 8–15 digits total. */
+const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
+/** Trailing extension ("ext. 89", "extension 89", "x89", "#89") — its digits must never be folded into the subscriber number. */
+const EXTENSION_PATTERN = /[\s.,;:-]*(?:extension|ext\.?|x|#)[\s.]*\d+\s*$/i;
 
-  const allowedFormat = trimmed.startsWith("+")
-    ? /^\+[\d\s().-]+$/.test(trimmed)
-    : /^[\d\s().-]+$/.test(trimmed);
-  if (!allowedFormat) {
-    throw new OutreachSmsError(
-      "INVALID_PHONE",
-      "Phone number contains unsupported characters or an extension.",
-    );
-  }
-
-  if (trimmed.startsWith("+")) {
-    const normalized = `+${trimmed.slice(1).replace(/\D/g, "")}`;
-    if (/^\+[1-9]\d{7,14}$/.test(normalized)) return normalized;
-  }
-
+/** Normalize common North American and already-international values to E.164. */
+export function normalizePhoneNumber(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const trimmed = raw.trim().replace(EXTENSION_PATTERN, "").trim();
   const digits = trimmed.replace(/\D/g, "");
-  if (/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return `+1${digits}`;
-  if (/^1[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return `+${digits}`;
-
-  throw new OutreachSmsError(
-    "INVALID_PHONE",
-    "Phone number must be a valid E.164 or US phone number.",
-  );
-}
-
-function requireSenderName(): string {
-  const senderName = process.env.SENDER_NAME?.trim();
-  if (!senderName) {
-    throw new OutreachSmsError(
-      "NOT_CONFIGURED",
-      "SENDER_NAME is required for SMS outreach.",
-    );
+  let candidate: string | null = null;
+  // Explicit international prefixes take priority — a "+354…" number with ten
+  // digits must never be reinterpreted as NANP and given a "+1".
+  if (trimmed.startsWith("+") && digits.length >= 8 && digits.length <= 15) {
+    candidate = `+${digits}`;
+  } else if (trimmed.startsWith("00") && digits.length >= 10 && digits.length <= 17) {
+    candidate = `+${digits.slice(2)}`;
+  } else if (digits.length === 10) {
+    candidate = `+1${digits}`;
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    candidate = `+${digits}`;
   }
-  return senderName;
+  return candidate !== null && E164_PATTERN.test(candidate) ? candidate : null;
 }
 
-function assertCompliantBody(body: string): void {
-  const senderName = requireSenderName();
-  const lines = body.trimEnd().split(/\r?\n/);
-  if (!body.includes(senderName)) {
-    throw new OutreachSmsError(
-      "NON_COMPLIANT",
-      `SMS body must identify the sender as ${senderName}.`,
-    );
-  }
-  if (lines.at(-1) !== "Reply STOP to opt out") {
-    throw new OutreachSmsError(
-      "NON_COMPLIANT",
-      'SMS body must end with "Reply STOP to opt out".',
-    );
-  }
-}
-
-function demoUrl(slug: string): string | null {
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.NEXTAUTH_URL?.trim()
-  )?.replace(/\/$/, "");
-  // The demo link is optional — without a public base URL the draft falls
-  // back to the plain pitch instead of failing generation.
-  if (!baseUrl) return null;
-  return `${baseUrl}/demo/${slug}`;
-}
-
-function draftBody(lead: Lead, websiteSlug?: string | null): string {
-  const greeting = lead.firstName?.trim() || "there";
-  const senderName = requireSenderName();
-  const company = lead.company?.trim() || "your business";
-  const link = websiteSlug ? demoUrl(websiteSlug) : null;
-  const pitch = link
-    ? `I put together a quick website demo for ${company}: ${link}`
-    : `I'd love to show you a quick website idea for ${company}.`;
-
-  return `Hi ${greeting}, this is ${senderName}. ${pitch}\n\nReply STOP to opt out`;
+function demoUrl(slug: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
+  return `${base}/demo/${slug}`;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -116,57 +61,59 @@ function isUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-async function assertPhoneNotOptedOut(
-  prisma: PrismaClient,
-  phone: string,
-  organizationId: string,
-): Promise<void> {
-  const optOut = await prisma.phoneOptOut.findUnique({
-    where: { phone_organizationId: { phone, organizationId } },
-    select: { id: true },
-  });
-  if (optOut) {
-    throw new OutreachSmsError("OPTED_OUT", "This phone number has opted out.");
-  }
+function isTwilioBlockedRecipient(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 21610
+  );
 }
 
-export async function generateDraftForLead(
+export async function generateSmsDraftForLead(
   prisma: PrismaClient,
   lead: Lead,
   opts: { organizationId: string; userId: string },
 ): Promise<{ draftId: string }> {
-  if (!lead.phone) {
-    throw new OutreachSmsError("NO_PHONE", "Lead has no phone number.");
+  if (!isSmsConfigured()) {
+    throw new OutreachSmsError("NOT_CONFIGURED", "Twilio SMS is not configured.");
   }
-  const phone = normalizePhoneE164(lead.phone);
+  const senderName = process.env.SENDER_NAME?.trim();
+  if (!senderName) {
+    throw new OutreachSmsError("NOT_CONFIGURED", "SENDER_NAME must be set for SMS outreach.");
+  }
+  if (!lead.phone) throw new OutreachSmsError("NO_PHONE", "Lead has no phone number.");
+  const toPhone = normalizePhoneNumber(lead.phone);
+  if (!toPhone) throw new OutreachSmsError("INVALID_PHONE", "Lead phone number is invalid.");
 
-  await assertPhoneNotOptedOut(prisma, phone, opts.organizationId);
+  const optOut = await prisma.phoneOptOut.findUnique({
+    where: { phone_organizationId: { phone: toPhone, organizationId: opts.organizationId } },
+    select: { id: true },
+  });
+  if (optOut) throw new OutreachSmsError("OPTED_OUT", "This phone number has opted out.");
 
   const website = await prisma.generatedWebsite.findFirst({
-    where: {
-      leadId: lead.id,
-      lead: { organizationId: opts.organizationId },
-      slug: { not: null },
-    },
+    where: { leadId: lead.id, organizationId: opts.organizationId, slug: { not: null } },
     orderBy: { createdAt: "desc" },
     select: { id: true, slug: true },
   });
-  const body = draftBody(lead, website?.slug);
+  if (!website?.slug) {
+    throw new OutreachSmsError("NO_WEBSITE", "Generate a demo website before creating an SMS draft.");
+  }
+
+  const greeting = lead.firstName?.trim() ? `Hi ${lead.firstName.trim()}` : "Hi there";
+  const company = lead.company?.trim() || "your business";
+  const body = `${greeting} - this is ${senderName}. I made a quick demo website for ${company}: ${demoUrl(website.slug)}\n\nReply STOP to opt out.`;
 
   const existing = await prisma.smsDraft.findFirst({
-    where: {
-      leadId: lead.id,
-      organizationId: opts.organizationId,
-      status: SmsDraftStatus.DRAFT,
-    },
+    where: { leadId: lead.id, organizationId: opts.organizationId, status: SmsDraftStatus.DRAFT },
     orderBy: { createdAt: "desc" },
     select: { id: true },
   });
-
   if (existing) {
     const updated = await prisma.smsDraft.update({
-      where: { id: existing.id, organizationId: opts.organizationId },
-      data: { body, toPhone: phone, websiteId: website?.id ?? null },
+      where: { id: existing.id },
+      data: { body, toPhone, websiteId: website.id },
     });
     return { draftId: updated.id };
   }
@@ -177,96 +124,114 @@ export async function generateDraftForLead(
       data: {
         leadId: lead.id,
         organizationId: opts.organizationId,
-        websiteId: website?.id ?? null,
-        toPhone: phone,
+        websiteId: website.id,
+        toPhone,
         body,
       },
     });
   } catch (error) {
-    // A concurrent call can win the race between findFirst and create; the
-    // partial unique index on (leadId) WHERE status = 'DRAFT' turns that
-    // into P2002 — converge on the surviving draft instead of duplicating.
+    // A concurrent call (worker tick + user click) can win the race between
+    // findFirst and create; the partial unique index on (leadId) WHERE
+    // status = 'DRAFT' turns that into P2002 — converge on the surviving
+    // draft instead of duplicating.
     if (!isUniqueConstraintError(error)) throw error;
     const winner = await prisma.smsDraft.findFirst({
-      where: {
-        leadId: lead.id,
-        organizationId: opts.organizationId,
-        status: SmsDraftStatus.DRAFT,
-      },
+      where: { leadId: lead.id, organizationId: opts.organizationId, status: SmsDraftStatus.DRAFT },
       orderBy: { createdAt: "desc" },
       select: { id: true },
     });
     if (!winner) throw error;
     const updated = await prisma.smsDraft.update({
-      where: { id: winner.id, organizationId: opts.organizationId },
-      data: { body, toPhone: phone, websiteId: website?.id ?? null },
+      where: { id: winner.id },
+      data: { body, toPhone, websiteId: website.id },
     });
     return { draftId: updated.id };
   }
-
-  await logActivity(prisma, {
+  void logActivity(prisma, {
     leadId: lead.id,
     userId: opts.userId,
+    organizationId: opts.organizationId,
     type: ActivityType.SMS_DRAFT_CREATED,
     description: "SMS draft generated",
-    organizationId: opts.organizationId,
   });
-
   return { draftId: created.id };
 }
 
-export async function sendDraft(
+export async function sendSmsDraft(
   prisma: PrismaClient,
   opts: { draftId: string; organizationId: string; userId: string },
 ): Promise<{ messageId: string }> {
   if (!isSmsConfigured()) {
-    throw new OutreachSmsError(
-      "NOT_CONFIGURED",
-      "Twilio SMS is not configured for this workspace.",
-    );
+    throw new OutreachSmsError("NOT_CONFIGURED", "Twilio SMS is not configured.");
   }
-
   const draft = await prisma.smsDraft.findFirst({
     where: { id: opts.draftId, organizationId: opts.organizationId },
-    include: { lead: { select: { id: true, phone: true } } },
+    include: { lead: { select: { id: true, company: true, phone: true } } },
   });
   if (!draft) throw new OutreachSmsError("NOT_FOUND", "SMS draft not found.");
   if (draft.status !== SmsDraftStatus.DRAFT) {
-    throw new OutreachSmsError("ALREADY_SENT", "SMS draft was already sent.");
+    throw new OutreachSmsError("ALREADY_SENT", "SMS draft has already been sent.");
   }
-  // Always send to the lead's CURRENT phone — it may have changed (or been
-  // removed) after the draft was generated.
+
+  // Send to the lead's current phone, not the destination captured when the
+  // draft was generated — the lead may have been edited since.
   if (!draft.lead.phone) {
     throw new OutreachSmsError("NO_PHONE", "Lead no longer has a phone number.");
   }
-  const phone = normalizePhoneE164(draft.lead.phone);
-  await assertPhoneNotOptedOut(prisma, phone, opts.organizationId);
-  assertCompliantBody(draft.body);
+  const toPhone = normalizePhoneNumber(draft.lead.phone);
+  if (!toPhone) throw new OutreachSmsError("INVALID_PHONE", "Lead phone number is invalid.");
 
-  const claim = await prisma.smsDraft.updateMany({
+  const optOut = await prisma.phoneOptOut.findUnique({
     where: {
-      id: opts.draftId,
+      phone_organizationId: {
+        phone: toPhone,
+        organizationId: opts.organizationId,
+      },
+    },
+    select: { id: true },
+  });
+  if (optOut) throw new OutreachSmsError("OPTED_OUT", "This phone number has opted out.");
+
+  // Reserve the draft before crossing the network boundary. Only one caller
+  // can transition DRAFT -> SENT, which prevents concurrent single/bulk sends
+  // from delivering the same message twice.
+  const claimed = await prisma.smsDraft.updateMany({
+    where: {
+      id: draft.id,
       organizationId: opts.organizationId,
       status: SmsDraftStatus.DRAFT,
     },
-    data: { status: SmsDraftStatus.SENDING },
+    data: { status: SmsDraftStatus.SENT },
   });
-  if (claim.count !== 1) {
-    throw new OutreachSmsError("ALREADY_SENT", "SMS draft was already sent.");
+  if (claimed.count !== 1) {
+    throw new OutreachSmsError("ALREADY_SENT", "SMS draft has already been sent.");
   }
 
-  let messageSid: string;
+  let sent: { messageSid: string };
   try {
-    ({ messageSid } = await sendSms({ to: phone, body: draft.body }));
+    sent = await sendSmsMessage({ to: toPhone, body: draft.body, draftId: draft.id });
   } catch (error) {
     await prisma.smsDraft.updateMany({
       where: {
-        id: opts.draftId,
-        organizationId: opts.organizationId,
-        status: SmsDraftStatus.SENDING,
+        id: draft.id,
+        status: SmsDraftStatus.SENT,
+        twilioMessageSid: null,
       },
       data: { status: SmsDraftStatus.DRAFT },
     });
+    // Twilio 21610: the recipient unsubscribed at the Messaging Service level.
+    // Mirror it into the org-scoped opt-out list so the draft is not retried
+    // against a number Twilio will always reject.
+    if (isTwilioBlockedRecipient(error)) {
+      await prisma.phoneOptOut.upsert({
+        where: {
+          phone_organizationId: { phone: toPhone, organizationId: opts.organizationId },
+        },
+        create: { phone: toPhone, organizationId: opts.organizationId },
+        update: {},
+      });
+      throw new OutreachSmsError("OPTED_OUT", "This phone number has opted out.");
+    }
     throw new OutreachSmsError(
       "SEND_FAILED",
       error instanceof Error ? error.message : "Failed to send SMS.",
@@ -274,33 +239,29 @@ export async function sendDraft(
   }
 
   await prisma.smsDraft.update({
-    where: {
-      id: opts.draftId,
-      organizationId: opts.organizationId,
-      status: SmsDraftStatus.SENDING,
-    },
+    where: { id: draft.id },
     data: {
-      status: SmsDraftStatus.SENT,
-      toPhone: phone,
-      twilioMessageSid: messageSid,
+      toPhone,
+      twilioMessageSid: sent.messageSid,
       sentAt: new Date(),
     },
   });
-  await prisma.smsEvent.create({
-    data: {
-      draftId: opts.draftId,
-      organizationId: opts.organizationId,
+  await prisma.smsEvent.upsert({
+    where: { dedupKey: `${sent.messageSid}:sent` },
+    create: {
+      draftId: draft.id,
       event: "sent",
-      data: { twilio_message_sid: messageSid },
+      dedupKey: `${sent.messageSid}:sent`,
+      data: { messageSid: sent.messageSid },
     },
+    update: {},
   });
-  await logActivity(prisma, {
+  void logActivity(prisma, {
     leadId: draft.leadId,
     userId: opts.userId,
-    type: ActivityType.SMS_SENT,
-    description: `Outreach SMS sent to ${phone}`,
     organizationId: opts.organizationId,
+    type: ActivityType.SMS_SENT,
+    description: `Outreach SMS sent to ${toPhone}`,
   });
-
-  return { messageId: messageSid };
+  return { messageId: sent.messageSid };
 }

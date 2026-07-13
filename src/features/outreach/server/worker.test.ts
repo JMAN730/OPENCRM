@@ -8,10 +8,19 @@ vi.mock("@/features/emails/server/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./../../emails/server/service")>()),
   generateDraftForLead: vi.fn(),
 }));
+vi.mock("@/features/sms/server/service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./../../sms/server/service")>()),
+  generateSmsDraftForLead: vi.fn(),
+}));
+vi.mock("@/features/sms/server/twilio", () => ({
+  isSmsConfigured: vi.fn(),
+}));
 
 import { processOutreachQueue } from "./worker";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { generateDraftForLead } from "@/features/emails/server/service";
+import { generateSmsDraftForLead } from "@/features/sms/server/service";
+import { isSmsConfigured } from "@/features/sms/server/twilio";
 
 function createMockPrisma() {
   return {
@@ -28,6 +37,12 @@ function createMockPrisma() {
       findUnique: vi.fn().mockResolvedValue(null),
     },
     emailDraft: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    phoneOptOut: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    smsDraft: {
       findFirst: vi.fn().mockResolvedValue(null),
     },
   };
@@ -48,6 +63,7 @@ const baseLead = {
   id: "lead-1",
   organizationId: "org-1",
   email: "owner@acme.com",
+  phone: "+1 (555) 234-5678",
   company: "Acme",
 };
 
@@ -70,6 +86,8 @@ describe("processOutreachQueue", () => {
       needsPhotos: false,
     } as never);
     vi.mocked(generateDraftForLead).mockResolvedValue({ draftId: "draft-1" });
+    vi.mocked(generateSmsDraftForLead).mockResolvedValue({ draftId: "sms-1" });
+    vi.mocked(isSmsConfigured).mockReturnValue(true);
   });
 
   it("returns zero counters when the queue is empty", async () => {
@@ -85,7 +103,7 @@ describe("processOutreachQueue", () => {
     });
   });
 
-  it("generates website + draft and marks the job DONE", async () => {
+  it("prefers an SMS draft for a lead with a phone number", async () => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
     prisma.lead.findUnique.mockResolvedValue(baseLead);
@@ -96,15 +114,48 @@ describe("processOutreachQueue", () => {
       organizationId: "org-1",
       userId: "user-1",
     });
-    expect(generateDraftForLead).toHaveBeenCalledWith(prisma, baseLead, {
+    expect(generateSmsDraftForLead).toHaveBeenCalledWith(prisma, baseLead, {
       organizationId: "org-1",
       userId: "user-1",
     });
+    expect(generateDraftForLead).not.toHaveBeenCalled();
     expect(prisma.outreachJob.update).toHaveBeenCalledWith({
       where: { id: "oj-1" },
-      data: expect.objectContaining({ status: "DONE", websiteId: "web-1", draftId: "draft-1" }),
+      data: expect.objectContaining({
+        status: "DONE",
+        websiteId: "web-1",
+        smsDraftId: "sms-1",
+        draftId: null,
+      }),
     });
     expect(result).toMatchObject({ processed: 1, done: 1 });
+  });
+
+  it("falls back to email for a lead without a phone number", async () => {
+    prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
+    prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
+    prisma.lead.findUnique.mockResolvedValue({ ...baseLead, phone: null });
+
+    await run(prisma);
+
+    expect(generateDraftForLead).toHaveBeenCalledTimes(1);
+    expect(generateSmsDraftForLead).not.toHaveBeenCalled();
+    expect(prisma.outreachJob.update).toHaveBeenCalledWith({
+      where: { id: "oj-1" },
+      data: expect.objectContaining({ draftId: "draft-1", smsDraftId: null }),
+    });
+  });
+
+  it("falls back to email when SMS is not configured", async () => {
+    vi.mocked(isSmsConfigured).mockReturnValue(false);
+    prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
+    prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
+    prisma.lead.findUnique.mockResolvedValue(baseLead);
+
+    await run(prisma);
+
+    expect(generateDraftForLead).toHaveBeenCalledTimes(1);
+    expect(generateSmsDraftForLead).not.toHaveBeenCalled();
   });
 
   it("skips an item another worker already claimed (atomic claim)", async () => {
@@ -122,7 +173,7 @@ describe("processOutreachQueue", () => {
 
   it.each([
     ["lead_deleted", { lead: null }],
-    ["no_email", { lead: { ...baseLead, email: null } }],
+    ["no_contact", { lead: { ...baseLead, email: null, phone: null } }],
   ])("marks the job SKIPPED with reason %s", async (reason, { lead }) => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
@@ -135,6 +186,22 @@ describe("processOutreachQueue", () => {
       data: expect.objectContaining({ status: "SKIPPED", skipReason: reason }),
     });
     expect(result).toMatchObject({ processed: 1, skipped: 1, done: 0 });
+    expect(generateWebsiteForLead).not.toHaveBeenCalled();
+  });
+
+  it("skips a phone number that opted out", async () => {
+    prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
+    prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
+    prisma.lead.findUnique.mockResolvedValue(baseLead);
+    prisma.phoneOptOut.findUnique.mockResolvedValue({ id: "phone-opt-1" });
+
+    const result = await run(prisma);
+
+    expect(prisma.outreachJob.update).toHaveBeenCalledWith({
+      where: { id: "oj-1" },
+      data: expect.objectContaining({ status: "SKIPPED", skipReason: "phone_opted_out" }),
+    });
+    expect(result).toMatchObject({ skipped: 1 });
     expect(generateWebsiteForLead).not.toHaveBeenCalled();
   });
 
@@ -152,7 +219,7 @@ describe("processOutreachQueue", () => {
   it("marks the job SKIPPED when the email has opted out", async () => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
-    prisma.lead.findUnique.mockResolvedValue(baseLead);
+    prisma.lead.findUnique.mockResolvedValue({ ...baseLead, phone: null });
     prisma.emailOptOut.findUnique.mockResolvedValue({ id: "opt-1" });
 
     const result = await run(prisma);
@@ -167,7 +234,7 @@ describe("processOutreachQueue", () => {
   it("marks the job SKIPPED when a draft already exists for the lead", async () => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue(baseJob);
-    prisma.lead.findUnique.mockResolvedValue(baseLead);
+    prisma.lead.findUnique.mockResolvedValue({ ...baseLead, phone: null });
     prisma.emailDraft.findFirst.mockResolvedValue({ id: "draft-existing" });
 
     const result = await run(prisma);
@@ -183,7 +250,7 @@ describe("processOutreachQueue", () => {
   it("returns a failed item to PENDING for retry while attempts remain", async () => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue({ ...baseJob, attempts: 1 });
-    prisma.lead.findUnique.mockResolvedValue(baseLead);
+    prisma.lead.findUnique.mockResolvedValue({ ...baseLead, phone: null });
     vi.mocked(generateWebsiteForLead).mockRejectedValue(new Error("deepseek 429"));
 
     const result = await run(prisma);
@@ -198,7 +265,7 @@ describe("processOutreachQueue", () => {
   it("marks the job FAILED once max attempts are exhausted", async () => {
     prisma.outreachJob.findMany.mockResolvedValue([{ id: "oj-1" }]);
     prisma.outreachJob.findUnique.mockResolvedValue({ ...baseJob, attempts: 3 });
-    prisma.lead.findUnique.mockResolvedValue(baseLead);
+    prisma.lead.findUnique.mockResolvedValue({ ...baseLead, phone: null });
     vi.mocked(generateDraftForLead).mockRejectedValue(new Error("no api key"));
 
     const result = await run(prisma);
@@ -216,8 +283,8 @@ describe("processOutreachQueue", () => {
       .mockResolvedValueOnce({ ...baseJob, id: "oj-1" })
       .mockResolvedValueOnce({ ...baseJob, id: "oj-2", leadId: "lead-2" });
     prisma.lead.findUnique
-      .mockResolvedValueOnce(baseLead)
-      .mockResolvedValueOnce({ ...baseLead, id: "lead-2" });
+      .mockResolvedValueOnce({ ...baseLead, phone: null })
+      .mockResolvedValueOnce({ ...baseLead, id: "lead-2", phone: null });
     vi.mocked(generateWebsiteForLead)
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce({ website: { id: "web-2", slug: "s" }, needsPhotos: false } as never);

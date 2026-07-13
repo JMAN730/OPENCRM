@@ -36,24 +36,24 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          UserRole  @default(USER)
+  id                   String               @id @default(cuid())
+  name                 String?
+  email                String?              @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  role                 UserRole             @default(USER)
   // Platform-level "master account" flag, orthogonal to the org-scoped `role`.
   // When true, the user can read across every organization via the read-only
   // `platform` router (super-admin monitoring console). Never granted through
   // the app UI — set out-of-band via `scripts/grant-superadmin.ts`.
-  isSuperAdmin  Boolean   @default(false)
+  isSuperAdmin         Boolean              @default(false)
   loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
   // Bumped whenever credentials change (password reset / email change) so
   // JWTs minted before the change are rejected on their next refresh (CWE-613).
-  sessionVersion Int      @default(0)
-  accounts      Account[]
-  sessions      Session[]
+  sessionVersion       Int                  @default(0)
+  accounts             Account[]
+  sessions             Session[]
 
   // Organization Context
   organizationId String?
@@ -66,17 +66,17 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
 
-  leads          Lead[]       @relation("AssignedTo")
-  calls          CallLog[]
-  notes          Note[]
-  tasks          Task[]       @relation("TaskCreator")
-  assignedTasks  Task[]       @relation("TaskAssignee")
-  activities     Activity[]
-  scraperJobs    ScraperJob[]
-  scraperRows    ScraperImportedRow[]
-  invitationsSent Invitation[] @relation("InvitationInviter")
+  leads            Lead[]               @relation("AssignedTo")
+  calls            CallLog[]
+  notes            Note[]
+  tasks            Task[]               @relation("TaskCreator")
+  assignedTasks    Task[]               @relation("TaskAssignee")
+  activities       Activity[]
+  scraperJobs      ScraperJob[]
+  scraperRows      ScraperImportedRow[]
+  invitationsSent  Invitation[]         @relation("InvitationInviter")
   trainingSessions TrainingSession[]
-  outreachJobs   OutreachJob[]
+  outreachJobs     OutreachJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -95,7 +95,7 @@ enum LoadingAnimationMode {
 }
 
 model Organization {
-  id             String          @id @default(cuid())
+  id             String               @id @default(cuid())
   name           String
   users          User[]
   teams          Team[]
@@ -116,7 +116,6 @@ model Organization {
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
   smsDrafts         SmsDraft[]
-  smsEvents         SmsEvent[]
   phoneOptOuts      PhoneOptOut[]
   salesScripts      SalesScript[]
   outreachJobs      OutreachJob[]
@@ -224,20 +223,20 @@ model Lead {
   secondaryOutcomeId String?
   secondaryOutcome   CustomOutcome? @relation("SecondaryOutcome", fields: [secondaryOutcomeId], references: [id], onDelete: SetNull)
 
-  pipelineStageId String?
-  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
+  pipelineStageId      String?
+  pipelineStage        PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
   qualificationSummary String?
 
-  calls        CallLog[]
-  notes        Note[]
-  activities   Activity[]
-  tasks        Task[]
-  tags         LeadTag[]
-  websites     GeneratedWebsite[]
-  emailDrafts  EmailDraft[]
-  smsDrafts    SmsDraft[]
+  calls            CallLog[]
+  notes            Note[]
+  activities       Activity[]
+  tasks            Task[]
+  tags             LeadTag[]
+  websites         GeneratedWebsite[]
+  emailDrafts      EmailDraft[]
+  smsDrafts        SmsDraft[]
   trainingSessions TrainingSession[]
-  outreachJob  OutreachJob?
+  outreachJob      OutreachJob?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -350,8 +349,8 @@ model CustomOutcome {
   hint           String?      @db.VarChar(200)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  primaryLeads   Lead[] @relation("PrimaryOutcome")
-  secondaryLeads Lead[] @relation("SecondaryOutcome")
+  primaryLeads   Lead[]       @relation("PrimaryOutcome")
+  secondaryLeads Lead[]       @relation("SecondaryOutcome")
 
   createdAt DateTime @default(now())
 
@@ -396,10 +395,12 @@ enum ActivityType {
   NOTE_DELETED
   EMAIL_DRAFT_CREATED
   EMAIL_SENT
-  SMS_DRAFT_CREATED
-  SMS_SENT
   DEMO_GENERATED
   LEAD_ENRICHED
+  // Declared last to match the DB: ALTER TYPE ... ADD VALUE (20260713060000)
+  // appends to the end of the Postgres enum, and drift checks compare order.
+  SMS_DRAFT_CREATED
+  SMS_SENT
 }
 
 model Activity {
@@ -407,9 +408,9 @@ model Activity {
   type        ActivityType
   description String
   leadId      String
-  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId      String
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Denormalized from Lead.organizationId so org-wide activity feeds (team
   // activityFeed, dashboard "last active") avoid a join through Lead.
@@ -523,10 +524,10 @@ enum InvitationStatus {
 // Scraper feature
 // ─────────────────────────────────────────────────────────────────────────────
 model ScraperJob {
-  id     String           @id @default(cuid())
-  status ScraperJobStatus @default(PENDING)
+  id      String           @id @default(cuid())
+  status  ScraperJobStatus @default(PENDING)
   // "SCRAPE" (location/category scrape) or "ENRICH" (map-selected lead enrichment)
-  jobType String @default("SCRAPE")
+  jobType String           @default("SCRAPE")
 
   locations  Json @default("[]")
   categories Json @default("[]")
@@ -534,19 +535,19 @@ model ScraperJob {
   limit       Int @default(20)
   concurrency Int @default(1)
 
-  totalScraped  Int     @default(0)
-  importedCount Int     @default(0)
-  autoImport    Boolean @default(true)
-  autoOutreach  Boolean @default(false)
-  totalQueries     Int @default(0)
-  completedQueries Int @default(0)
-  failedQueries    Int @default(0)
+  totalScraped     Int     @default(0)
+  importedCount    Int     @default(0)
+  autoImport       Boolean @default(true)
+  autoOutreach     Boolean @default(false)
+  totalQueries     Int     @default(0)
+  completedQueries Int     @default(0)
+  failedQueries    Int     @default(0)
 
-  outputDir String?
-  logs      String  @default("")
-  error     String?
-  workerId  String?
-  workerPid Int?
+  outputDir       String?
+  logs            String    @default("")
+  error           String?
+  workerId        String?
+  workerPid       Int?
   lastHeartbeatAt DateTime?
   stopRequestedAt DateTime?
 
@@ -570,7 +571,7 @@ model ScraperJob {
 }
 
 model ScraperImportedRow {
-  id          String @id @default(cuid())
+  id          String     @id @default(cuid())
   jobId       String
   job         ScraperJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   fingerprint String
@@ -581,7 +582,7 @@ model ScraperImportedRow {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   importedById String
-  importedBy   User @relation(fields: [importedById], references: [id], onDelete: Cascade)
+  importedBy   User   @relation(fields: [importedById], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -652,8 +653,8 @@ model ScheduledScrape {
   categories     Json         @default("[]")
   limit          Int          @default(20)
   concurrency    Int          @default(1)
-  dayOfWeek      Int          // 0=Sunday … 6=Saturday
-  hourOfDay      Int          // 0-23 UTC
+  dayOfWeek      Int // 0=Sunday … 6=Saturday
+  hourOfDay      Int // 0-23 UTC
   enabled        Boolean      @default(true)
   lastRunAt      DateTime?
   nextRunAt      DateTime?
@@ -681,22 +682,22 @@ enum EmailDraftStatus {
 }
 
 model EmailDraft {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   organizationId   String
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadId           String
-  lead             Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
   websiteId        String?
   website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
   subject          String
-  body             String           @db.Text
-  status           EmailDraftStatus @default(DRAFT)
-  unsubscribeToken String           @unique
+  body             String            @db.Text
+  status           EmailDraftStatus  @default(DRAFT)
+  unsubscribeToken String            @unique
   resendMessageId  String?
   sentAt           DateTime?
   events           EmailEvent[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([leadId])
   @@index([organizationId, createdAt])
@@ -730,12 +731,13 @@ model EmailOptOut {
   @@index([organizationId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SMS outreach feature
-// ─────────────────────────────────────────────────────────────────────────────
-
+// SMS outreach is intentionally parallel to email outreach. Keeping separate
+// lifecycle models avoids a channel-polymorphic draft whose fields and status
+// rules would be mostly nullable.
 enum SmsDraftStatus {
   DRAFT
+  // Kept from the one-off SMS iteration (20260713060000): Postgres enum values
+  // cannot be dropped in place. Unused by the outreach send flow.
   SENDING
   SENT
   DELIVERED
@@ -769,18 +771,15 @@ model SmsDraft {
 }
 
 model SmsEvent {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  draftId        String
-  draft          SmsDraft     @relation(fields: [draftId], references: [id], onDelete: Cascade)
-  event          String
-  dedupKey       String?      @unique
-  data           Json?
-  createdAt      DateTime     @default(now())
+  id        String   @id @default(cuid())
+  draftId   String
+  draft     SmsDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  event     String
+  dedupKey  String?  @unique
+  data      Json?
+  createdAt DateTime @default(now())
 
   @@index([draftId, createdAt])
-  @@index([organizationId, createdAt])
 }
 
 model PhoneOptOut {
@@ -819,9 +818,10 @@ model OutreachJob {
   status         OutreachJobStatus @default(PENDING)
   attempts       Int               @default(0)
   error          String?
-  skipReason     String?           // no_email | opted_out | draft_exists | lead_deleted
+  skipReason     String? // no_contact | phone_opted_out | sms_not_configured | opted_out | draft_exists | lead_deleted
   websiteId      String?
   draftId        String?
+  smsDraftId     String?
   processedAt    DateTime?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -849,17 +849,17 @@ model SalesScript {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TrainingPersona {
-  id             String       @id @default(cuid())
+  id             String            @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   description    String
-  systemPrompt   String       @db.Text
+  systemPrompt   String            @db.Text
   firstMessage   String
   voiceId        String
   voiceName      String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   sessions       TrainingSession[]
 
   @@index([organizationId])

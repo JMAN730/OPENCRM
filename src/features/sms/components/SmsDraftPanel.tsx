@@ -1,157 +1,136 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, MessageSquareText, Send, Sparkles } from "lucide-react";
-import { SmsDraftStatus } from "@prisma/client";
+import { MessageSquareText, Send } from "lucide-react";
 import { toast } from "sonner";
+import { SmsDraftStatus } from "@prisma/client";
 import { trpc } from "@/app/_trpc/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SmsStatusBadge } from "./SmsStatusBadge";
 
-interface SmsDraftPanelProps {
-  leadId: string;
-}
-
-export function SmsDraftPanel({ leadId }: SmsDraftPanelProps) {
-  const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.sms.getDraftForLead.useQuery({ leadId });
+export function SmsDraftPanel({ leadId }: { leadId: string }) {
   const [body, setBody] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+  const configuration = trpc.sms.configuration.useQuery();
+  const draft = trpc.sms.getForLead.useQuery({ leadId });
 
-  const refresh = () => utils.sms.getDraftForLead.invalidate({ leadId });
+  const refresh = () => {
+    setBody(null);
+    void utils.sms.getForLead.invalidate({ leadId });
+  };
   const generate = trpc.sms.generate.useMutation({
     onSuccess: () => {
-      void refresh();
-      setBody(null);
-      toast.success("SMS draft generated");
+      toast.success("SMS draft generated.");
+      refresh();
     },
     onError: (error) => toast.error(error.message),
   });
-  const updateDraft = trpc.sms.updateDraft.useMutation({
+  const update = trpc.sms.updateBody.useMutation({
     onSuccess: () => {
-      void refresh();
-      setBody(null);
-      toast.success("SMS draft saved");
+      toast.success("SMS draft updated.");
+      refresh();
     },
     onError: (error) => toast.error(error.message),
   });
   const send = trpc.sms.send.useMutation({
     onSuccess: () => {
-      void refresh();
-      toast.success("SMS sent");
+      toast.success("SMS sent.");
+      refresh();
     },
     onError: (error) => toast.error(error.message),
   });
 
-  if (isLoading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--crm-fg-faint)", fontSize: 13 }}>
-        <Loader2 size={13} className="animate-spin" />
-        Loading SMS…
-      </div>
-    );
-  }
-
-  if (!data?.configured) {
-    return (
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <MessageSquareText size={14} style={{ marginTop: 2, color: "var(--crm-fg-faint)" }} />
-        <div>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--crm-fg-muted)" }}>
-            Twilio SMS not configured
-          </div>
-          <div style={{ marginTop: 2, fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-            Add the Twilio Account SID, Auth Token, Messaging Service SID, and a sender name to enable texting.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const draft = data.draft;
-  if (!draft) {
-    return (
-      <button
-        className="crm-btn"
-        onClick={() => generate.mutate({ leadId })}
-        disabled={generate.isPending}
-      >
-        {generate.isPending ? (
-          <Loader2 size={13} className="animate-spin" />
-        ) : (
-          <Sparkles size={13} />
-        )}
-        Generate SMS draft
-      </button>
-    );
-  }
-
-  const currentBody = body ?? draft.body;
-  const isDirty = body !== null;
-  const isEditable = draft.status === SmsDraftStatus.DRAFT;
+  const data = draft.data;
+  const currentBody = body ?? data?.body ?? "";
+  const editable = data?.status === SmsDraftStatus.DRAFT;
+  const dirty = Boolean(data && currentBody !== data.body);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <MessageSquareText size={13} style={{ color: "var(--crm-fg-muted)" }} />
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--crm-fg)" }}>
-            Outreach SMS
-          </span>
-        </div>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--crm-fg-muted)" }}>
-          {draft.status}
-        </span>
-      </div>
-
-      {isEditable ? (
-        <>
-          <label>
-            <span style={{ display: "block", marginBottom: 3, fontSize: 11, color: "var(--crm-fg-faint)" }}>
-              Message body
-            </span>
-            <textarea
-              aria-label="Message body"
-              className="crm-input"
-              style={{ width: "100%", minHeight: 130, resize: "vertical", fontSize: 12.5, lineHeight: 1.55 }}
-              value={currentBody}
-              onChange={(event) => setBody(event.target.value)}
-            />
-          </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ marginRight: "auto", fontSize: 11, color: "var(--crm-fg-faint)" }}>
-              {currentBody.length} characters
-            </span>
-            {isDirty ? (
-              <button
-                className="crm-btn sm"
-                disabled={updateDraft.isPending || !currentBody.trim()}
-                onClick={() => updateDraft.mutate({ id: draft.id, body: currentBody })}
-              >
-                {updateDraft.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
-                Save
-              </button>
-            ) : null}
-            <button
-              className="crm-btn primary sm"
-              disabled={send.isPending || isDirty}
-              title={isDirty ? "Save changes before sending" : undefined}
-              onClick={() => {
-                if (window.confirm("Send this SMS now?")) send.mutate({ id: draft.id });
-              }}
-            >
-              {send.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Send SMS
-            </button>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MessageSquareText size={17} /> SMS outreach
+            </CardTitle>
+            <CardDescription>Review every text before explicitly sending it.</CardDescription>
           </div>
-        </>
-      ) : (
-        <div style={{ fontSize: 12.5, color: "var(--crm-fg-muted)", lineHeight: 1.5 }}>
-          <div style={{ whiteSpace: "pre-wrap" }}>{draft.body}</div>
-          {draft.sentAt ? (
-            <div style={{ marginTop: 4, fontSize: 11, color: "var(--crm-fg-faint)" }}>
-              Sent {new Date(draft.sentAt).toLocaleDateString()}
-            </div>
-          ) : null}
+          {data ? <SmsStatusBadge status={data.status} /> : null}
         </div>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {configuration.data && !configuration.data.configured ? (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            Twilio SMS is not configured. Add the account, auth token, and Messaging Service SID
+            to enable texting; email outreach continues to work normally.
+          </p>
+        ) : draft.isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-8 w-28" />
+          </div>
+        ) : !data ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Generate a static, compliant text using this lead&apos;s latest demo website.
+            </p>
+            <Button
+              size="sm"
+              disabled={generate.isPending}
+              onClick={() => generate.mutate({ leadId })}
+            >
+              {generate.isPending ? "Generating…" : "Generate SMS"}
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="text-xs text-muted-foreground">To {data.toPhone}</div>
+            <div className="space-y-1">
+              <Label htmlFor={`sms-message-${leadId}`}>SMS message</Label>
+              <textarea
+                id={`sms-message-${leadId}`}
+                value={currentBody}
+                disabled={!editable}
+                rows={6}
+                maxLength={1600}
+                onChange={(event) => setBody(event.target.value)}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <div className="text-right text-xs text-muted-foreground">
+                {currentBody.length}/1600
+              </div>
+            </div>
+            {data.status === SmsDraftStatus.FAILED ? (
+              <p className="text-sm text-destructive">
+                This number was undeliverable. Call this lead instead.
+              </p>
+            ) : null}
+            {editable ? (
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!dirty || update.isPending}
+                  onClick={() => update.mutate({ id: data.id, body: currentBody })}
+                >
+                  {update.isPending ? "Saving…" : "Save changes"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-1"
+                  disabled={dirty || send.isPending}
+                  onClick={() => send.mutate({ id: data.id })}
+                >
+                  <Send size={13} /> {send.isPending ? "Sending…" : "Send SMS"}
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

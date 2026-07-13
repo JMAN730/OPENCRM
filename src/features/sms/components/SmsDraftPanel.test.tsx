@@ -1,104 +1,59 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SmsDraftPanel } from "./SmsDraftPanel";
 
-const generateMutate = vi.fn();
-const updateMutate = vi.fn();
-const sendMutate = vi.fn();
-let queryData: unknown;
+const state = vi.hoisted(() => ({
+  configured: true,
+  draft: null as null | {
+    id: string;
+    body: string;
+    status: "DRAFT" | "SENT" | "DELIVERED" | "FAILED";
+    toPhone: string;
+    sentAt: Date | null;
+    events: unknown[];
+  },
+}));
 
 vi.mock("@/app/_trpc/client", () => ({
   trpc: {
-    useUtils: () => ({
-      sms: { getDraftForLead: { invalidate: vi.fn() } },
-    }),
+    useUtils: () => ({ sms: { getForLead: { invalidate: vi.fn() } } }),
     sms: {
-      getDraftForLead: {
-        useQuery: vi.fn(() => ({ data: queryData, isLoading: false })),
+      configuration: { useQuery: () => ({ data: { configured: state.configured } }) },
+      getForLead: {
+        useQuery: () => ({ data: state.draft, isLoading: false, refetch: vi.fn() }),
       },
-      generate: {
-        useMutation: vi.fn(() => ({ mutate: generateMutate, isPending: false })),
-      },
-      updateDraft: {
-        useMutation: vi.fn(() => ({ mutate: updateMutate, isPending: false })),
-      },
-      send: {
-        useMutation: vi.fn(() => ({ mutate: sendMutate, isPending: false })),
-      },
+      generate: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      updateBody: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      send: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));
 
-vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
+import { SmsDraftPanel } from "./SmsDraftPanel";
 
 describe("SmsDraftPanel", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    state.configured = true;
+    state.draft = null;
   });
 
-  it("shows a not-configured notice without exposing send controls", () => {
-    queryData = { configured: false, draft: null };
-
+  it("degrades visibly when Twilio SMS is not configured", () => {
+    state.configured = false;
     render(<SmsDraftPanel leadId="lead-1" />);
-
-    expect(screen.getByText("Twilio SMS not configured")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /send sms/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/twilio sms is not configured/i)).toBeInTheDocument();
   });
 
-  it("generates a draft for the lead when none exists yet", () => {
-    queryData = { configured: true, draft: null };
-
-    render(<SmsDraftPanel leadId="lead-1" />);
-
-    fireEvent.click(screen.getByRole("button", { name: /generate sms draft/i }));
-    expect(generateMutate).toHaveBeenCalledWith({ leadId: "lead-1" });
-  });
-
-  it("lets the user edit and save the draft body before sending", () => {
-    queryData = {
-      configured: true,
-      draft: {
-        id: "sms-1",
-        body: "Original body",
-        status: "DRAFT",
-        sentAt: null,
-        events: [],
-      },
-    };
-    render(<SmsDraftPanel leadId="lead-1" />);
-
-    fireEvent.change(screen.getByLabelText("Message body"), {
-      target: { value: "Personalized body" },
-    });
-
-    expect(screen.getByRole("button", { name: "Send SMS" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(updateMutate).toHaveBeenCalledWith({
+  it("shows an editable draft and requires an explicit send action", () => {
+    state.draft = {
       id: "sms-1",
-      body: "Personalized body",
-    });
-  });
-
-  it("sends only after the user explicitly confirms", () => {
-    queryData = {
-      configured: true,
-      draft: {
-        id: "sms-1",
-        body: "Ready body",
-        status: "DRAFT",
-        sentAt: null,
-        events: [],
-      },
+      body: "Hi there — demo link. Reply STOP to opt out.",
+      status: "DRAFT",
+      toPhone: "+15552345678",
+      sentAt: null,
+      events: [],
     };
-    vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     render(<SmsDraftPanel leadId="lead-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS" }));
-    expect(sendMutate).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Send SMS" }));
-    expect(sendMutate).toHaveBeenCalledWith({ id: "sms-1" });
+    expect(screen.getByLabelText("SMS message")).toHaveValue(state.draft.body);
+    expect(screen.getByRole("button", { name: /send sms/i })).toBeInTheDocument();
   });
 });

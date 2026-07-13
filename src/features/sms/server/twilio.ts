@@ -1,39 +1,51 @@
 import twilio from "twilio";
 
-type SendSmsInput = {
+export function isSmsConfigured(): boolean {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_MESSAGING_SERVICE_SID &&
+      process.env.SENDER_NAME?.trim(),
+  );
+}
+
+export function smsStatusCallbackUrl(draftId?: string): string {
+  const baseUrl = (process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").replace(
+    /\/$/,
+    "",
+  );
+  const url = `${baseUrl}/api/webhooks/twilio/status`;
+  return draftId ? `${url}?draftId=${encodeURIComponent(draftId)}` : url;
+}
+
+export async function sendSmsMessage(input: {
   to: string;
   body: string;
-};
-
-function smsConfig() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
-  const senderName = process.env.SENDER_NAME?.trim();
-
-  if (!accountSid || !authToken || !messagingServiceSid || !senderName) return null;
-  return { accountSid, authToken, messagingServiceSid };
-}
-
-export function isSmsConfigured(): boolean {
-  return smsConfig() !== null;
-}
-
-export async function sendSms(input: SendSmsInput): Promise<{ messageSid: string }> {
-  const config = smsConfig();
-  if (!config) {
-    throw new Error(
-      "Twilio SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_MESSAGING_SERVICE_SID, and SENDER_NAME.",
-    );
+  draftId: string;
+}): Promise<{ messageSid: string }> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  if (!accountSid || !authToken || !messagingServiceSid) {
+    throw new Error("Twilio SMS is not configured.");
   }
 
   // Bound the user-facing send path instead of relying on the SDK default.
-  const client = twilio(config.accountSid, config.authToken, { timeout: 10_000 });
-  const message = await client.messages.create({
+  const message = await twilio(accountSid, authToken, { timeout: 10_000 }).messages.create({
     to: input.to,
     body: input.body,
-    messagingServiceSid: config.messagingServiceSid,
+    messagingServiceSid,
+    statusCallback: smsStatusCallbackUrl(input.draftId),
   });
-
   return { messageSid: message.sid };
+}
+
+export function validateTwilioWebhook(input: {
+  signature: string;
+  url: string;
+  params: Record<string, string>;
+}): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) return false;
+  return twilio.validateRequest(authToken, input.signature, input.url, input.params);
 }
