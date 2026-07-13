@@ -198,11 +198,20 @@ export const authOptions: NextAuthOptions = {
 
         // First-time Google sign-in: provision an organization + ADMIN user,
         // same as credentials registration but without a password.
-        await provisionUserWithOrganization({
-          prisma,
-          name: user.name?.trim() || email,
-          email,
-        });
+        try {
+          await provisionUserWithOrganization({
+            prisma,
+            name: user.name?.trim() || email,
+            email,
+          });
+        } catch (err) {
+          if ((err as { code?: string })?.code !== "P2002") throw err;
+
+          const concurrentlyProvisionedUser = await prisma.user.findUnique({
+            where: { email },
+          });
+          if (!concurrentlyProvisionedUser) throw err;
+        }
         return true;
       } catch (err) {
         console.error("[auth] Google sign-in provisioning error:", err);

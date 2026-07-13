@@ -21,7 +21,7 @@ import { authOptions } from "./auth";
 import bcrypt from "bcryptjs";
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mockRateLimit.mockResolvedValue({ ok: true, remaining: 9, resetAt: 0 });
 });
 
@@ -304,6 +304,29 @@ describe("signIn callback (Google OAuth)", () => {
       prisma: mockPrisma,
       name: "New User",
       email: "new@y.com",
+    });
+  });
+
+  it("allows sign-in when a concurrent callback wins the provisioning race", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockImplementationOnce(async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: "u-new",
+        email: "new@y.com",
+      });
+      throw { code: "P2002" };
+    });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.user.findUnique).toHaveBeenLastCalledWith({
+      where: { email: "new@y.com" },
     });
   });
 
