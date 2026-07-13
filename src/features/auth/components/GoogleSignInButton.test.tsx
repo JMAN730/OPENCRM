@@ -98,5 +98,8 @@ describe("GoogleSignInButton", () => {
       );
     });
     expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+    await waitFor(() => expect(mockSignIn).toHaveBeenCalledTimes(2));
   });
 });

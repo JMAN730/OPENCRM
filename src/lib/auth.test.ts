@@ -287,15 +287,17 @@ describe("signIn callback (Google OAuth)", () => {
   it("normalizes a Google email with surrounding whitespace and mixed case before lookup", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
 
-    await signInCallback({
+    const result = await signInCallback({
       user: { id: "g1", email: "  X@Y.COM  ", name: "X" },
       account: { provider: "google" },
       profile: { email_verified: true },
     } as never);
 
+    expect(result).toBe(true);
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
     });
+    expect(mockProvision).not.toHaveBeenCalled();
   });
 
   it("allows an existing user to sign in with Google without re-provisioning", async () => {
