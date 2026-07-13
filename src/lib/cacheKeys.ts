@@ -18,6 +18,7 @@ export const keys = {
 
   // ── Rate-limit buckets ───────────────────────────────────────────────
   authSigninBucket: (email: string) => `auth:signin:${email}`,
+  authOauthProvisionBucket: (email: string) => `auth:oauth-provision:${email}`,
   authRegisterIpBucket: (ip: string) => `auth:register:ip:${ip}`,
   authResetEmailBucket: (email: string) => `auth:reset:email:${email}`,
   authResetIpBucket: (ip: string) => `auth:reset:ip:${ip}`,
@@ -25,6 +26,8 @@ export const keys = {
   acceptInviteIpBucket: (ip: string) => `auth:accept-invite:ip:${ip}`,
   emailSendBucket: (organizationId: string) => `email-send:${organizationId}`,
   emailGenBucket: (organizationId: string, leadId: string) => `email-gen:${organizationId}:${leadId}`,
+  smsSendBucket: (organizationId: string) => `sms-send:${organizationId}`,
+  smsGenBucket: (organizationId: string, leadId: string) => `sms-gen:${organizationId}:${leadId}`,
   demoGenBucket: (organizationId: string, leadId: string) => `demo-gen:${organizationId}:${leadId}`,
   emailTrackIpBucket: (ip: string) => `email-track:${ip}`,
   mapGeocodeBucket: (organizationId: string) => `map:geocode:${organizationId}`,

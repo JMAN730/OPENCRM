@@ -60,6 +60,9 @@ vi.mock("@/app/_trpc/client", () => ({
       emails: {
         getDraftForLead: { invalidate: vi.fn() },
       },
+      sms: {
+        getForLead: { invalidate: vi.fn() },
+      },
       scripts: {
         getAll: { invalidate: vi.fn() },
       },
@@ -175,6 +178,23 @@ vi.mock("@/app/_trpc/client", () => ({
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       deleteDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    sms: {
+      configuration: {
+        useQuery: vi.fn(() => ({ data: { configured: false } })),
+      },
+      getForLead: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: false })),
+      },
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      updateBody: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      send: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
     },

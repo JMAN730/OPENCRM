@@ -10,6 +10,7 @@ import { scoringRouter } from "@/features/scoring/server/router";
 import { scriptsRouter } from "@/features/scripts/server/router";
 import { websitesRouter } from "@/features/websites/server/router";
 import { emailsRouter } from "@/features/emails/server/router";
+import { smsRouter } from "@/features/sms/server/router";
 import { pipelineRouter } from "@/features/pipeline/server/router";
 import { analyticsRouter } from "@/features/analytics/server/router";
 import { scheduledScraperRouter } from "@/features/scraper/server/scheduledRouter";
@@ -32,6 +33,7 @@ export const appRouter = createTRPCRouter({
   scripts: scriptsRouter,
   websites: websitesRouter,
   emails: emailsRouter,
+  sms: smsRouter,
   pipeline: pipelineRouter,
   analytics: analyticsRouter,
   trainer: trainerRouter,

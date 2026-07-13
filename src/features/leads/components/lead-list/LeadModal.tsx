@@ -4,6 +4,7 @@ import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import { ScriptsPanel } from "@/features/scripts/components/ScriptsPanel";
 import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
+import { SmsDraftPanel } from "@/features/sms/components/SmsDraftPanel";
 import { formatLocation, getMapsUrl } from "@/features/leads/location";
 import { formatPhone } from "@/lib/phone";
 import { DIALER_ENABLED, SCRIPTS_ENABLED, TRAINER_ENABLED } from "@/lib/features";
@@ -1907,6 +1908,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               }}
             >
               <EmailDraftPanel leadId={lead.id} />
+              <SmsDraftPanel leadId={lead.id} />
             </div>
 
             <div>
