@@ -303,6 +303,19 @@ describe("LeadModal", () => {
     expect(screen.getByText("Twilio SMS not configured")).toBeInTheDocument();
   });
 
+  it("hides the SMS panel for a lead without a phone number", () => {
+    render(
+      <LeadModal
+        lead={{ ...lead, phone: null }}
+        onClose={vi.fn()}
+        onPrev={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Twilio SMS not configured")).not.toBeInTheDocument();
+  });
+
   it("opens scripts from the shared scripts data source", () => {
     scriptsMock = [
       {

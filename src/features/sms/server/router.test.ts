@@ -127,6 +127,77 @@ describe("smsRouter", () => {
       });
       expect(prisma.smsDraft.create).not.toHaveBeenCalled();
     });
+
+    it("falls back to the plain pitch when no public base URL is configured", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+      vi.stubEnv("NEXTAUTH_URL", "");
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        assignedToId: "user-1",
+        firstName: "Ava",
+        company: "Acme",
+        phone: "(813) 555-0199",
+      });
+      prisma.generatedWebsite.findFirst.mockResolvedValue({
+        id: "site-1",
+        slug: "acme-tampa",
+      });
+      prisma.smsDraft.findFirst.mockResolvedValue(null);
+      prisma.smsDraft.create.mockResolvedValue({ id: "sms-1" });
+
+      await expect(caller.sms.generate({ leadId: "lead-1" })).resolves.toEqual({
+        draftId: "sms-1",
+      });
+
+      expect(prisma.smsDraft.create).toHaveBeenCalledWith({
+        data: {
+          body:
+            "Hi Ava, this is Maya's Web Studio. I'd love to show you a quick website idea for Acme.\n\nReply STOP to opt out",
+          leadId: "lead-1",
+          organizationId: "org-1",
+          toPhone: "+18135550199",
+          websiteId: "site-1",
+        },
+      });
+    });
+
+    it("converges on the winning draft when a concurrent generate hits the unique index", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        assignedToId: "user-1",
+        firstName: "Ava",
+        company: "Acme",
+        phone: "(813) 555-0199",
+      });
+      prisma.generatedWebsite.findFirst.mockResolvedValue(null);
+      prisma.smsDraft.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: "sms-2" });
+      prisma.smsDraft.create.mockRejectedValue({ code: "P2002" });
+      prisma.smsDraft.update.mockResolvedValue({ id: "sms-2" });
+
+      await expect(caller.sms.generate({ leadId: "lead-1" })).resolves.toEqual({
+        draftId: "sms-2",
+      });
+
+      expect(prisma.smsDraft.update).toHaveBeenCalledWith({
+        where: { id: "sms-2", organizationId: "org-1" },
+        data: {
+          body:
+            "Hi Ava, this is Maya's Web Studio. I'd love to show you a quick website idea for Acme.\n\nReply STOP to opt out",
+          toPhone: "+18135550199",
+          websiteId: null,
+        },
+      });
+    });
   });
 
   describe("updateDraft", () => {

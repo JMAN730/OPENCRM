@@ -539,8 +539,8 @@ model ScraperJob {
   autoImport    Boolean @default(true)
   autoOutreach  Boolean @default(false)
   totalQueries     Int @default(0)
-  completedQueries Int     @default(0)
-  failedQueries    Int     @default(0)
+  completedQueries Int @default(0)
+  failedQueries    Int @default(0)
 
   outputDir String?
   logs      String  @default("")
@@ -759,6 +759,9 @@ model SmsDraft {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  // At most one DRAFT row per lead — enforced by the partial unique index
+  // "SmsDraft_leadId_active_draft_key" in the migration SQL (Prisma cannot
+  // express partial indexes declaratively).
   @@index([leadId])
   @@index([organizationId, createdAt])
   @@index([organizationId, status])

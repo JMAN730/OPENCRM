@@ -85,16 +85,13 @@ function assertCompliantBody(body: string): void {
   }
 }
 
-function demoUrl(slug: string): string {
+function demoUrl(slug: string): string | null {
   const baseUrl = (
     process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.NEXTAUTH_URL?.trim()
   )?.replace(/\/$/, "");
-  if (!baseUrl) {
-    throw new OutreachSmsError(
-      "NOT_CONFIGURED",
-      "NEXT_PUBLIC_APP_URL or NEXTAUTH_URL is required to include the demo link.",
-    );
-  }
+  // The demo link is optional — without a public base URL the draft falls
+  // back to the plain pitch instead of failing generation.
+  if (!baseUrl) return null;
   return `${baseUrl}/demo/${slug}`;
 }
 
@@ -102,11 +99,21 @@ function draftBody(lead: Lead, websiteSlug?: string | null): string {
   const greeting = lead.firstName?.trim() || "there";
   const senderName = requireSenderName();
   const company = lead.company?.trim() || "your business";
-  const pitch = websiteSlug
-    ? `I put together a quick website demo for ${company}: ${demoUrl(websiteSlug)}`
+  const link = websiteSlug ? demoUrl(websiteSlug) : null;
+  const pitch = link
+    ? `I put together a quick website demo for ${company}: ${link}`
     : `I'd love to show you a quick website idea for ${company}.`;
 
   return `Hi ${greeting}, this is ${senderName}. ${pitch}\n\nReply STOP to opt out`;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }
 
 async function assertPhoneNotOptedOut(
@@ -164,15 +171,38 @@ export async function generateDraftForLead(
     return { draftId: updated.id };
   }
 
-  const created = await prisma.smsDraft.create({
-    data: {
-      leadId: lead.id,
-      organizationId: opts.organizationId,
-      websiteId: website?.id ?? null,
-      toPhone: phone,
-      body,
-    },
-  });
+  let created;
+  try {
+    created = await prisma.smsDraft.create({
+      data: {
+        leadId: lead.id,
+        organizationId: opts.organizationId,
+        websiteId: website?.id ?? null,
+        toPhone: phone,
+        body,
+      },
+    });
+  } catch (error) {
+    // A concurrent call can win the race between findFirst and create; the
+    // partial unique index on (leadId) WHERE status = 'DRAFT' turns that
+    // into P2002 — converge on the surviving draft instead of duplicating.
+    if (!isUniqueConstraintError(error)) throw error;
+    const winner = await prisma.smsDraft.findFirst({
+      where: {
+        leadId: lead.id,
+        organizationId: opts.organizationId,
+        status: SmsDraftStatus.DRAFT,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!winner) throw error;
+    const updated = await prisma.smsDraft.update({
+      where: { id: winner.id, organizationId: opts.organizationId },
+      data: { body, toPhone: phone, websiteId: website?.id ?? null },
+    });
+    return { draftId: updated.id };
+  }
 
   await logActivity(prisma, {
     leadId: lead.id,

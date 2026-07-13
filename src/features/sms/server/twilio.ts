@@ -27,7 +27,8 @@ export async function sendSms(input: SendSmsInput): Promise<{ messageSid: string
     );
   }
 
-  const client = twilio(config.accountSid, config.authToken);
+  // Bound the user-facing send path instead of relying on the SDK default.
+  const client = twilio(config.accountSid, config.authToken, { timeout: 10_000 });
   const message = await client.messages.create({
     to: input.to,
     body: input.body,

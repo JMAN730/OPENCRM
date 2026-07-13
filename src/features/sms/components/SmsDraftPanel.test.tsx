@@ -47,6 +47,15 @@ describe("SmsDraftPanel", () => {
     expect(screen.queryByRole("button", { name: /send sms/i })).not.toBeInTheDocument();
   });
 
+  it("generates a draft for the lead when none exists yet", () => {
+    queryData = { configured: true, draft: null };
+
+    render(<SmsDraftPanel leadId="lead-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /generate sms draft/i }));
+    expect(generateMutate).toHaveBeenCalledWith({ leadId: "lead-1" });
+  });
+
   it("lets the user edit and save the draft body before sending", () => {
     queryData = {
       configured: true,

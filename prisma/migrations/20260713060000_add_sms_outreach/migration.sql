@@ -47,6 +47,9 @@ CREATE INDEX "SmsDraft_organizationId_createdAt_idx" ON "SmsDraft"("organization
 CREATE INDEX "SmsDraft_organizationId_status_idx" ON "SmsDraft"("organizationId", "status");
 CREATE UNIQUE INDEX "SmsDraft_twilioMessageSid_key" ON "SmsDraft"("twilioMessageSid");
 CREATE INDEX "SmsDraft_toPhone_idx" ON "SmsDraft"("toPhone");
+-- At most one active draft per lead; partial indexes are not expressible in
+-- the Prisma schema, so this lives only in SQL.
+CREATE UNIQUE INDEX "SmsDraft_leadId_active_draft_key" ON "SmsDraft"("leadId") WHERE "status" = 'DRAFT';
 CREATE UNIQUE INDEX "SmsEvent_dedupKey_key" ON "SmsEvent"("dedupKey");
 CREATE INDEX "SmsEvent_draftId_createdAt_idx" ON "SmsEvent"("draftId", "createdAt");
 CREATE INDEX "SmsEvent_organizationId_createdAt_idx" ON "SmsEvent"("organizationId", "createdAt");
