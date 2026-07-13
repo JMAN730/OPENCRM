@@ -31,6 +31,7 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "check-bundle-size": "tsx scripts/check-bundle-size.ts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

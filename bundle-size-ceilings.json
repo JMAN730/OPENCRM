@@ -1,0 +1,8 @@
+{
+  "policy": "Ceilings ratchet DOWN toward the 250 KB gzip First Load JS budget locked in #239, as the #270 server-prefetch PRs restructure these routes. Seeded from this check's own measurement on main plus 2% (rounded up to the next whole KB) -- never hand-copied from a baseline report. Raising a ceiling requires justification in the pull request that raises it; lowering one after a size win is encouraged.",
+  "routes": {
+    "/dashboard": 243,
+    "/leads": 265,
+    "/tasks": 244
+  }
+}
