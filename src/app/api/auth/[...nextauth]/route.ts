@@ -21,11 +21,13 @@ async function rateLimitedHandler(
     nextauth[1] === "google";
 
   if (isGoogleCallback) {
-    // Route handlers need to return an HTTP 429 response; the throwing helper
-    // is reserved for tRPC procedures, where TRPCError is serialized correctly.
+    // This is deliberately a coarse shared-IP backstop. Keep its ceiling high
+    // enough for corporate NATs; the tighter per-email limiter in signIn still
+    // handles repeated provisioning attempts for an individual account.
+    // Route handlers need an HTTP 429 response, so use the non-throwing helper.
     const result = await rateLimit({
       key: keys.authOauthProvisionIpBucket(getClientIp(request.headers)),
-      limit: 10,
+      limit: 100,
       windowSeconds: 60 * 60,
     });
 

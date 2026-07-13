@@ -577,6 +577,14 @@ test("redirects anonymous users to sign in for protected routes", async ({ page 
   await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fdashboard/);
 });
 
+test("serves providers through the real NextAuth catch-all route", async ({ request }) => {
+  const response = await request.get("/api/auth/providers");
+
+  expect(response.ok()).toBe(true);
+  const providers = await response.json();
+  expect(providers.credentials.id).toBe("credentials");
+});
+
 test("covers authenticated leads, tasks, and team admin flows in the browser", async ({
   context,
   page,

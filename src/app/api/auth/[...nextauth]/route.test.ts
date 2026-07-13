@@ -49,7 +49,7 @@ describe("NextAuth route", () => {
     expect(mockGetClientIp).toHaveBeenCalledWith(request.headers);
     expect(mockRateLimit).toHaveBeenCalledWith({
       key: "auth:oauth-provision:ip:203.0.113.7",
-      limit: 10,
+      limit: 100,
       windowSeconds: 60 * 60,
     });
     expect(mockAuthHandler).not.toHaveBeenCalled();
