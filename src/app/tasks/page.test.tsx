@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import TasksPage from "./page";
+import TasksPageClient from "./TasksPageClient";
 import { trpc } from "@/app/_trpc/client";
 import { useSearchParams } from "next/navigation";
 
@@ -55,7 +55,7 @@ const deepLinkedTask = {
   assignedTo: { id: "user-1", name: "Maya Rivera", image: null },
 };
 
-describe("TasksPage", () => {
+describe("TasksPageClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSearchParamsMock.mockReturnValue(new URLSearchParams("taskId=task-deep"));
@@ -64,7 +64,7 @@ describe("TasksPage", () => {
   });
 
   it("opens a task detail sidebar from a taskId query parameter", async () => {
-    render(<TasksPage />);
+    render(<TasksPageClient />);
 
     expect(useTaskByIdQuery).toHaveBeenCalledWith(
       { taskId: "task-deep" },
