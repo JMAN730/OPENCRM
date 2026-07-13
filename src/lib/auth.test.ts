@@ -273,6 +273,31 @@ describe("signIn callback (Google OAuth)", () => {
     expect(mockProvision).not.toHaveBeenCalled();
   });
 
+  it("rejects Google sign-in when the profile object is missing entirely", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: undefined,
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a Google email with surrounding whitespace and mixed case before lookup", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    await signInCallback({
+      user: { id: "g1", email: "  X@Y.COM  ", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "x@y.com" },
+    });
+  });
+
   it("allows an existing user to sign in with Google without re-provisioning", async () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
 

@@ -1,9 +1,13 @@
 "use client";
 
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowUpRight, Check, Mail, Phone, Trash2 } from "lucide-react";
+import { useMemo, useRef } from "react";
 import { NextActionChip, ScoreBar, StageTag, Touches } from "./LeadUi";
+import { useLeadListScrollAnchor } from "./useLeadListScrollAnchor";
 import {
   avatarClass,
+  chunk,
   effectiveTempOf,
   fullNameOf,
   initials,
@@ -56,6 +60,27 @@ export function LeadCardList({
     filteredLeads.length > 0 && filteredLeads.every((lead) => selectedIds.has(lead.id));
   const show = (column: LeadVisibleColumn) => visibleColumns.has(column);
 
+  // Rows of 2 mirror the 2-column .focus-grid. Each virtual item is one row
+  // wrapper that reuses .focus-grid, so the responsive media query still
+  // applies: when CSS collapses the grid to 1 column the two cards stack
+  // inside the wrapper and per-row measurement stays correct.
+  const rows = useMemo(() => chunk(filteredLeads, 2), [filteredLeads]);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const listRendered = !isLoading && filteredLeads.length > 0;
+  const { scrollElement, scrollMargin } = useLeadListScrollAnchor(containerRef, listRendered);
+
+  const virtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
+    count: rows.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 250,
+    overscan: 3,
+    scrollMargin,
+    // A row can measure 0 mid-layout (or in jsdom); keep the estimate then
+    // so the scroll geometry never collapses.
+    measureElement: (el) => el.getBoundingClientRect().height || 250,
+  });
+
   return (
     <section className="focus-all-leads">
       <div className="focus-all-leads-head">
@@ -75,8 +100,25 @@ export function LeadCardList({
       ) : filteredLeads.length === 0 ? (
         <div className="focus-list-state">No leads found.</div>
       ) : (
-        <div className="focus-grid">
-          {filteredLeads.map((lead) => {
+        <div ref={containerRef} style={{ position: "relative", height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => (
+            <div
+              key={item.key}
+              className="focus-grid"
+              data-index={item.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${item.start - virtualizer.options.scrollMargin}px)`,
+                // Preserves the inter-row grid gap; the trailing row getting
+                // it too is harmless.
+                paddingBottom: 14,
+              }}
+            >
+              {rows[item.index].map((lead) => {
             const selected = selectedIds.has(lead.id);
             const name = fullNameOf(lead);
             const temp = effectiveTempOf(lead);
@@ -237,6 +279,8 @@ export function LeadCardList({
               </article>
             );
           })}
+            </div>
+          ))}
         </div>
       )}
 

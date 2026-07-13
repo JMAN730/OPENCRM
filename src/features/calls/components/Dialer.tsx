@@ -68,6 +68,13 @@ export function Dialer({ leadId, initialPhone }: DialerProps) {
 
   const { data: tokenData, error: tokenError } = trpc.calls.generateToken.useQuery(undefined, {
     retry: false,
+    // Twilio access tokens expire after 1h (ttl: 3600 in calls.generateToken).
+    // The app-wide refetchOnWindowFocus:false default would let a backgrounded
+    // tab keep an expired token, so opt back into focus refetch — but only
+    // once the token is near expiry, to avoid rebuilding the Device (the
+    // effect below is keyed on the token) on every tab return.
+    refetchOnWindowFocus: true,
+    staleTime: 50 * 60 * 1000,
   });
   const logCallMutation = trpc.calls.logCall.useMutation();
   const { data: recentCalls, refetch: refetchRecent } = trpc.calls.getRecent.useQuery();

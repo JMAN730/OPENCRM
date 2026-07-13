@@ -20,6 +20,12 @@ let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => voi
 let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
 let scriptsMock: Array<{ id: string; category: string; title: string; body: string }> = [];
 
+vi.mock("@/lib/features", () => ({
+  TRAINER_ENABLED: true,
+  DIALER_ENABLED: true,
+  SCRIPTS_ENABLED: true,
+}));
+
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
     data: {

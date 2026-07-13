@@ -6,6 +6,7 @@ import { ScriptsPanel } from "@/features/scripts/components/ScriptsPanel";
 import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
 import { formatLocation, getMapsUrl } from "@/features/leads/location";
 import { formatPhone } from "@/lib/phone";
+import { DIALER_ENABLED, SCRIPTS_ENABLED, TRAINER_ENABLED } from "@/lib/features";
 import {
   Dialog,
   DialogContent,
@@ -863,7 +864,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
           </div>
 
           <div className="crm-modal-actions">
-            {lead.phone ? (
+            {DIALER_ENABLED && lead.phone ? (
               <Link
                 className="crm-btn primary"
                 href={`/dialer?leadId=${lead.id}&phone=${encodeURIComponent(lead.phone)}`}
@@ -876,9 +877,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 <Mail size={13} /> Email
               </a>
             ) : null}
-            <Link className="crm-btn" href={`/trainer?leadId=${lead.id}`}>
-              <Dumbbell size={13} /> Practice Call
-            </Link>
+            {TRAINER_ENABLED ? (
+              <Link className="crm-btn" href={`/trainer?leadId=${lead.id}`}>
+                <Dumbbell size={13} /> Practice Call
+              </Link>
+            ) : null}
             <button className="crm-btn" onClick={() => setNoteOpen(true)}>
               <NotebookPen size={13} /> Log note
             </button>
@@ -1278,9 +1281,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 ) : null}
               </div>
 
-            <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
-              <BookOpen size={13} /> Scripts
-            </button>
+            {SCRIPTS_ENABLED ? (
+              <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
+                <BookOpen size={13} /> Scripts
+              </button>
+            ) : null}
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button

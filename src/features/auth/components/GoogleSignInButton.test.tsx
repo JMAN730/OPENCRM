@@ -44,6 +44,28 @@ describe("GoogleSignInButton", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders nothing when getProviders() returns no providers at all", async () => {
+    mockGetProviders.mockResolvedValue(null);
+
+    render(<GoogleSignInButton />);
+
+    await waitFor(() => expect(mockGetProviders).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /continue with google/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders nothing (and does not throw) when getProviders() rejects", async () => {
+    mockGetProviders.mockRejectedValue(new Error("network error"));
+
+    render(<GoogleSignInButton />);
+
+    await waitFor(() => expect(mockGetProviders).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /continue with google/i })
+    ).not.toBeInTheDocument();
+  });
+
   it("starts the Google OAuth flow targeting the dashboard on click", async () => {
     mockGetProviders.mockResolvedValue({ google: { id: "google" } });
 

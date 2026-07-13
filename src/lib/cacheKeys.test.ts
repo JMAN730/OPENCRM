@@ -14,6 +14,11 @@ describe("cache key builders", () => {
     expect(keys.demoGenBucket("org-1", "lead-9")).toBe("demo-gen:org-1:lead-9");
   });
 
+  it("scopes the OAuth auto-provisioning rate-limit bucket by email, distinct from credentials signin", () => {
+    expect(keys.authOauthProvisionBucket("x@y.com")).toBe("auth:oauth-provision:x@y.com");
+    expect(keys.authOauthProvisionBucket("x@y.com")).not.toBe(keys.authSigninBucket("x@y.com"));
+  });
+
   it("produces distinct namespaces per builder", () => {
     const all = Object.values(keys).map((fn) =>
       (fn as (...args: string[]) => string)("a", "b"),

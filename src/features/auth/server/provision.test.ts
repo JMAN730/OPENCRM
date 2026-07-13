@@ -70,6 +70,23 @@ describe("provisionUserWithOrganization", () => {
     );
   });
 
+  it("falls back to the default org name when organizationName is whitespace-only", async () => {
+    await provisionUserWithOrganization({
+      prisma,
+      name: "Jane",
+      email: "jane@x.com",
+      organizationName: "   ",
+    });
+
+    expect(mockPrisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organization: { create: expect.objectContaining({ name: "Jane's Organization" }) },
+        }),
+      })
+    );
+  });
+
   it("stores the password hash when provided (credentials registration)", async () => {
     await provisionUserWithOrganization({
       prisma,
@@ -108,5 +125,32 @@ describe("provisionUserWithOrganization", () => {
 
     expect(result).toEqual({ userId: "u-1", organizationId: "org-1" });
     consoleSpy.mockRestore();
+  });
+
+  it("still succeeds when saving the Stripe customer id fails", async () => {
+    mockCreateStripeCustomer.mockResolvedValueOnce("cus_123");
+    mockPrisma.organizationSubscription.update.mockRejectedValueOnce(new Error("db down"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await provisionUserWithOrganization({
+      prisma,
+      name: "Jane",
+      email: "jane@x.com",
+    });
+
+    expect(result).toEqual({ userId: "u-1", organizationId: "org-1" });
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[auth.provision] Stripe customer creation failed",
+      expect.any(Error)
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it("does not create a Stripe customer update when no customer id is returned", async () => {
+    mockCreateStripeCustomer.mockResolvedValueOnce(null);
+
+    await provisionUserWithOrganization({ prisma, name: "Jane", email: "jane@x.com" });
+
+    expect(mockPrisma.organizationSubscription.update).not.toHaveBeenCalled();
   });
 });
