@@ -103,6 +103,7 @@ PEXELS_API_KEY="..."
 # Optional – Twilio (browser dialer)
 TWILIO_ACCOUNT_SID="..."
 TWILIO_AUTH_TOKEN="..."
+TWILIO_MESSAGING_SERVICE_SID="MG..."  # Required for SMS outreach sending
 TWILIO_API_KEY="..."
 TWILIO_API_SECRET="..."
 TWILIO_TWIML_APP_SID="..."

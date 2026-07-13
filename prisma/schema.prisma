@@ -115,6 +115,9 @@ model Organization {
   scheduledScrapes  ScheduledScrape[]
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
+  smsDrafts         SmsDraft[]
+  smsEvents         SmsEvent[]
+  phoneOptOuts      PhoneOptOut[]
   salesScripts      SalesScript[]
   outreachJobs      OutreachJob[]
 
@@ -232,6 +235,7 @@ model Lead {
   tags         LeadTag[]
   websites     GeneratedWebsite[]
   emailDrafts  EmailDraft[]
+  smsDrafts    SmsDraft[]
   trainingSessions TrainingSession[]
   outreachJob  OutreachJob?
 
@@ -392,6 +396,8 @@ enum ActivityType {
   NOTE_DELETED
   EMAIL_DRAFT_CREATED
   EMAIL_SENT
+  SMS_DRAFT_CREATED
+  SMS_SENT
   DEMO_GENERATED
   LEAD_ENRICHED
 }
@@ -619,6 +625,7 @@ model GeneratedWebsite {
   slug           String?      @unique
   organizationId String?
   emailDrafts    EmailDraft[]
+  smsDrafts      SmsDraft[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -720,6 +727,70 @@ model EmailOptOut {
   createdAt      DateTime     @default(now())
 
   @@unique([email, organizationId])
+  @@index([organizationId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMS outreach feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SmsDraftStatus {
+  DRAFT
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model SmsDraft {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId           String
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteId        String?
+  website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  toPhone          String
+  body             String            @db.Text
+  status           SmsDraftStatus    @default(DRAFT)
+  twilioMessageSid String?           @unique
+  sentAt           DateTime?
+  events           SmsEvent[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // At most one DRAFT row per lead — enforced by the partial unique index
+  // "SmsDraft_leadId_active_draft_key" in the migration SQL (Prisma cannot
+  // express partial indexes declaratively).
+  @@index([leadId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([toPhone])
+}
+
+model SmsEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftId        String
+  draft          SmsDraft     @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  event          String
+  dedupKey       String?      @unique
+  data           Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([draftId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model PhoneOptOut {
+  id             String       @id @default(cuid())
+  phone          String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([phone, organizationId])
   @@index([organizationId])
 }
 

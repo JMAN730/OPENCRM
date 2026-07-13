@@ -18,6 +18,7 @@ import { outreachRouter } from "@/features/outreach/server/router";
 import { mapRouter } from "@/features/map/server/router";
 import { billingRouter } from "@/features/billing/server/router";
 import { platformRouter } from "@/features/admin/server/router";
+import { smsRouter } from "@/features/sms/server/router";
 
 export const appRouter = createTRPCRouter({
   leads: leadsRouter,
@@ -39,6 +40,7 @@ export const appRouter = createTRPCRouter({
   map: mapRouter,
   billing: billingRouter,
   platform: platformRouter,
+  sms: smsRouter,
 });
 
 export type AppRouter = typeof appRouter;
