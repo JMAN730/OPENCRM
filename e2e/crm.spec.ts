@@ -572,6 +572,19 @@ async function seedSmokeSession(context: BrowserContext, page: Page) {
   return user;
 }
 
+async function navigateViaSidebar(page: Page, href: string) {
+  const sidebar = page.locator(".crm-sidebar");
+  const menuToggle = page.getByRole("button", { name: "Toggle menu" });
+
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+    await expect(sidebar).toHaveClass(/is-open/);
+  }
+
+  await sidebar.locator(`a[href="${href}"]`).first().click();
+  await expect(page).toHaveURL(new URL(href, BASE_URL).toString());
+}
+
 test("redirects anonymous users to sign in for protected routes", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fdashboard/);
@@ -668,7 +681,7 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await leadCard.getByTitle("Delete").click();
   await expect(leadCard).toHaveCount(0);
 
-  await page.goto("/tasks");
+  await navigateViaSidebar(page, "/tasks");
   const tasksMain = page.getByRole("main");
   await expect(tasksMain.getByRole("heading", { name: "Tasks" })).toBeVisible();
   await tasksMain.getByRole("button", { name: /new task/i }).click();
@@ -679,7 +692,7 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await taskRow.getByTitle("Mark complete").click();
   await expect(taskRow.getByText("Completed")).toBeVisible();
 
-  await page.goto("/team");
+  await navigateViaSidebar(page, "/team");
   const teamMain = page.getByRole("main");
   await expect(teamMain.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
   const adminTeamsPanel = teamMain.locator(".crm-card.flush").filter({ hasText: "Teams (admin)" }).first();
