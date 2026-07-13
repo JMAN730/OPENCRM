@@ -58,7 +58,7 @@ export function SmsDraftPanel({ leadId }: SmsDraftPanelProps) {
             Twilio SMS not configured
           </div>
           <div style={{ marginTop: 2, fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-            Add the Twilio Account SID, Auth Token, and Messaging Service SID to enable texting.
+            Add the Twilio Account SID, Auth Token, Messaging Service SID, and a sender name to enable texting.
           </div>
         </div>
       </div>

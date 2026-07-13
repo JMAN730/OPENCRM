@@ -97,6 +97,22 @@ describe("smsRouter", () => {
       });
     });
 
+    it("refuses to draft when SENDER_NAME is not configured", async () => {
+      const { caller, prisma } = createTestCaller();
+      vi.stubEnv("SENDER_NAME", "");
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        phone: "(813) 555-0199",
+      });
+
+      await expect(caller.sms.generate({ leadId: "lead-1" })).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+        message: "SENDER_NAME is required for SMS outreach.",
+      });
+      expect(prisma.smsDraft.create).not.toHaveBeenCalled();
+    });
+
     it("rejects a phone extension instead of folding it into the E.164 destination", async () => {
       const { caller, prisma } = createTestCaller();
       prisma.lead.findFirst.mockResolvedValue({
@@ -158,7 +174,7 @@ describe("smsRouter", () => {
             "Hi Ava, this is Maya's Web Studio. Edited outreach body\n\nReply STOP to opt out",
           status: "DRAFT",
           toPhone: "+18135550199",
-          lead: { id: "lead-1" },
+          lead: { id: "lead-1", phone: "(813) 555-0199" },
         });
       prisma.smsDraft.update.mockResolvedValue({ id: "sms-1", status: "SENT" });
       mockSendSms.mockResolvedValue({ messageSid: "SM123" });
@@ -177,6 +193,7 @@ describe("smsRouter", () => {
         data: {
           sentAt: expect.any(Date),
           status: "SENT",
+          toPhone: "+18135550199",
           twilioMessageSid: "SM123",
         },
       });
@@ -197,6 +214,106 @@ describe("smsRouter", () => {
           userId: "user-1",
         },
       });
+    });
+
+    it("sends to the lead's current phone when it changed after drafting and persists it", async () => {
+      const { caller, prisma } = createTestCaller({
+        sessionOverrides: { role: "USER" },
+      });
+      prisma.smsDraft.findFirst
+        .mockResolvedValueOnce({ id: "sms-1" })
+        .mockResolvedValueOnce({
+          id: "sms-1",
+          leadId: "lead-1",
+          organizationId: "org-1",
+          body:
+            "Hi Ava, this is Maya's Web Studio. Hello\n\nReply STOP to opt out",
+          status: "DRAFT",
+          toPhone: "+18135550199",
+          lead: { id: "lead-1", phone: "(813) 555-0277" },
+        });
+      prisma.smsDraft.update.mockResolvedValue({ id: "sms-1", status: "SENT" });
+      mockSendSms.mockResolvedValue({ messageSid: "SM456" });
+
+      await expect(caller.sms.send({ id: "sms-1" })).resolves.toEqual({
+        messageId: "SM456",
+      });
+
+      expect(mockSendSms).toHaveBeenCalledWith({
+        body:
+          "Hi Ava, this is Maya's Web Studio. Hello\n\nReply STOP to opt out",
+        to: "+18135550277",
+      });
+      expect(prisma.phoneOptOut.findUnique).toHaveBeenCalledWith({
+        where: {
+          phone_organizationId: {
+            phone: "+18135550277",
+            organizationId: "org-1",
+          },
+        },
+        select: { id: true },
+      });
+      expect(prisma.smsDraft.update).toHaveBeenCalledWith({
+        where: { id: "sms-1", organizationId: "org-1", status: "SENDING" },
+        data: {
+          sentAt: expect.any(Date),
+          status: "SENT",
+          toPhone: "+18135550277",
+          twilioMessageSid: "SM456",
+        },
+      });
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: {
+          description: "Outreach SMS sent to +18135550277",
+          leadId: "lead-1",
+          organizationId: "org-1",
+          type: "SMS_SENT",
+          userId: "user-1",
+        },
+      });
+    });
+
+    it("refuses to send when the lead no longer has a phone number", async () => {
+      const { caller, prisma } = createTestCaller();
+      prisma.smsDraft.findFirst
+        .mockResolvedValueOnce({ id: "sms-1" })
+        .mockResolvedValueOnce({
+          id: "sms-1",
+          leadId: "lead-1",
+          body:
+            "Hi Ava, this is Maya's Web Studio. Hello\n\nReply STOP to opt out",
+          status: "DRAFT",
+          toPhone: "+18135550199",
+          lead: { id: "lead-1", phone: null },
+        });
+
+      await expect(caller.sms.send({ id: "sms-1" })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Lead no longer has a phone number.",
+      });
+      expect(prisma.smsDraft.updateMany).not.toHaveBeenCalled();
+      expect(mockSendSms).not.toHaveBeenCalled();
+    });
+
+    it("refuses to send when SENDER_NAME is not configured", async () => {
+      const { caller, prisma } = createTestCaller();
+      vi.stubEnv("SENDER_NAME", "");
+      prisma.smsDraft.findFirst
+        .mockResolvedValueOnce({ id: "sms-1" })
+        .mockResolvedValueOnce({
+          id: "sms-1",
+          leadId: "lead-1",
+          body: "Hi Ava, this is Maya's Web Studio. Hello\n\nReply STOP to opt out",
+          status: "DRAFT",
+          toPhone: "+18135550199",
+          lead: { id: "lead-1", phone: "+18135550199" },
+        });
+
+      await expect(caller.sms.send({ id: "sms-1" })).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+        message: "SENDER_NAME is required for SMS outreach.",
+      });
+      expect(mockSendSms).not.toHaveBeenCalled();
     });
 
     it("reports Twilio as not configured without attempting delivery", async () => {
@@ -221,7 +338,7 @@ describe("smsRouter", () => {
           body: "Hello",
           status: "DRAFT",
           toPhone: "+18135550199",
-          lead: { id: "lead-1" },
+          lead: { id: "lead-1", phone: "+18135550199" },
         });
       prisma.phoneOptOut.findUnique.mockResolvedValue({ id: "opt-1" });
 
@@ -263,7 +380,7 @@ describe("smsRouter", () => {
             "Hi Ava, this is Maya's Web Studio. Hello\n\nReply STOP to opt out",
           status: "DRAFT",
           toPhone: "+18135550199",
-          lead: { id: "lead-1" },
+          lead: { id: "lead-1", phone: "+18135550199" },
         });
       prisma.smsDraft.updateMany.mockResolvedValue({ count: 0 });
 
@@ -284,7 +401,7 @@ describe("smsRouter", () => {
           body: "Hi Ava, this is Maya's Web Studio. Hello",
           status: "DRAFT",
           toPhone: "+18135550199",
-          lead: { id: "lead-1" },
+          lead: { id: "lead-1", phone: "+18135550199" },
         });
 
       await expect(caller.sms.send({ id: "sms-1" })).rejects.toMatchObject({

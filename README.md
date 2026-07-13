@@ -105,7 +105,7 @@ SENDER_NAME="Your Business"
 NEXT_PUBLIC_APP_URL="https://crm.example.com"
 ```
 
-Create the Messaging Service in Twilio and enable Advanced Opt-Out before enabling production sending. Complete any required sender/campaign registration for your jurisdiction and use case. If the three Twilio SMS values are absent, the lead panel reports that SMS is not configured and the rest of OpenCRM continues normally.
+Create the Messaging Service in Twilio and enable Advanced Opt-Out before enabling production sending. Complete any required sender/campaign registration for your jurisdiction and use case. If any of the three Twilio SMS values or `SENDER_NAME` are absent, the lead panel reports that SMS is not configured and the rest of OpenCRM continues normally.
 
 ## Project structure
 

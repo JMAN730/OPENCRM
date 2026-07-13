@@ -57,8 +57,19 @@ export function normalizePhoneE164(value: string): string {
   );
 }
 
+function requireSenderName(): string {
+  const senderName = process.env.SENDER_NAME?.trim();
+  if (!senderName) {
+    throw new OutreachSmsError(
+      "NOT_CONFIGURED",
+      "SENDER_NAME is required for SMS outreach.",
+    );
+  }
+  return senderName;
+}
+
 function assertCompliantBody(body: string): void {
-  const senderName = process.env.SENDER_NAME?.trim() || "ClientCore";
+  const senderName = requireSenderName();
   const lines = body.trimEnd().split(/\r?\n/);
   if (!body.includes(senderName)) {
     throw new OutreachSmsError(
@@ -89,7 +100,7 @@ function demoUrl(slug: string): string {
 
 function draftBody(lead: Lead, websiteSlug?: string | null): string {
   const greeting = lead.firstName?.trim() || "there";
-  const senderName = process.env.SENDER_NAME?.trim() || "ClientCore";
+  const senderName = requireSenderName();
   const company = lead.company?.trim() || "your business";
   const pitch = websiteSlug
     ? `I put together a quick website demo for ${company}: ${demoUrl(websiteSlug)}`
@@ -187,13 +198,18 @@ export async function sendDraft(
 
   const draft = await prisma.smsDraft.findFirst({
     where: { id: opts.draftId, organizationId: opts.organizationId },
-    include: { lead: { select: { id: true } } },
+    include: { lead: { select: { id: true, phone: true } } },
   });
   if (!draft) throw new OutreachSmsError("NOT_FOUND", "SMS draft not found.");
   if (draft.status !== SmsDraftStatus.DRAFT) {
     throw new OutreachSmsError("ALREADY_SENT", "SMS draft was already sent.");
   }
-  const phone = normalizePhoneE164(draft.toPhone);
+  // Always send to the lead's CURRENT phone — it may have changed (or been
+  // removed) after the draft was generated.
+  if (!draft.lead.phone) {
+    throw new OutreachSmsError("NO_PHONE", "Lead no longer has a phone number.");
+  }
+  const phone = normalizePhoneE164(draft.lead.phone);
   await assertPhoneNotOptedOut(prisma, phone, opts.organizationId);
   assertCompliantBody(draft.body);
 
@@ -235,6 +251,7 @@ export async function sendDraft(
     },
     data: {
       status: SmsDraftStatus.SENT,
+      toPhone: phone,
       twilioMessageSid: messageSid,
       sentAt: new Date(),
     },

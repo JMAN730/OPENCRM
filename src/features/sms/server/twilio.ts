@@ -9,8 +9,9 @@ function smsConfig() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  const senderName = process.env.SENDER_NAME?.trim();
 
-  if (!accountSid || !authToken || !messagingServiceSid) return null;
+  if (!accountSid || !authToken || !messagingServiceSid || !senderName) return null;
   return { accountSid, authToken, messagingServiceSid };
 }
 
@@ -22,7 +23,7 @@ export async function sendSms(input: SendSmsInput): Promise<{ messageSid: string
   const config = smsConfig();
   if (!config) {
     throw new Error(
-      "Twilio SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_MESSAGING_SERVICE_SID.",
+      "Twilio SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_MESSAGING_SERVICE_SID, and SENDER_NAME.",
     );
   }
 
