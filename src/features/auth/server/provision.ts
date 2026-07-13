@@ -16,6 +16,9 @@ type ProvisionInput = {
  * Create a new Organization (with a 14-day STARTER trial) and its first
  * ADMIN user. Shared by credentials registration and first-time Google
  * OAuth sign-in. Stripe customer creation is best-effort.
+ *
+ * Callers must catch Prisma `P2002` errors from this provisioning function
+ * and handle concurrent duplicate-email races gracefully.
  */
 export async function provisionUserWithOrganization({
   prisma,

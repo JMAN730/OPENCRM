@@ -1,20 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
-const { mockSignIn, mockGetProviders } = vi.hoisted(() => ({
+const { mockSignIn, mockGetProviders, mockToastError } = vi.hoisted(() => ({
   mockSignIn: vi.fn(),
   mockGetProviders: vi.fn(),
+  mockToastError: vi.fn(),
 }));
 
 vi.mock("next-auth/react", () => ({
   signIn: mockSignIn,
   getProviders: mockGetProviders,
 }));
+vi.mock("sonner", () => ({
+  toast: { error: mockToastError },
+}));
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSignIn.mockResolvedValue(undefined);
 });
 
 describe("GoogleSignInButton", () => {
@@ -51,5 +56,25 @@ describe("GoogleSignInButton", () => {
     expect(mockSignIn).toHaveBeenCalledWith("google", {
       callbackUrl: "/dashboard",
     });
+  });
+
+  it("reports an OAuth kickoff failure and lets the user retry", async () => {
+    mockGetProviders.mockResolvedValue({ google: { id: "google" } });
+    mockSignIn.mockRejectedValueOnce(new Error("network down"));
+
+    render(<GoogleSignInButton />);
+
+    const button = await screen.findByRole("button", {
+      name: /continue with google/i,
+    });
+    fireEvent.click(button);
+
+    expect(button).toBeDisabled();
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith(
+        "Couldn't start Google sign-in. Please try again."
+      );
+    });
+    expect(button).toBeEnabled();
   });
 });

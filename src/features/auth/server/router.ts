@@ -131,13 +131,22 @@ export const authRouter = createTRPCRouter({
 
       const hashed = await bcrypt.hash(input.password, 12);
 
-      await provisionUserWithOrganization({
-        prisma: ctx.prisma,
-        name: input.name,
-        email,
-        passwordHash: hashed,
-        organizationName: input.organizationName,
-      });
+      try {
+        await provisionUserWithOrganization({
+          prisma: ctx.prisma,
+          name: input.name,
+          email,
+          passwordHash: hashed,
+          organizationName: input.organizationName,
+        });
+      } catch (err) {
+        if ((err as { code?: string })?.code !== "P2002") throw err;
+
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "An account with that email already exists.",
+        });
+      }
 
       return { ok: true };
     }),

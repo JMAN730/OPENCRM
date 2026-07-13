@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getProviders, signIn } from "next-auth/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
  */
 export function GoogleSignInButton() {
   const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +35,14 @@ export function GoogleSignInButton() {
         type="button"
         variant="outline"
         className="w-full gap-2"
-        onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+        disabled={isRedirecting}
+        onClick={() => {
+          setIsRedirecting(true);
+          void signIn("google", { callbackUrl: "/dashboard" }).catch(() => {
+            setIsRedirecting(false);
+            toast.error("Couldn't start Google sign-in. Please try again.");
+          });
+        }}
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
           <path

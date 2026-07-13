@@ -134,12 +134,12 @@ export const authOptions: NextAuthOptions = {
         // IP here (NextAuth doesn't pass the request in App Router), so we
         // key on email alone — sufficient to block credential stuffing on a
         // single account.
-        const rl = await rateLimit({
+        const rateLimitResult = await rateLimit({
           key: keys.authSigninBucket(email),
           limit: 10,
           windowSeconds: 60,
         });
-        if (!rl.ok) {
+        if (!rateLimitResult.ok) {
           // Returning null surfaces as "invalid credentials" on the client,
           // which is the right user-facing message — we don't want to leak
           // that this account is being attacked.
@@ -189,12 +189,12 @@ export const authOptions: NextAuthOptions = {
         // like registration and rate-limit it. Keyed on email — NextAuth
         // doesn't expose the request IP here (same constraint as the
         // credentials authorize() above).
-        const rl = await rateLimit({
+        const rateLimitResult = await rateLimit({
           key: keys.authOauthProvisionBucket(email),
           limit: 5,
           windowSeconds: 60 * 60,
         });
-        if (!rl.ok) return false;
+        if (!rateLimitResult.ok) return false;
 
         // First-time Google sign-in: provision an organization + ADMIN user,
         // same as credentials registration but without a password.

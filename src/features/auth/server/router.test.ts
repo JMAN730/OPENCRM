@@ -321,6 +321,17 @@ describe("authRouter.register", () => {
     expect(prisma.organization.create).not.toHaveBeenCalled();
   });
 
+  it("returns CONFLICT when another registration wins the email race", async () => {
+    const { caller, prisma } = createTestCaller({ session: null });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockRejectedValue({ code: "P2002" });
+
+    await expect(caller.auth.register(validInput)).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "An account with that email already exists.",
+    });
+  });
+
   it("hashes the password before storing", async () => {
     const { caller, prisma } = createTestCaller({ session: null });
     prisma.user.findUnique.mockResolvedValue(null);
