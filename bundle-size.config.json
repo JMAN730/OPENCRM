@@ -1,0 +1,8 @@
+{
+  "policy": "Per-route client-JS gzip ceilings (whole KB) for the mobile-critical routes locked in #239: /leads, /tasks, /dashboard. Lead details is a modal inside the /leads bundle and needs no separate entry; /pipeline is desktop-first (#239) and is excluded. Ceilings were seeded from `npm run bundle:check`'s own measurement on main + 2% (rounded up to the whole KB), NOT copied from the baseline report, so the ratchet's reference and its enforcement share one measurement method. TIGHTENING POLICY: ceilings ratchet DOWN toward the binding 250 KB gzip budget as the #270 server-prefetch PRs shrink these routes — after such a PR lands, lower the affected number. RAISING a ceiling requires explicit justification in the PR that changes it.",
+  "routes": {
+    "/leads": 304,
+    "/tasks": 284,
+    "/dashboard": 282
+  }
+}
