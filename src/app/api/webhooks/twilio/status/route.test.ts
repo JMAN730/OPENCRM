@@ -69,6 +69,14 @@ describe("Twilio SMS status webhook", () => {
     });
   });
 
+  it("accepts a callback for an unknown message id without error or side effects", async () => {
+    mockPrisma.smsDraft.findFirst.mockResolvedValue(null);
+    const response = await POST(request("delivered"));
+    expect(response.status).toBe(200);
+    expect(mockPrisma.smsDraft.update).not.toHaveBeenCalled();
+    expect(mockPrisma.smsEvent.create).not.toHaveBeenCalled();
+  });
+
   it("correlates an early callback by signed draft id and persists the Twilio SID", async () => {
     mockPrisma.smsDraft.findFirst.mockResolvedValue({
       id: "sms-1",
