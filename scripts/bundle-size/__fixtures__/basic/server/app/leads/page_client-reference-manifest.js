@@ -1,0 +1,2 @@
+globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
+globalThis.__RSC_MANIFEST["/leads/page"] = {"clientModules":{"[project]/src/app/leads/LeadsList.tsx":{"id":1,"name":"*","chunks":["/_next/static/chunks/root.js","/_next/static/chunks/leads.js"],"async":false},"[project]/src/components/LeadDialog.tsx":{"id":2,"name":"*","chunks":["/_next/static/chunks/leads.js","/_next/static/chunks/lazy-dialog.js"],"async":true}}};
