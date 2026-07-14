@@ -1,5 +1,5 @@
 import type { DemoContent } from "@/lib/ai";
-import { packForCategory, type PackTheme, type TemplatePack } from "./packs";
+import { nicheForCategory, packForCategory, type PackTheme, type TemplatePack } from "./packs";
 
 /**
  * The single source of truth for what a generated demo site says and shows.
@@ -90,7 +90,7 @@ export function buildDemoView(input: DemoViewInput): DemoView {
   const { content } = input;
   const pack: TemplatePack = packForCategory(input.category);
   const businessName = input.businessName || "Demo Site";
-  const specialty = input.category || pack.copy.specialtyFallback;
+  const specialty = nicheForCategory(input.category) ?? pack.copy.specialtyFallback;
   const serviceArea = input.city || "Local area";
   const phone = input.phone;
   const leadPhotos = (input.photos ?? content.photos ?? []).filter(Boolean);

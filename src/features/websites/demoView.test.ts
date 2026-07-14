@@ -58,10 +58,17 @@ describe("buildDemoView", () => {
   });
 
   it("marquee services fall back to the specialty when the AI returned none", () => {
+    // "Auto repair" matches the Mobile Mechanics pack, so the specialty is the
+    // pack's copy-safe niche label, not the raw scraper category.
     const view = buildDemoView({ ...base, content: makeContent({ services: [] }) });
     expect(view.services).toEqual([]);
-    expect(view.marqueeServices).toEqual(["Auto repair"]);
-    expect(view.footer.serviceLinks).toEqual(["Auto repair"]);
+    expect(view.marqueeServices).toEqual(["Mobile mechanic"]);
+    expect(view.footer.serviceLinks).toEqual(["Mobile mechanic"]);
+  });
+
+  it("passes an unmatched category through as the specialty", () => {
+    const view = buildDemoView({ ...base, category: "Chimney Sweep" });
+    expect(view.specialty).toBe("Chimney Sweep");
   });
 
   it("filters blank photos and honors the photos override", () => {
