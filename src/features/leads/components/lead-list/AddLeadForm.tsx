@@ -29,7 +29,7 @@ export function AddLeadForm({ onCancel, onSubmit }: AddLeadFormProps) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "oklch(15% 0.012 70 / 0.32)",
+        background: "oklch(15% 0.012 260 / 0.32)",
         backdropFilter: "blur(2px)",
         zIndex: 60,
         display: "grid",
