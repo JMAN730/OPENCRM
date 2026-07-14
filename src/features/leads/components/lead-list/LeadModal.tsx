@@ -7,6 +7,7 @@ import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
 import { SmsDraftPanel } from "@/features/sms/components/SmsDraftPanel";
 import { formatLocation, getMapsUrl } from "@/features/leads/location";
 import { formatPhone } from "@/lib/phone";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import { DIALER_ENABLED, SCRIPTS_ENABLED, TRAINER_ENABLED } from "@/lib/features";
 import {
   Dialog,
@@ -104,6 +105,7 @@ function LogNoteDialog({
   leadId: string;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const [text, setText] = useState("");
   const utils = trpc.useUtils();
   const createNote = trpc.leads.createNote.useMutation({
@@ -209,6 +211,7 @@ function ViewNotesDialog({
   onClose: () => void;
   onAddNote: () => void;
 }) {
+  useBodyScrollLock();
   const utils = trpc.useUtils();
   const deleteNote = trpc.leads.deleteNote.useMutation({
     onSuccess: () => {
@@ -410,6 +413,7 @@ function ViewNotesDialog({
 }
 
 function ScriptsDialog({ onClose }: { onClose: () => void }) {
+  useBodyScrollLock();
   return (
     <div
       style={{
@@ -499,6 +503,7 @@ type LeadModalProps = {
 };
 
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
+  useBodyScrollLock();
   const name = fullNameOf(lead);
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
