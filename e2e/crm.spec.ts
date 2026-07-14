@@ -322,6 +322,12 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
     case "emails.getDraftForLead":
       return null;
 
+    case "sms.configuration":
+      return { configured: false };
+
+    case "sms.getForLead":
+      return null;
+
     case "tasks.create": {
       const payload = (input ?? {}) as {
         title: string;
