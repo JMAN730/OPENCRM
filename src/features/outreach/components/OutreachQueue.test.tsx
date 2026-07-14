@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bulkSendMutateAsync = vi.fn();
@@ -200,10 +200,10 @@ describe("OutreachQueue", () => {
 
     render(<OutreachQueue />);
 
-    const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes).toHaveLength(2);
-    fireEvent.click(checkboxes[0]);
-    fireEvent.click(checkboxes[1]);
+    const smsRow = screen.getByText("Acme Plumbing").closest("tr")!;
+    const emailRow = screen.getByText("Acme Landscaping").closest("tr")!;
+    fireEvent.click(within(smsRow).getByRole("checkbox"));
+    fireEvent.click(within(emailRow).getByRole("checkbox"));
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Send 2 selected/i })).not.toBeDisabled(),
@@ -225,5 +225,26 @@ describe("OutreachQueue", () => {
       expect(invalidateListMock).toHaveBeenCalled();
       expect(invalidateStatsMock).toHaveBeenCalled();
     });
+  });
+
+  it("surfaces a toast error when the bulk send call rejects outright", async () => {
+    bulkSendMutateAsync.mockRejectedValue(new Error("Rate limit exceeded."));
+
+    render(<OutreachQueue />);
+
+    const smsRow = screen.getByText("Acme Plumbing").closest("tr")!;
+    const emailRow = screen.getByText("Acme Landscaping").closest("tr")!;
+    fireEvent.click(within(smsRow).getByRole("checkbox"));
+    fireEvent.click(within(emailRow).getByRole("checkbox"));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Send 2 selected/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Send 2 selected/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Rate limit exceeded.");
+    });
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
