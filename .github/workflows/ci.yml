@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   DATABASE_URL: "postgresql://crm:crm@localhost:5432/crm"
   NEXTAUTH_SECRET: "dummy-ci-secret-not-real"
