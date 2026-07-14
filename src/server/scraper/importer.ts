@@ -174,6 +174,7 @@ export async function importRowsToLeads(opts: {
     rating: number | null;
     reviewCount: number | null;
     source: string;
+    category: string | null;
     organizationId: string;
     assignedToId: string;
   }> = [];
@@ -252,6 +253,7 @@ export async function importRowsToLeads(opts: {
       rating: Number.isFinite(rating) ? rating : null,
       reviewCount: Number.isFinite(reviewCount) ? reviewCount : null,
       source: sourceParts.join(" / "),
+      category: (row.Category ?? "").trim() || null,
       organizationId,
       assignedToId,
     });
@@ -272,6 +274,7 @@ export async function importRowsToLeads(opts: {
           rating: row.rating,
           reviewCount: row.reviewCount,
           source: row.source,
+          category: row.category,
           organizationId: row.organizationId,
           assignedToId: row.assignedToId,
         })),

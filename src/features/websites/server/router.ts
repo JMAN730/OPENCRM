@@ -2,7 +2,6 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { Prisma } from "@prisma/client";
-import { TEMPLATE_IDS, getTemplate } from "@/features/websites/templates";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
@@ -15,45 +14,6 @@ export const websitesRouter = createTRPCRouter({
       return ctx.prisma.generatedWebsite.findFirst({
         where: { leadId: input.leadId, lead: await visibleLeadWhere(ctx) },
         orderBy: { createdAt: "desc" },
-      });
-    }),
-
-  generate: organizationProcedure
-    .input(z.object({ leadId: z.string(), template: z.enum(TEMPLATE_IDS) }))
-    .mutation(async ({ ctx, input }) => {
-      const template = getTemplate(input.template);
-      if (!template) throw new TRPCError({ code: "BAD_REQUEST", message: "Unknown template." });
-
-      const lead = await requireVisibleLead(ctx, input.leadId, {
-        include: { notes: { take: 3, orderBy: { createdAt: "desc" } } },
-      });
-
-      const { title, ...sections } = template.fillContent(lead);
-
-      const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { leadId: input.leadId },
-      });
-
-      if (existing) {
-        return ctx.prisma.generatedWebsite.update({
-          where: { id: existing.id },
-          data: {
-            template: input.template,
-            title,
-            content: sections,
-            organizationId: ctx.organizationId,
-          },
-        });
-      }
-
-      return ctx.prisma.generatedWebsite.create({
-        data: {
-          leadId: input.leadId,
-          template: input.template,
-          title,
-          content: sections,
-          organizationId: ctx.organizationId,
-        },
       });
     }),
 
@@ -79,36 +39,6 @@ export const websitesRouter = createTRPCRouter({
       });
 
       return { ...website, needsPhotos };
-    }),
-
-  update: organizationProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        content: z.object({
-          hero: z.object({ title: z.string().max(200), tagline: z.string().max(500), cta: z.string().max(100) }),
-          about: z.object({ heading: z.string().max(200), body: z.string().max(5000) }),
-          services: z.array(z.object({ title: z.string().max(200), description: z.string().max(2000) })).max(50),
-          contact: z.object({ phone: z.string().max(50), email: z.string().max(255), address: z.string().max(500) }),
-          footer: z.object({ tagline: z.string().max(500) }),
-        }),
-        title: z.string().max(200).optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { id: input.id, lead: await visibleLeadWhere(ctx) },
-        select: { id: true },
-      });
-      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
-
-      return ctx.prisma.generatedWebsite.update({
-        where: { id: input.id },
-        data: {
-          content: input.content,
-          ...(input.title ? { title: input.title } : {}),
-        },
-      });
     }),
 
   delete: organizationProcedure

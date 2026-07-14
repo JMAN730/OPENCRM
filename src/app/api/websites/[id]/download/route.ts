@@ -5,8 +5,9 @@ import { createTRPCContext } from "@/server/trpc";
 import type { DemoContent } from "@/lib/ai";
 import {
   buildDemoExport,
-  DEMO_EXPORT_ASSETS,
+  demoExportAssetSources,
   type DemoExportFile,
+  type DemoExportSite,
 } from "@/features/websites/server/export";
 
 export const runtime = "nodejs";
@@ -23,7 +24,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   const site = await trpcCtx.prisma.generatedWebsite.findFirst({
     where: { id, lead: { organizationId } },
-    include: { lead: { select: { company: true, phone: true, city: true, source: true } } },
+    include: {
+      lead: {
+        select: { company: true, phone: true, city: true, category: true, rating: true, reviewCount: true },
+      },
+    },
   });
 
   if (!site) {
@@ -34,18 +39,18 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: "Only AI demo websites can be downloaded" }, { status: 400 });
   }
 
-  const exportFiles = await readBundledAssets();
-  const demoExport = buildDemoExport(
-    {
-      title: site.title,
-      businessName: site.lead.company ?? site.title,
-      phone: site.lead.phone,
-      city: site.lead.city,
-      category: site.lead.source,
-      content: site.content as unknown as DemoContent,
-    },
-    exportFiles,
-  );
+  const exportSite: DemoExportSite = {
+    title: site.title,
+    businessName: site.lead.company ?? site.title,
+    phone: site.lead.phone,
+    city: site.lead.city,
+    category: site.lead.category,
+    rating: site.lead.rating,
+    reviewCount: site.lead.reviewCount,
+    content: site.content as unknown as DemoContent,
+  };
+  const exportFiles = await readBundledAssets(exportSite);
+  const demoExport = buildDemoExport(exportSite, exportFiles);
 
   const archiveEntries = Object.fromEntries(
     demoExport.files.map((file) => [file.path, file.data]),
@@ -61,9 +66,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   });
 }
 
-async function readBundledAssets(): Promise<DemoExportFile[]> {
+async function readBundledAssets(site: DemoExportSite): Promise<DemoExportFile[]> {
   const files = await Promise.all(
-    DEMO_EXPORT_ASSETS.map(async (asset) => ({
+    demoExportAssetSources(site).map(async (asset) => ({
       path: asset.target,
       data: await readFile(asset.source),
     })),

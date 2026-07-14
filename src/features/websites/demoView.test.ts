@@ -58,10 +58,17 @@ describe("buildDemoView", () => {
   });
 
   it("marquee services fall back to the specialty when the AI returned none", () => {
+    // "Auto repair" matches the Mobile Mechanics pack, so the specialty is the
+    // pack's copy-safe niche label, not the raw scraper category.
     const view = buildDemoView({ ...base, content: makeContent({ services: [] }) });
     expect(view.services).toEqual([]);
-    expect(view.marqueeServices).toEqual(["Auto repair"]);
-    expect(view.footer.serviceLinks).toEqual(["Auto repair"]);
+    expect(view.marqueeServices).toEqual(["Mobile mechanic"]);
+    expect(view.footer.serviceLinks).toEqual(["Mobile mechanic"]);
+  });
+
+  it("passes an unmatched category through as the specialty", () => {
+    const view = buildDemoView({ ...base, category: "Chimney Sweep" });
+    expect(view.specialty).toBe("Chimney Sweep");
   });
 
   it("filters blank photos and honors the photos override", () => {
@@ -82,5 +89,37 @@ describe("buildDemoView", () => {
     expect(buildDemoView(base).mapEmbedUrl).toBe(
       "https://www.google.com/maps?q=Acme%20Auto%20Austin&output=embed",
     );
+  });
+
+  it("resolves the generic pack for unknown categories and exposes its theme", () => {
+    const view = buildDemoView({ ...base, category: "Underwater basket weaving" });
+    expect(view.packId).toBe("generic");
+    expect(view.theme.accent).toBeTruthy();
+  });
+
+  it("falls back to the pack's curated photos when the lead has none", () => {
+    const view = buildDemoView({ ...base, content: makeContent({ photos: [] }) });
+    expect(view.photos.length).toBeGreaterThan(0);
+    expect(view.photos[0]).toMatch(/^\//);
+  });
+
+  it("shows the real Google rating when the scraper captured it", () => {
+    const view = buildDemoView({ ...base, rating: 4.8, reviewCount: 127 });
+    expect(view.reviewsBadge).toEqual({
+      score: "4.8",
+      stars: "★★★★★",
+      note: "127 Google reviews",
+    });
+  });
+
+  it("rounds partial ratings into the star row", () => {
+    const view = buildDemoView({ ...base, rating: 3.4, reviewCount: 12 });
+    expect(view.reviewsBadge.score).toBe("3.4");
+    expect(view.reviewsBadge.stars).toBe("★★★☆☆");
+  });
+
+  it("keeps the neutral demo badge without a rating", () => {
+    const view = buildDemoView({ ...base, rating: null, reviewCount: null });
+    expect(view.reviewsBadge).toEqual({ score: "5.0", stars: "★★★★★", note: "Demo reviews" });
   });
 });

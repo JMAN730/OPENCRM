@@ -1,26 +1,38 @@
 import { buildDemoView, type DemoView, type DemoViewInput } from "@/features/websites/demoView";
+import type { CSSProperties } from "react";
 
 type DemoTemplateProps = DemoViewInput;
 
 const heroImage = "/demo-template/workshop.jpg";
-const shopImage = "/demo-template/shop-exterior.jpg";
 const logoImage = "/demo-template/logo.png";
 
 export function DemoTemplate(props: DemoTemplateProps) {
   const view: DemoView = buildDemoView(props);
-  const { photos } = view;
+  const { photos, theme } = view;
   const telHref = view.telHref ?? undefined;
 
+  const themeVars = {
+    "--dt-accent": theme.accent,
+    "--dt-accent-dark": theme.accentDark,
+    "--dt-deep": theme.deep,
+    "--dt-ink": theme.ink,
+    "--dt-paper": theme.paper,
+    "--dt-paper-alt": theme.paperAlt,
+  } as CSSProperties;
+
   return (
-    <div className="min-h-screen bg-[#faf7f0] text-[#0b0d14] [font-family:Manrope,system-ui,sans-serif]">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#070d22]/88 px-5 py-3 text-[#f4efe6] backdrop-blur md:px-10">
+    <div
+      style={themeVars}
+      className="min-h-screen bg-[var(--dt-paper)] text-[var(--dt-ink)] [font-family:Manrope,system-ui,sans-serif]"
+    >
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[color-mix(in_srgb,var(--dt-deep)_88%,transparent)] px-5 py-3 text-[var(--dt-paper-alt)] backdrop-blur md:px-10">
         <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <a href="#top" className="flex min-w-0 items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoImage}
               alt=""
-              className="size-11 shrink-0 rounded-full bg-[#f4efe6] p-1"
+              className="size-11 shrink-0 rounded-full bg-[var(--dt-paper-alt)] p-1"
             />
             <span className="min-w-0">
               <span className="block truncate text-xl font-black italic uppercase tracking-tight [font-family:'Arial_Narrow',Impact,sans-serif]">
@@ -35,14 +47,14 @@ export function DemoTemplate(props: DemoTemplateProps) {
           <div className="hidden items-center gap-8 text-sm font-semibold md:flex">
             <a href="#services" className="hover:text-white">Services</a>
             <a href="#why" className="hover:text-white">Why Us</a>
-            <a href="#gallery" className="hover:text-white">Shop</a>
+            <a href="#gallery" className="hover:text-white">{view.galleryNavLabel}</a>
             <a href="#reviews" className="hover:text-white">Reviews</a>
             <a href="#contact" className="hover:text-white">Visit</a>
           </div>
 
           <a
             href={telHref ?? "#contact"}
-            className="shrink-0 rounded-full bg-[#b5172a] px-4 py-2 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-red-950/30 hover:bg-[#8e0f1f]"
+            className="shrink-0 rounded-full bg-[var(--dt-accent)] px-4 py-2 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-black/30 hover:bg-[var(--dt-accent-dark)]"
           >
             {view.headerCta}
           </a>
@@ -52,13 +64,13 @@ export function DemoTemplate(props: DemoTemplateProps) {
       <main>
         <section
           id="top"
-          className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-[#070d22] px-5 pb-10 pt-32 text-[#f4efe6] md:px-10 md:pb-14"
+          className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-[var(--dt-deep)] px-5 pb-10 pt-32 text-[var(--dt-paper-alt)] md:px-10 md:pb-14"
         >
           <div
             className="absolute inset-0 scale-110 bg-cover bg-center brightness-[.36] contrast-125 saturate-110"
             style={{ backgroundImage: `url(${photos[0] ?? heroImage})` }}
           />
-          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,13,34,.38),rgba(7,13,34,.16)_32%,rgba(7,13,34,.9)_88%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,color-mix(in_srgb,var(--dt-deep)_38%,transparent),color-mix(in_srgb,var(--dt-deep)_16%,transparent)_32%,color-mix(in_srgb,var(--dt-deep)_90%,transparent)_88%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(rgba(244,239,230,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(244,239,230,.045)_1px,transparent_1px)] bg-[length:56px_56px]" />
 
           <div className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
@@ -88,20 +100,20 @@ export function DemoTemplate(props: DemoTemplateProps) {
             </div>
 
             <div className="max-w-md lg:ml-auto">
-              <p className="text-base leading-7 text-[#f4efe6]/80">
-                <span className="font-bold text-[#f4efe6]">{view.businessName}</span>{" "}
+              <p className="text-base leading-7 text-[var(--dt-paper-alt)]/80">
+                <span className="font-bold text-[var(--dt-paper-alt)]">{view.businessName}</span>{" "}
                 {view.subheadline}
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
                   href={telHref ?? "#contact"}
-                  className="rounded-full bg-[#b5172a] px-6 py-3 text-sm font-black uppercase tracking-wide text-white hover:bg-[#8e0f1f]"
+                  className="rounded-full bg-[var(--dt-accent)] px-6 py-3 text-sm font-black uppercase tracking-wide text-white hover:bg-[var(--dt-accent-dark)]"
                 >
                   {view.cta}
                 </a>
                 <a
                   href="#services"
-                  className="rounded-full border border-white/15 px-6 py-3 text-sm font-bold uppercase tracking-wide text-[#f4efe6] hover:bg-white/10"
+                  className="rounded-full border border-white/15 px-6 py-3 text-sm font-bold uppercase tracking-wide text-[var(--dt-paper-alt)] hover:bg-white/10"
                 >
                   {view.viewServicesLabel}
                 </a>
@@ -123,7 +135,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
               {view.marqueeServices.map((service, index) => (
                 <article
                   key={service}
-                  className="min-h-56 bg-[#faf7f0] p-7 transition hover:bg-[#0b0d14] hover:text-[#f4efe6]"
+                  className="min-h-56 bg-[var(--dt-paper)] p-7 transition hover:bg-[var(--dt-ink)] hover:text-[var(--dt-paper-alt)]"
                 >
                   <div className="flex items-start justify-between">
                     <span className="text-xs font-bold uppercase tracking-[0.2em] text-[#6b7280]">
@@ -143,31 +155,31 @@ export function DemoTemplate(props: DemoTemplateProps) {
           </div>
         </section>
 
-        <section id="why" className="bg-[#070d22] px-5 py-20 text-[#f4efe6] md:px-10 lg:py-32">
+        <section id="why" className="bg-[var(--dt-deep)] px-5 py-20 text-[var(--dt-paper-alt)] md:px-10 lg:py-32">
           <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-2">
             <div className="relative aspect-[4/5] overflow-hidden rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photos[0] ?? heroImage} alt="" className="h-full w-full object-cover" />
-              <span className="absolute bottom-6 left-6 rounded bg-[#f4efe6] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#0b0d14]">
+              <span className="absolute bottom-6 left-6 rounded bg-[var(--dt-paper-alt)] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--dt-ink)]">
                 {view.whyPhotoCaption}
               </span>
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#b5172a]">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--dt-accent)]">
                 {view.sections.why.kicker}
               </p>
               <h2 className="mt-4 text-5xl font-black uppercase italic leading-[.88] [font-family:'Arial_Narrow',Impact,sans-serif] md:text-7xl">
                 {view.sections.why.titleLines.map((line, index) => (
                   <span key={line} className="block">
                     {index === view.sections.why.accentLine ? (
-                      <span className="text-[#b5172a]">{line}</span>
+                      <span className="text-[var(--dt-accent)]">{line}</span>
                     ) : (
                       line
                     )}
                   </span>
                 ))}
               </h2>
-              <p className="mt-7 max-w-xl text-lg leading-8 text-[#f4efe6]/75">
+              <p className="mt-7 max-w-xl text-lg leading-8 text-[var(--dt-paper-alt)]/75">
                 {view.sections.why.body}
               </p>
               <div className="mt-10 grid border border-white/15 bg-white/15 sm:grid-cols-2">
@@ -179,7 +191,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
           </div>
         </section>
 
-        <section id="gallery" className="bg-[#0b0d14] px-5 py-20 text-[#f4efe6] md:px-10 lg:py-32">
+        <section id="gallery" className="bg-[var(--dt-ink)] px-5 py-20 text-[var(--dt-paper-alt)] md:px-10 lg:py-32">
           <div className="mx-auto max-w-7xl">
             <SectionHeader
               number={view.sections.gallery.kicker}
@@ -188,11 +200,12 @@ export function DemoTemplate(props: DemoTemplateProps) {
               dark
             />
             <div className="grid auto-rows-[88px] grid-cols-6 gap-4 lg:grid-cols-12">
-              <GalleryTile src={photos[0] ?? shopImage} label="The Shop" index="01/06" className="col-span-6 row-span-5 lg:col-span-7" />
-              <GalleryTile src={photos[1] ?? heroImage} label="Lift Bay" index="02/06" className="col-span-6 row-span-3 lg:col-span-5" />
+              <GalleryTile src={photos[1] ?? photos[0]} label={view.galleryTileLabels[0]} index="01/06" className="col-span-6 row-span-5 lg:col-span-7" />
+              <GalleryTile src={photos[2] ?? photos[0] ?? heroImage} label={view.galleryTileLabels[1]} index="02/06" className="col-span-6 row-span-3 lg:col-span-5" />
               {view.marqueeServices.slice(0, 4).map((service, index) => (
                 <GalleryTile
                   key={service}
+                  src={photos[3 + index]}
                   label={service}
                   index={`${String(index + 3).padStart(2, "0")}/06`}
                   className="col-span-6 row-span-2 lg:col-span-3"
@@ -203,11 +216,11 @@ export function DemoTemplate(props: DemoTemplateProps) {
         </section>
 
         {view.testimonials.length > 0 && (
-          <section id="reviews" className="bg-[#f4efe6] px-5 py-20 md:px-10 lg:py-32">
+          <section id="reviews" className="bg-[var(--dt-paper-alt)] px-5 py-20 md:px-10 lg:py-32">
             <div className="mx-auto max-w-7xl">
               <div className="mb-14 grid items-end gap-8 lg:grid-cols-[1fr_auto]">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#b5172a]">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--dt-accent)]">
                     {view.sections.reviews.kicker}
                   </p>
                   <h2 className="mt-3 text-6xl font-black uppercase italic leading-none [font-family:'Arial_Narrow',Impact,sans-serif]">
@@ -229,14 +242,14 @@ export function DemoTemplate(props: DemoTemplateProps) {
                 {view.testimonials.map((testimonial) => (
                   <figure
                     key={`${testimonial.author}-${testimonial.quote}`}
-                    className="border border-black/10 bg-[#faf7f0] p-7"
+                    className="border border-black/10 bg-[var(--dt-paper)] p-7"
                   >
                     <p className="text-sm text-amber-500">★★★★★</p>
-                    <blockquote className="mt-5 text-base leading-7 text-[#1a1d26]">
+                    <blockquote className="mt-5 text-base leading-7 text-[var(--dt-ink)]">
                       &ldquo;{testimonial.quote}&rdquo;
                     </blockquote>
                     <figcaption className="mt-6 flex items-center gap-3">
-                      <span className="grid size-10 place-items-center rounded-full bg-[#0e1b3d] text-sm font-bold text-[#f4efe6]">
+                      <span className="grid size-10 place-items-center rounded-full bg-[var(--dt-deep)] text-sm font-bold text-[var(--dt-paper-alt)]">
                         {testimonial.author[0]}
                       </span>
                       <span>
@@ -266,7 +279,7 @@ export function DemoTemplate(props: DemoTemplateProps) {
                   <ContactBlock key={block.label} label={block.label} value={block.value} sub={block.sub} />
                 ))}
               </div>
-              <div className="relative min-h-[420px] overflow-hidden rounded-lg bg-[#0b0d14]">
+              <div className="relative min-h-[420px] overflow-hidden rounded-lg bg-[var(--dt-ink)]">
                 {view.googleMapsUrl ? (
                   <iframe
                     src={view.mapEmbedUrl}
@@ -278,12 +291,12 @@ export function DemoTemplate(props: DemoTemplateProps) {
                 ) : (
                   <>
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(244,239,230,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(244,239,230,.05)_1px,transparent_1px)] bg-[length:42px_42px]" />
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(181,23,42,.28),transparent_42%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,color-mix(in_srgb,var(--dt-accent)_28%,transparent),transparent_42%)]" />
                     <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-full flex-col items-center gap-3">
-                      <span className="whitespace-nowrap rounded bg-[#f4efe6] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#0b0d14]">
+                      <span className="whitespace-nowrap rounded bg-[var(--dt-paper-alt)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--dt-ink)]">
                         {view.businessName}
                       </span>
-                      <span className="size-4 rounded-full bg-[#b5172a] shadow-[0_0_0_8px_rgba(181,23,42,.25),0_0_0_18px_rgba(181,23,42,.12)]" />
+                      <span className="size-4 rounded-full bg-[var(--dt-accent)] shadow-[0_0_0_8px_color-mix(in_srgb,var(--dt-accent)_25%,transparent),0_0_0_18px_color-mix(in_srgb,var(--dt-accent)_12%,transparent)]" />
                     </div>
                   </>
                 )}
@@ -293,11 +306,11 @@ export function DemoTemplate(props: DemoTemplateProps) {
         </section>
       </main>
 
-      <footer className="bg-[#0b0d14] px-5 py-12 text-[#f4efe6] md:px-10">
+      <footer className="bg-[var(--dt-ink)] px-5 py-12 text-[var(--dt-paper-alt)] md:px-10">
         <div className="mx-auto grid max-w-7xl gap-10 border-b border-white/10 pb-10 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoImage} alt="" className="mb-4 size-14 rounded-full bg-[#f4efe6] p-1" />
+            <img src={logoImage} alt="" className="mb-4 size-14 rounded-full bg-[var(--dt-paper-alt)] p-1" />
             <h4 className="text-2xl font-black uppercase italic [font-family:'Arial_Narrow',Impact,sans-serif]">
               {view.businessName}
             </h4>
@@ -306,12 +319,12 @@ export function DemoTemplate(props: DemoTemplateProps) {
             </p>
           </div>
           <FooterLinks title="Services" items={view.footer.serviceLinks} />
-          <FooterLinks title="Shop" items={view.footer.shopLinks} />
+          <FooterLinks title="Explore" items={view.footer.shopLinks} />
           <div>
-            <h5 className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[#b5172a]">
+            <h5 className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--dt-accent)]">
               Contact
             </h5>
-            <a href={telHref ?? "#contact"} className="text-sm text-[#f4efe6]/75 hover:text-white">
+            <a href={telHref ?? "#contact"} className="text-sm text-[var(--dt-paper-alt)]/75 hover:text-white">
               {view.footer.contactValue}
             </a>
           </div>
@@ -329,7 +342,7 @@ function HeroMeta({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#9ca3af]">{label}</p>
-      <p className="mt-1 text-2xl font-black uppercase italic text-[#f4efe6] [font-family:'Arial_Narrow',Impact,sans-serif]">
+      <p className="mt-1 text-2xl font-black uppercase italic text-[var(--dt-paper-alt)] [font-family:'Arial_Narrow',Impact,sans-serif]">
         {value}
       </p>
     </div>
@@ -339,7 +352,7 @@ function HeroMeta({ label, value }: { label: string; value: string }) {
 function Marquee({ items }: { items: string[] }) {
   const doubled = [...items, ...items, ...items];
   return (
-    <div className="overflow-hidden bg-[#0b0d14] py-5 text-[#f4efe6]">
+    <div className="overflow-hidden bg-[var(--dt-ink)] py-5 text-[var(--dt-paper-alt)]">
       <div className="flex w-max animate-[demo-marquee_38s_linear_infinite] gap-12 whitespace-nowrap">
         {doubled.map((item, index) => (
           <span
@@ -347,7 +360,7 @@ function Marquee({ items }: { items: string[] }) {
             className="inline-flex items-center gap-5 text-3xl font-black uppercase italic [font-family:'Arial_Narrow',Impact,sans-serif]"
           >
             {item}
-            <span className="size-2.5 rounded-full bg-[#b5172a]" />
+            <span className="size-2.5 rounded-full bg-[var(--dt-accent)]" />
           </span>
         ))}
       </div>
@@ -369,16 +382,16 @@ function SectionHeader({
   return (
     <div className="mb-14 grid items-end gap-8 md:grid-cols-[auto_1fr]">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b5172a]">{number}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--dt-accent)]">{number}</p>
         <h2
           className={`mt-3 text-5xl font-black uppercase italic leading-[.88] [font-family:'Arial_Narrow',Impact,sans-serif] md:text-7xl ${
-            dark ? "text-[#f4efe6]" : "text-[#0b0d14]"
+            dark ? "text-[var(--dt-paper-alt)]" : "text-[var(--dt-ink)]"
           }`}
         >
           {title}
         </h2>
       </div>
-      <p className={`max-w-md text-sm leading-6 md:justify-self-end ${dark ? "text-[#f4efe6]/65" : "text-[#6b7280]"}`}>
+      <p className={`max-w-md text-sm leading-6 md:justify-self-end ${dark ? "text-[var(--dt-paper-alt)]/65" : "text-[#6b7280]"}`}>
         {body}
       </p>
     </div>
@@ -387,10 +400,10 @@ function SectionHeader({
 
 function Stat({ value, label, cream = false }: { value: string; label: string; cream?: boolean }) {
   return (
-    <div className="bg-[#070d22] p-7">
+    <div className="bg-[var(--dt-deep)] p-7">
       <p
         className={`text-5xl font-black uppercase italic leading-none [font-family:'Arial_Narrow',Impact,sans-serif] ${
-          cream ? "text-[#f4efe6]" : "text-[#b5172a]"
+          cream ? "text-[var(--dt-paper-alt)]" : "text-[var(--dt-accent)]"
         }`}
       >
         {value}
@@ -434,7 +447,7 @@ function GalleryTile({
 function ContactBlock({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div className="border border-black/10 bg-white p-7">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#b5172a]">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--dt-accent)]">{label}</p>
       <p className="mt-3 text-3xl font-black uppercase italic leading-none [font-family:'Arial_Narrow',Impact,sans-serif]">
         {value}
       </p>
@@ -446,7 +459,7 @@ function ContactBlock({ label, value, sub }: { label: string; value: string; sub
 function FooterLinks({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h5 className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[#b5172a]">
+      <h5 className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--dt-accent)]">
         {title}
       </h5>
       <ul className="space-y-2">

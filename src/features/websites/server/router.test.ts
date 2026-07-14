@@ -63,63 +63,6 @@ describe("websitesRouter", () => {
     });
   });
 
-  describe("generate", () => {
-    const baseLead = {
-      id: "lead-1",
-      company: "Acme Landscaping",
-      firstName: "John",
-      lastName: "Doe",
-      phone: "555-1234",
-      email: "john@acme.com",
-      city: "Tampa",
-      rating: 4.8,
-      reviewCount: 42,
-      notes: [],
-    };
-
-    it("creates a new website when none exists", async () => {
-      prisma.lead.findFirst.mockResolvedValue(baseLead);
-      prisma.generatedWebsite.findFirst.mockResolvedValue(null);
-      const created = { id: "w-new", leadId: "lead-1", template: "my_template", title: expect.any(String), content: expect.any(Object) };
-      prisma.generatedWebsite.create.mockResolvedValue(created);
-
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
-      expect(prisma.generatedWebsite.create).toHaveBeenCalled();
-      expect(result).toMatchObject({ leadId: "lead-1" });
-    });
-
-    it("updates an existing website when one exists", async () => {
-      prisma.lead.findFirst.mockResolvedValue(baseLead);
-      prisma.generatedWebsite.findFirst.mockResolvedValue({ id: "w-1", leadId: "lead-1" });
-      const updated = { id: "w-1", leadId: "lead-1", template: "my_template" };
-      prisma.generatedWebsite.update.mockResolvedValue(updated);
-
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
-      expect(prisma.generatedWebsite.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "w-1" } }),
-      );
-      expect(result).toMatchObject({ id: "w-1" });
-    });
-
-    it("throws NOT_FOUND when the lead doesn't belong to the org", async () => {
-      prisma.lead.findFirst.mockResolvedValue(null);
-      await expect(
-        caller.websites.generate({ leadId: "other-lead", template: "my_template" }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    });
-
-    it("fills in lead details in generated content", async () => {
-      prisma.lead.findFirst.mockResolvedValue({ ...baseLead, notes: [{ content: "Great business!" }] });
-      prisma.generatedWebsite.findFirst.mockResolvedValue(null);
-      prisma.generatedWebsite.create.mockImplementation((args) =>
-        Promise.resolve({ id: "w-1", ...args.data }),
-      );
-
-      const result = await caller.websites.generate({ leadId: "lead-1", template: "my_template" });
-      expect(result.title).toContain("Acme Landscaping");
-    });
-  });
-
   describe("generateAi", () => {
     it("creates an AI demo with fallback content when DeepSeek is not configured", async () => {
       delete process.env.DEEPSEEK_API_KEY;
@@ -135,7 +78,8 @@ describe("websitesRouter", () => {
         city: "Tampa",
         rating: 4.8,
         reviewCount: 42,
-        source: "Landscaping",
+        source: "GoogleMaps / Landscaping / Tampa, FL",
+        category: "Landscaping",
         website: "https://acme.example",
         qualificationSummary: null,
       };
@@ -162,35 +106,6 @@ describe("websitesRouter", () => {
         }),
       );
       expect(result).toMatchObject({ id: "w-ai", template: "ai_demo" });
-    });
-  });
-
-  describe("update", () => {
-    const updateInput = {
-      id: "w-1",
-      content: {
-        hero: { title: "Updated", tagline: "Tagline", cta: "CTA" },
-        about: { heading: "About", body: "Body text" },
-        services: [{ title: "Service", description: "Desc" }],
-        contact: { phone: "555", email: "e@e.com", address: "Tampa" },
-        footer: { tagline: "Footer" },
-      },
-    };
-
-    it("updates the website content", async () => {
-      prisma.generatedWebsite.findFirst.mockResolvedValue({ id: "w-1" });
-      prisma.generatedWebsite.update.mockResolvedValue({ ...updateInput, id: "w-1" });
-
-      const result = await caller.websites.update(updateInput);
-      expect(prisma.generatedWebsite.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "w-1" } }),
-      );
-      expect(result).toMatchObject({ id: "w-1" });
-    });
-
-    it("throws NOT_FOUND when website is outside org scope", async () => {
-      prisma.generatedWebsite.findFirst.mockResolvedValue(null);
-      await expect(caller.websites.update(updateInput)).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 

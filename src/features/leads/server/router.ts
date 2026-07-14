@@ -43,6 +43,7 @@ const leadInputSchema = z.object({
     .enum(["NOT_CONTACTED", "CONNECTED", "AI_VOICEMAIL", "NO_ANSWER", "HUNG_UP"])
     .default("NOT_CONTACTED"),
   source: optionalShortString(100),
+  category: optionalShortString(100),
   qualificationSummary: z.string().max(2000).optional(),
 });
 
@@ -542,6 +543,7 @@ export const leadsRouter = createTRPCRouter({
         if (row.website) data.website = row.website;
         if (row.mapsUrl) data.mapsUrl = row.mapsUrl;
         if (row.source) data.source = row.source;
+        if (row.category) data.category = row.category;
         if (typeof row.rating === "number") data.rating = row.rating;
         if (typeof row.reviewCount === "number") data.reviewCount = row.reviewCount;
         if (email) data.email = email;
