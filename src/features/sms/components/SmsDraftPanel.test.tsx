@@ -56,4 +56,35 @@ describe("SmsDraftPanel", () => {
     expect(screen.getByLabelText("SMS message")).toHaveValue(state.draft.body);
     expect(screen.getByRole("button", { name: /send sms/i })).toBeInTheDocument();
   });
+
+  it("shows the delivered status for a delivered draft", () => {
+    state.draft = {
+      id: "sms-1",
+      body: "Hi there — demo link. Reply STOP to opt out.",
+      status: "DELIVERED",
+      toPhone: "+15552345678",
+      sentAt: new Date("2026-07-01T00:00:00Z"),
+      events: [],
+    };
+    render(<SmsDraftPanel leadId="lead-1" />);
+
+    expect(screen.getByText("Delivered")).toBeInTheDocument();
+  });
+
+  it("flags a failed draft as undeliverable and prompts to call instead", () => {
+    state.draft = {
+      id: "sms-1",
+      body: "Hi there — demo link. Reply STOP to opt out.",
+      status: "FAILED",
+      toPhone: "+15552345678",
+      sentAt: new Date("2026-07-01T00:00:00Z"),
+      events: [],
+    };
+    render(<SmsDraftPanel leadId="lead-1" />);
+
+    expect(screen.getByText("Failed — call instead")).toBeInTheDocument();
+    expect(
+      screen.getByText(/this number was undeliverable\. call this lead instead\./i),
+    ).toBeInTheDocument();
+  });
 });
