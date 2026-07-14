@@ -8,7 +8,6 @@ import {
   Columns,
   Mail,
   MapPin,
-  Phone,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -25,12 +24,6 @@ const FEATURES = [
     title: "AI Qualification & Outreach",
     description:
       "AI scores every lead, drafts personalized outreach emails, and even spins up a demo website for each prospect — ready for your review.",
-  },
-  {
-    icon: Phone,
-    title: "Built-in Dialer",
-    description:
-      "Call leads right from the browser with the Twilio-powered dialer. Every call is logged against the lead automatically.",
   },
   {
     icon: Columns,
@@ -64,9 +57,9 @@ const STEPS = [
       "The outreach pipeline scores each lead, writes a tailored email, and generates a demo site — queued up for your approval, never auto-sent.",
   },
   {
-    title: "Dial, track, and close",
+    title: "Track and close",
     description:
-      "Work the queue with the dialer, log outcomes, schedule follow-up tasks, and watch deals move across the pipeline board.",
+      "Work the queue, log outcomes, schedule follow-up tasks, and watch deals move across the pipeline board.",
   },
 ];
 
@@ -78,7 +71,6 @@ const PLANS = [
       "Up to 3 team seats",
       "Lead scraping & CSV import",
       "AI qualification & email drafts",
-      "Browser dialer & call logging",
       "25 lead tags",
     ],
     highlighted: false,
@@ -112,7 +104,7 @@ const PLANS = [
 const FAQS = [
   {
     q: "Do I own my data?",
-    a: "Yes. ClientCore is open source (MIT) and can be fully self-hosted with Docker on your own infrastructure — your leads, calls, and emails stay in your own PostgreSQL database.",
+    a: "Yes. Your leads, calls, and emails belong to you — export your data at any time.",
   },
   {
     q: "Where do the leads come from?",
@@ -121,10 +113,6 @@ const FAQS = [
   {
     q: "Does the AI send emails on its own?",
     a: "No. The AI drafts outreach emails and demo websites into a review queue — a human always approves before anything is sent. All outreach includes unsubscribe links and your physical address for CAN-SPAM compliance.",
-  },
-  {
-    q: "Can I call leads without leaving the app?",
-    a: "Yes. Connect a Twilio account and the browser dialer lets you place calls directly from a lead's record, with outcomes and notes logged automatically.",
   },
   {
     q: "How do team roles work?",
@@ -201,7 +189,7 @@ function DashboardMockup() {
               <BrandMark size="h-6 w-6 text-xs" />
               <span className="text-xs font-semibold text-white/80">ClientCore</span>
             </div>
-            {["Dashboard", "Leads", "Dialer", "Pipeline", "Tasks", "Analytics"].map((item, i) => (
+            {["Dashboard", "Leads", "Pipeline", "Tasks", "Analytics"].map((item, i) => (
               <div
                 key={item}
                 className={`rounded-md px-3 py-1.5 text-[11px] ${
@@ -316,7 +304,7 @@ export function LandingPage() {
                 Sign in
               </Link>
             </div>
-            <p className="mt-4 text-sm text-white/50">14-day free trial · Open source & self-hostable</p>
+            <p className="mt-4 text-sm text-white/50">14-day free trial</p>
           </div>
 
           <DashboardMockup />
@@ -384,7 +372,7 @@ export function LandingPage() {
               </h2>
               <p className="mt-4 text-lg text-white/60">
                 Every workspace starts on a free 14-day trial — upgrade to any plan whenever
-                you&apos;re ready. Prefer full control? Self-host it free forever.
+                you&apos;re ready.
               </p>
             </div>
             <div className="mt-14 grid gap-6 md:grid-cols-3">
@@ -510,7 +498,7 @@ export function LandingPage() {
         </div>
         <div className="mx-auto mt-10 max-w-6xl px-4 sm:px-6">
           <p className="border-t border-white/10 pt-6 text-xs text-white/40">
-            © {new Date().getFullYear()} ClientCore. Open source under the MIT license.
+            © {new Date().getFullYear()} ClientCore. All rights reserved.
           </p>
         </div>
       </footer>
