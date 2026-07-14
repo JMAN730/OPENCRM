@@ -169,6 +169,11 @@
   --crm-cool: oklch(60% 0.13 220);
   --crm-cool-soft: oklch(95% 0.03 220);
 
+  /* Overlay scrims (drawers, modals, dialogs) */
+  --crm-overlay-soft: oklch(15% 0.012 70 / 0.32);
+  --crm-overlay: oklch(15% 0.012 70 / 0.45);
+  --crm-overlay-modal: oklch(20% 0.012 70 / 0.36);
+
   /* Clay depth */
   --crm-clay-light: rgba(255, 252, 245, 0.9);
   --crm-clay-dark: rgba(130, 110, 85, 0.26);
@@ -257,6 +262,10 @@
   --crm-hot-soft:       oklch(22% 0.08 35);
   --crm-cool:           oklch(68% 0.14 220);
   --crm-cool-soft:      oklch(20% 0.05 220);
+
+  --crm-overlay-soft:   oklch(15% 0.012 260 / 0.32);
+  --crm-overlay:        oklch(15% 0.012 260 / 0.45);
+  --crm-overlay-modal:  oklch(20% 0.012 260 / 0.36);
 
   --crm-clay-light:     rgba(255, 255, 255, 0.06);
   --crm-clay-dark:      rgba(0, 0, 0, 0.42);
@@ -1177,7 +1186,7 @@
   z-index: 60;
 }
 .crm-selbar .crm-pill-btn {
-  background: oklch(30% 0.012 260 / 0.6);
+  background: oklch(30% 0.012 70 / 0.6);
   color: white;
   height: 28px;
   padding: 0 14px;
@@ -1187,13 +1196,13 @@
   border: 0;
   font-family: var(--crm-font-sans);
 }
-.crm-selbar .crm-pill-btn:hover { background: oklch(40% 0.012 260 / 0.7); }
+.crm-selbar .crm-pill-btn:hover { background: oklch(40% 0.012 70 / 0.7); }
 
 /* ===== Drawer ===== */
 .crm-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: oklch(15% 0.012 260 / 0.32);
+  background: var(--crm-overlay-soft);
   backdrop-filter: blur(2px);
   z-index: 50;
   animation: crm-fadeIn 0.18s ease-out;
@@ -1349,7 +1358,7 @@
 .crm-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: oklch(20% 0.012 260 / 0.36);
+  background: var(--crm-overlay-modal);
   backdrop-filter: blur(4px);
   z-index: 60;
   display: grid;
