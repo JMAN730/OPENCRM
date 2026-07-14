@@ -8,6 +8,7 @@ import type { AppRouter } from "@/server/api/root";
 import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import {
   ChevronLeft,
   ChevronRight,
@@ -203,6 +204,7 @@ function DayPanel({
   onCreateForDay: (date: Date) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const pending = tasks.filter((t) => t.status !== "COMPLETED");
   const done = tasks.filter((t) => t.status === "COMPLETED");
 
@@ -399,6 +401,7 @@ function TaskDrawer({
   onDelete: (t: CalendarTask) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   return (
     <div
       style={{
@@ -593,6 +596,7 @@ function CreateTaskDialog({
   onSave: (data: TaskFormData) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const [form, setForm] = useState<TaskFormData>({
     title: "",
     description: "",
@@ -790,6 +794,7 @@ function DeleteConfirm({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   return (
     <div
       style={{

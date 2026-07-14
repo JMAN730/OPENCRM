@@ -4,10 +4,14 @@ import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { Toaster } from "@/components/ui/sonner";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // The mobile nav drawer covers the page; lock the page scroll behind it.
+  useBodyScrollLock(sidebarOpen);
 
   return (
     <div className={`crm-app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>

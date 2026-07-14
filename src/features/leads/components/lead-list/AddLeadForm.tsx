@@ -1,11 +1,14 @@
 "use client";
 
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
+
 type AddLeadFormProps = {
   onCancel: () => void;
   onSubmit: (data: Record<string, string>) => void;
 };
 
 export function AddLeadForm({ onCancel, onSubmit }: AddLeadFormProps) {
+  useBodyScrollLock();
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);

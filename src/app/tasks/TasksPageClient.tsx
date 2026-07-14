@@ -19,6 +19,7 @@ import {
   eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths,
 } from "date-fns";
 import { getTaskSummaryCounts, isTaskOverdue } from "./task-summary";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
 
 type TaskItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
@@ -108,6 +109,8 @@ function ModalOverlay({
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+
+  useBodyScrollLock();
 
   // Move focus into the dialog on open, restore it on close.
   useEffect(() => {
