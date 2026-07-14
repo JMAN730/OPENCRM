@@ -526,6 +526,10 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [editingOutcomeId, setEditingOutcomeId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editHint, setEditHint] = useState("");
+  const [confirmDeleteOutcome, setConfirmDeleteOutcome] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [dispositionOpen, setDispositionOpen] = useState(false);
   const [dispositionId, setDispositionId] = useState<string | null>(
     lead.secondaryOutcome?.id ?? null,
@@ -634,6 +638,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onSuccess: () => {
       toast.success("Outcome deleted");
       setEditingOutcomeId(null);
+      setConfirmDeleteOutcome(null);
       void utils.leads.customOutcomes.list.invalidate();
       void utils.leads.getAll.invalidate();
       void utils.leads.getStatusCounts.invalidate();
@@ -851,6 +856,42 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       ) : null}
       {viewScriptsOpen ? <ScriptsDialog onClose={() => setViewScriptsOpen(false)} /> : null}
       {editOpen ? <EditLeadDialog lead={lead} onClose={() => setEditOpen(false)} /> : null}
+      <Dialog
+        open={confirmDeleteOutcome !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !deleteCustomOutcome.isPending) setConfirmDeleteOutcome(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete outcome</DialogTitle>
+            <DialogDescription>
+              Delete the &quot;{confirmDeleteOutcome?.label}&quot; outcome? Leads using it will be
+              reset to Not Contacted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              disabled={deleteCustomOutcome.isPending}
+              onClick={() => setConfirmDeleteOutcome(null)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={deleteCustomOutcome.isPending}
+              variant="destructive"
+              onClick={() => {
+                if (confirmDeleteOutcome) {
+                  deleteCustomOutcome.mutate({ id: confirmDeleteOutcome.id });
+                }
+              }}
+            >
+              {deleteCustomOutcome.isPending ? "Deleting…" : "Delete outcome"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="crm-modal-backdrop" onClick={onClose}>
         <div className="crm-modal crm-app" onClick={(event) => event.stopPropagation()}>
           <div className="crm-modal-head">
@@ -1029,15 +1070,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                           title="Delete outcome"
                           aria-label={`Delete ${item.label}`}
                           disabled={deleteCustomOutcome.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
-                              )
-                            ) {
-                              deleteCustomOutcome.mutate({ id: item.id });
-                            }
-                          }}
+                          onClick={() =>
+                            setConfirmDeleteOutcome({ id: item.id, label: item.label })
+                          }
                         >
                           <Trash2 size={11} />
                         </button>
@@ -1247,15 +1282,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                             title="Delete outcome"
                             aria-label={`Delete ${item.label}`}
                             disabled={deleteCustomOutcome.isPending}
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
-                                )
-                              ) {
-                                deleteCustomOutcome.mutate({ id: item.id });
-                              }
-                            }}
+                            onClick={() =>
+                              setConfirmDeleteOutcome({ id: item.id, label: item.label })
+                            }
                           >
                             <Trash2 size={11} />
                           </button>
