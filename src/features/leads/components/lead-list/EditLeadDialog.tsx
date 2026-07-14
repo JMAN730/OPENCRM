@@ -76,7 +76,7 @@ export function EditLeadDialog({ lead, onClose }: Props) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "oklch(15% 0.012 70 / 0.45)",
+        background: "var(--crm-overlay)",
         backdropFilter: "blur(2px)",
         zIndex: 200,
         display: "grid",
