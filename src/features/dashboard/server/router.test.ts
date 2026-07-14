@@ -57,6 +57,10 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(result.callsToday).toBe(3);
     expect(result.answeredCallsPrev7d).toBe(12);
     expect(result.totalCallsPrev7d).toBe(50);
+
+    // Verify answeredCallsPrev7d filter uses outcome: "ANSWERED"
+    const answeredCallsWhere = prisma.activity.count.mock.calls[1][0].where;
+    expect(answeredCallsWhere.outcome).toBe("ANSWERED");
   });
 
   it("counts only CALL_OUTCOME activities with a non-NOT_CONTACTED outcome as calls", async () => {
@@ -182,6 +186,8 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(prisma.activity.count.mock.calls[0][0].where.organizationId).toBe("org-1");
     // answeredCallsPrev7d (second activity.count call)
     expect(prisma.activity.count.mock.calls[1][0].where.organizationId).toBe("org-1");
+    // totalCallsPrev7d (third activity.count call)
+    expect(prisma.activity.count.mock.calls[2][0].where.organizationId).toBe("org-1");
     // outcome distribution groupBy (first lead.groupBy call)
     expect(prisma.lead.groupBy.mock.calls[0][0].where.organizationId).toBe("org-1");
     // lead status/pipeline groupBy (second lead.groupBy call)

@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { type LeadScope, leadWhereFromScope } from "@/server/teams/scope";
-import { touchWhere } from "@/server/touches";
+import { touchWhere, touchWhereSql } from "@/server/touches";
 
 /**
  * Sales analytics service — pure, scope-aware metric functions shared by the
@@ -251,10 +251,9 @@ export async function getRepPerformance(db: Db, scope: LeadScope): Promise<RepPe
       FROM "Lead" l
       JOIN (
         SELECT "leadId", MIN("createdAt") AS first_call
-        FROM "Activity"
-        WHERE type = 'CALL_OUTCOME'
-          AND outcome IS NOT NULL
-          AND outcome <> 'NOT_CONTACTED'
+        FROM "Activity" a
+        WHERE a."organizationId" = ${scope.organizationId}
+          AND ${touchWhereSql()}
         GROUP BY "leadId"
       ) fc ON fc."leadId" = l.id
       WHERE l."organizationId" = ${scope.organizationId}

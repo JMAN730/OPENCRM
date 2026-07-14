@@ -9,7 +9,8 @@ import {
   getRepPerformance,
 } from "./salesAnalytics";
 import { keys } from "@/lib/cacheKeys";
-import { touchWhere } from "@/server/touches";
+import { touchWhere, touchWhereSql } from "@/server/touches";
+import { Prisma } from "@prisma/client";
 
 const SALES_TTL_SECONDS = 60;
 
@@ -60,9 +61,7 @@ export const analyticsRouter = createTRPCRouter({
         SELECT date_trunc('day', a."createdAt") AS day, COUNT(*)::bigint AS count
         FROM "Activity" a
         WHERE a."organizationId" = ${organizationId}
-          AND a.type = 'CALL_OUTCOME'
-          AND a.outcome IS NOT NULL
-          AND a.outcome <> 'NOT_CONTACTED'
+          AND ${touchWhereSql()}
           AND a."createdAt" >= ${thirtyDaysAgo}
         GROUP BY 1 ORDER BY 1 ASC
       `,

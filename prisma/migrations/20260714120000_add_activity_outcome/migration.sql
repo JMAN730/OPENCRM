@@ -22,5 +22,5 @@ FROM "Lead" l
 WHERE a."leadId" = l.id AND a."organizationId" IS NULL;
 
 -- Touch aggregations filter by (org, type, createdAt).
-CREATE INDEX "Activity_organizationId_type_createdAt_idx"
+CREATE INDEX CONCURRENTLY "Activity_organizationId_type_createdAt_idx"
   ON "Activity"("organizationId", "type", "createdAt");
