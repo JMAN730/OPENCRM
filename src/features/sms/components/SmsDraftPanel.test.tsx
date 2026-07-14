@@ -82,7 +82,7 @@ describe("SmsDraftPanel", () => {
     };
     render(<SmsDraftPanel leadId="lead-1" />);
 
-    expect(screen.getByText(/failed.*call instead/i)).toBeInTheDocument();
+    expect(screen.getByText("Failed — call instead")).toBeInTheDocument();
     expect(
       screen.getByText(/this number was undeliverable\. call this lead instead\./i),
     ).toBeInTheDocument();
