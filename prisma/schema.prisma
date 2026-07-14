@@ -410,6 +410,11 @@ model Activity {
   id          String       @id @default(cuid())
   type        ActivityType
   description String
+
+  // Structured call outcome for CALL_OUTCOME activities (a "Touch" when not
+  // NOT_CONTACTED). Null for other activity types. Source of all "Calls"
+  // metrics — see docs/adr/0002-call-metrics-from-activity-touches.md.
+  outcome CallOutcome?
   leadId      String
   lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId      String
@@ -425,6 +430,9 @@ model Activity {
 
   @@index([leadId])
   @@index([organizationId, createdAt])
+  // Touch aggregations: "Calls" metrics filter by (org, type, createdAt) —
+  // see docs/adr/0002-call-metrics-from-activity-touches.md.
+  @@index([organizationId, type, createdAt])
 }
 
 enum TaskPriority {

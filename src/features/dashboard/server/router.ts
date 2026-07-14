@@ -2,6 +2,7 @@ import { createTRPCRouter, organizationProcedure, protectedProcedure } from "@/s
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
 import { keys } from "@/lib/cacheKeys";
+import { touchWhere } from "@/server/touches";
 
 const DASHBOARD_TTL_SECONDS = 60;
 
@@ -18,19 +19,21 @@ export const dashboardRouter = createTRPCRouter({
         const sevenDaysAgo = subDays(today, 6); // 7-day window including today
         const fourteenDaysAgo = subDays(today, 13); // start of prev 7-day window
 
+        const orgTouches = touchWhere(organizationId);
+
         const [
           callsTodayCount,
           followupsDueCount,
           outcomeDistribution,
           leadsByStatusResult,
-          recentCalls,
+          recentTouches,
           callsPerDayRows,
-          connectedCallsPerDayRows,
-          connectedCallsPrev7d,
+          answeredCallsPerDayRows,
+          answeredCallsPrev7d,
           totalCallsPrev7d,
         ] = await Promise.all([
-          ctx.prisma.callLog.count({
-            where: { lead: { organizationId }, createdAt: { gte: today, lt: tomorrow } },
+          ctx.prisma.activity.count({
+            where: { ...orgTouches, createdAt: { gte: today, lt: tomorrow } },
           }),
           ctx.prisma.task.count({
             where: { organizationId, status: { not: "COMPLETED" }, dueDate: { gte: today, lt: tomorrow }, deletedAt: null },
@@ -45,47 +48,52 @@ export const dashboardRouter = createTRPCRouter({
             where: { organizationId },
             _count: { id: true },
           }),
-          ctx.prisma.callLog.findMany({
-            where: { lead: { organizationId } },
+          ctx.prisma.activity.findMany({
+            where: orgTouches,
             orderBy: { createdAt: "desc" },
             take: 15,
-            include: { lead: { select: { phone: true, callOutcome: true } } },
+            include: {
+              lead: { select: { id: true, firstName: true, lastName: true, company: true, phone: true } },
+              user: { select: { name: true, email: true } },
+            },
           }),
-          // All calls per day (last 7 days) — for total sparkline + callsToday delta
+          // All touches per day (last 7 days) — for total sparkline + callsToday delta
           ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
-            SELECT date_trunc('day', cl."createdAt") AS day,
+            SELECT date_trunc('day', a."createdAt") AS day,
                    COUNT(*)::bigint AS count
-            FROM "CallLog" cl
-            JOIN "Lead" l ON cl."leadId" = l.id
-            WHERE l."organizationId" = ${organizationId}
-              AND cl."createdAt" >= ${sevenDaysAgo}
+            FROM "Activity" a
+            WHERE a."organizationId" = ${organizationId}
+              AND a.type = 'CALL_OUTCOME'
+              AND a.outcome IS NOT NULL
+              AND a.outcome <> 'NOT_CONTACTED'
+              AND a."createdAt" >= ${sevenDaysAgo}
             GROUP BY 1
             ORDER BY 1 ASC
           `,
-          // CONNECTED calls per day (last 7 days) — for answer-rate sparkline
+          // ANSWERED touches per day (last 7 days) — for answer-rate sparkline
           ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
-            SELECT date_trunc('day', cl."createdAt") AS day,
+            SELECT date_trunc('day', a."createdAt") AS day,
                    COUNT(*)::bigint AS count
-            FROM "CallLog" cl
-            JOIN "Lead" l ON cl."leadId" = l.id
-            WHERE l."organizationId" = ${organizationId}
-              AND cl.status = 'CONNECTED'
-              AND cl."createdAt" >= ${sevenDaysAgo}
+            FROM "Activity" a
+            WHERE a."organizationId" = ${organizationId}
+              AND a.type = 'CALL_OUTCOME'
+              AND a.outcome = 'ANSWERED'
+              AND a."createdAt" >= ${sevenDaysAgo}
             GROUP BY 1
             ORDER BY 1 ASC
           `,
-          // CONNECTED calls in prev 7-day window — for delta on connected KPI
-          ctx.prisma.callLog.count({
+          // ANSWERED touches in prev 7-day window — for delta on answered KPI
+          ctx.prisma.activity.count({
             where: {
-              lead: { organizationId },
-              status: "CONNECTED",
+              ...orgTouches,
+              outcome: "ANSWERED",
               createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
             },
           }),
-          // Total calls in prev 7-day window — for answer-rate delta
-          ctx.prisma.callLog.count({
+          // Total touches in prev 7-day window — for answer-rate delta
+          ctx.prisma.activity.count({
             where: {
-              lead: { organizationId },
+              ...orgTouches,
               createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
             },
           }),
@@ -121,19 +129,19 @@ export const dashboardRouter = createTRPCRouter({
         };
 
         const callsPerDay = fillDays(callsPerDayRows);
-        const connectedCallsPerDay = fillDays(connectedCallsPerDayRows);
+        const answeredCallsPerDay = fillDays(answeredCallsPerDayRows);
         // Derived call-outcome KPI values
         const totalCallsLast7d = callsPerDay.reduce((s, d) => s + d.count, 0);
-        const connectedCallsLast7d = connectedCallsPerDay.reduce((s, d) => s + d.count, 0);
+        const answeredCallsLast7d = answeredCallsPerDay.reduce((s, d) => s + d.count, 0);
         // yesterday = index 5 (index 6 = today)
         const callsYesterday = callsPerDay[5]?.count ?? 0;
 
         // Answer rate as a percentage string (e.g. "27.4%")
         const answerRateLast7d = totalCallsLast7d > 0
-          ? ((connectedCallsLast7d / totalCallsLast7d) * 100).toFixed(1)
+          ? ((answeredCallsLast7d / totalCallsLast7d) * 100).toFixed(1)
           : null;
         const answerRatePrev7d = totalCallsPrev7d > 0
-          ? ((connectedCallsPrev7d / totalCallsPrev7d) * 100).toFixed(1)
+          ? ((answeredCallsPrev7d / totalCallsPrev7d) * 100).toFixed(1)
           : null;
 
         return {
@@ -144,24 +152,28 @@ export const dashboardRouter = createTRPCRouter({
           followupsDue: followupsDueCount,
           conversionRate: `${conversionRate}%`,
           // Call-outcome KPI values
-          connectedCallsLast7d,
-          connectedCallsPrev7d,
+          answeredCallsLast7d,
+          answeredCallsPrev7d,
           totalCallsLast7d,
           totalCallsPrev7d,
           answerRateLast7d,
           answerRatePrev7d,
           leadsByStatus,
-          recentCalls: recentCalls.map((c) => ({
-            id: c.id,
-            status: c.status,
-            callOutcome: c.lead?.callOutcome ?? null,
-            duration: c.duration,
-            createdAt: c.createdAt.toISOString(),
-            phone: c.lead?.phone ?? "Unknown",
+          recentCalls: recentTouches.map((a) => ({
+            id: a.id,
+            outcome: a.outcome,
+            createdAt: a.createdAt.toISOString(),
+            leadId: a.leadId,
+            leadName:
+              [a.lead?.firstName, a.lead?.lastName].filter(Boolean).join(" ") ||
+              a.lead?.company ||
+              "(lead)",
+            company: a.lead?.company ?? null,
+            userName: a.user?.name ?? a.user?.email ?? null,
           })),
           charts: {
             callsPerDay,
-            connectedCallsPerDay,
+            answeredCallsPerDay,
             outcomeDistribution: outcomeDistribution.map((item) => ({
               outcome: item.callOutcome,
               count: item._count.id,
@@ -200,6 +212,8 @@ export const dashboardRouter = createTRPCRouter({
         today.setHours(0, 0, 0, 0);
         const sevenDaysAgo = subDays(today, 6);
 
+        const orgTouches = touchWhere(organizationId);
+
         const [
           totalCalls,
           callsThisWeek,
@@ -210,9 +224,9 @@ export const dashboardRouter = createTRPCRouter({
           memberLeadRows,
           memberActivityRows,
         ] = await Promise.all([
-          ctx.prisma.callLog.count({ where: { lead: { organizationId } } }),
-          ctx.prisma.callLog.count({
-            where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } },
+          ctx.prisma.activity.count({ where: orgTouches }),
+          ctx.prisma.activity.count({
+            where: { ...orgTouches, createdAt: { gte: sevenDaysAgo } },
           }),
           ctx.prisma.lead.count({
             where: { organizationId, status: "CONNECTED", callOutcome: { not: "CUSTOM" } },
@@ -220,9 +234,9 @@ export const dashboardRouter = createTRPCRouter({
           ctx.prisma.lead.count({ where: { organizationId } }),
           ctx.prisma.lead.count({ where: { organizationId, temperatureOverride: "HOT" } }),
           // Per-member call counts (all time)
-          ctx.prisma.callLog.groupBy({
+          ctx.prisma.activity.groupBy({
             by: ["userId"],
-            where: { lead: { organizationId } },
+            where: orgTouches,
             _count: { id: true },
           }),
           // Per-member lead assignment counts
@@ -346,12 +360,14 @@ export const dashboardRouter = createTRPCRouter({
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
     const sevenDaysAgo = subDays(today, 6);
 
+    const myTouchWhere = { ...touchWhere(organizationId ?? undefined), userId };
+
     const [callsToday, callsThisWeek, leadsAssigned, openTasks, recentActivity] = await Promise.all([
-      ctx.prisma.callLog.count({
-        where: { userId, createdAt: { gte: today, lt: tomorrow } },
+      ctx.prisma.activity.count({
+        where: { ...myTouchWhere, createdAt: { gte: today, lt: tomorrow } },
       }),
-      ctx.prisma.callLog.count({
-        where: { userId, createdAt: { gte: sevenDaysAgo } },
+      ctx.prisma.activity.count({
+        where: { ...myTouchWhere, createdAt: { gte: sevenDaysAgo } },
       }),
       organizationId
         ? ctx.prisma.lead.count({ where: { organizationId, assignedToId: userId } })

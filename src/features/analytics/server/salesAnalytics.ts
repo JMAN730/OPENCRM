@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { type LeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { touchWhere } from "@/server/touches";
 
 /**
  * Sales analytics service — pure, scope-aware metric functions shared by the
@@ -75,11 +76,12 @@ export async function getTopCallers(
 ): Promise<CallerStat[]> {
   const callUserFilter = scope.kind === "users" ? { userId: { in: scope.userIds } } : {};
 
+  // Calls are Touch activities (see docs/adr/0002); "connected" means ANSWERED.
   const [callRows, leadRows] = await Promise.all([
-    db.callLog.groupBy({
-      by: ["userId", "status"],
+    db.activity.groupBy({
+      by: ["userId", "outcome"],
       where: {
-        lead: { organizationId: scope.organizationId },
+        ...touchWhere(scope.organizationId),
         ...callUserFilter,
         ...(opts.since ? { createdAt: { gte: opts.since } } : {}),
       },
@@ -96,7 +98,7 @@ export async function getTopCallers(
   for (const r of callRows) {
     const cur = calls.get(r.userId) ?? { total: 0, connected: 0 };
     cur.total += r._count.id;
-    if (r.status === "CONNECTED") cur.connected += r._count.id;
+    if (r.outcome === "ANSWERED") cur.connected += r._count.id;
     calls.set(r.userId, cur);
   }
 
@@ -241,14 +243,18 @@ export async function getRepPerformance(db: Db, scope: LeadScope): Promise<RepPe
       where: { ...where, status: "CONNECTED" },
       _count: { id: true },
     }),
-    // Avg first-response time per rep: first call timestamp minus lead creation.
+    // Avg first-response time per rep: first touch timestamp minus lead creation
+    // (calls are Touch activities — see docs/adr/0002).
     db.$queryRaw<Array<{ userId: string; avg_seconds: number | null }>>(Prisma.sql`
       SELECT l."assignedToId" AS "userId",
              AVG(EXTRACT(EPOCH FROM (fc.first_call - l."createdAt"))) AS avg_seconds
       FROM "Lead" l
       JOIN (
         SELECT "leadId", MIN("createdAt") AS first_call
-        FROM "CallLog"
+        FROM "Activity"
+        WHERE type = 'CALL_OUTCOME'
+          AND outcome IS NOT NULL
+          AND outcome <> 'NOT_CONTACTED'
         GROUP BY "leadId"
       ) fc ON fc."leadId" = l.id
       WHERE l."organizationId" = ${scope.organizationId}

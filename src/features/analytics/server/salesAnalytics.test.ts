@@ -40,10 +40,10 @@ describe("getTopCallers", () => {
     prisma = createMockPrisma();
   });
 
-  it("computes connection rate and close rate per rep", async () => {
-    prisma.callLog.groupBy.mockResolvedValue([
-      { userId: "u1", status: "CONNECTED", _count: { id: 3 } },
-      { userId: "u1", status: "NO_ANSWER", _count: { id: 7 } },
+  it("computes connection rate and close rate per rep from touch activities", async () => {
+    prisma.activity.groupBy.mockResolvedValue([
+      { userId: "u1", outcome: "ANSWERED", _count: { id: 3 } },
+      { userId: "u1", outcome: "NO_ANSWER", _count: { id: 7 } },
     ]);
     prisma.lead.groupBy.mockResolvedValue([
       { assignedToId: "u1", status: "CONNECTED", _count: { id: 5 } },
@@ -66,7 +66,7 @@ describe("getTopCallers", () => {
   });
 
   it("returns an empty array when there is no activity", async () => {
-    prisma.callLog.groupBy.mockResolvedValue([]);
+    prisma.activity.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
     const result = await getTopCallers(db(prisma), ALL);
     expect(result).toEqual([]);
@@ -74,11 +74,11 @@ describe("getTopCallers", () => {
   });
 
   it("sorts by connection rate descending", async () => {
-    prisma.callLog.groupBy.mockResolvedValue([
-      { userId: "u1", status: "CONNECTED", _count: { id: 1 } },
-      { userId: "u1", status: "NO_ANSWER", _count: { id: 9 } },
-      { userId: "u2", status: "CONNECTED", _count: { id: 5 } },
-      { userId: "u2", status: "NO_ANSWER", _count: { id: 5 } },
+    prisma.activity.groupBy.mockResolvedValue([
+      { userId: "u1", outcome: "ANSWERED", _count: { id: 1 } },
+      { userId: "u1", outcome: "NO_ANSWER", _count: { id: 9 } },
+      { userId: "u2", outcome: "ANSWERED", _count: { id: 5 } },
+      { userId: "u2", outcome: "NO_ANSWER", _count: { id: 5 } },
     ]);
     prisma.lead.groupBy.mockResolvedValue([]);
     prisma.user.findMany.mockResolvedValue([
@@ -90,12 +90,18 @@ describe("getTopCallers", () => {
     expect(result[0].connectionRate).toBe(50);
   });
 
-  it("restricts call and lead queries to the scoped user ids", async () => {
-    prisma.callLog.groupBy.mockResolvedValue([]);
+  it("restricts call and lead queries to the scoped user ids and counts only touches", async () => {
+    prisma.activity.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
     await getTopCallers(db(prisma), MINE);
-    expect(prisma.callLog.groupBy).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ userId: { in: ["u1"] } }) }),
+    expect(prisma.activity.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: { in: ["u1"] },
+          type: "CALL_OUTCOME",
+          outcome: { not: "NOT_CONTACTED" },
+        }),
+      }),
     );
     expect(prisma.lead.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ assignedToId: { in: ["u1"] } }) }),

@@ -787,10 +787,29 @@ describe("leadsRouter", () => {
           userId: "user-1",
           type: "CALL_OUTCOME",
           description: "Marked call outcome as answered",
+          outcome: "ANSWERED",
           organizationId: "org-1",
         },
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("records the structured outcome even when reverting to NOT_CONTACTED", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        callOutcome: "ANSWERED",
+      });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", callOutcome: "NOT_CONTACTED" });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "NOT_CONTACTED",
+      });
+
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: "CALL_OUTCOME", outcome: "NOT_CONTACTED" }),
+      });
     });
 
     it("counts the first custom call outcome as a lead touch without forcing connected status", async () => {
@@ -859,6 +878,7 @@ describe("leadsRouter", () => {
           userId: "user-1",
           type: "CALL_OUTCOME",
           description: "Marked call outcome as no answer",
+          outcome: "NO_ANSWER",
           organizationId: "org-1",
         },
       });

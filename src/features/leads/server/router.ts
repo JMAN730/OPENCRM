@@ -746,6 +746,7 @@ export const leadsRouter = createTRPCRouter({
             userId: ctx.session.user.id,
             type: "CALL_OUTCOME",
             description,
+            outcome: input.callOutcome,
             organizationId: ctx.organizationId,
           },
         }),

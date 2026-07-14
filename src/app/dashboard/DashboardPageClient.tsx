@@ -20,7 +20,6 @@ import { useSession } from "next-auth/react";
 import { useState, useSyncExternalStore } from "react";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import Link from "next/link";
-import { formatPhone } from "@/lib/phone";
 
 function formatDueDate(date: string | Date | null | undefined): string {
   if (!date) return "";
@@ -393,20 +392,12 @@ const CALL_OUTCOME_MAP: Record<string, { label: string; cls: string }> = {
   NOT_CONTACTED: { label: "not contacted", cls: ""    },
 };
 
-const CALL_STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  CONNECTED: { label: "connected", cls: "pos"  },
-  NO_ANSWER: { label: "no answer", cls: "neg"  },
-  BUSY:      { label: "busy",      cls: "warn" },
-  FAILED:    { label: "failed",    cls: "neg"  },
-  CANCELED:  { label: "canceled",  cls: ""     },
-};
-
 function CallsCard({
   recentCalls,
   callsToday,
   isLoading,
 }: {
-  recentCalls: { id: string; phone: string; status: string; callOutcome?: string | null; duration?: number | null; createdAt: string }[];
+  recentCalls: { id: string; outcome: string | null; leadId: string; leadName: string; company: string | null; userName: string | null; createdAt: string }[];
   callsToday: number;
   isLoading: boolean;
 }) {
@@ -423,21 +414,17 @@ function CallsCard({
           <thead>
             <tr>
               <th style={{ width: 32 }}></th>
-              <th>Contact</th>
+              <th>Lead</th>
               <th>Outcome</th>
-              <th>Duration</th>
+              <th>By</th>
               <th className="right">When</th>
             </tr>
           </thead>
           <tbody>
             {recentCalls.map((call) => {
-              const outcomeCfg = call.callOutcome && call.callOutcome !== "NOT_CONTACTED"
-                ? (CALL_OUTCOME_MAP[call.callOutcome] ?? { label: call.callOutcome, cls: "" })
-                : null;
-              const statusCfg = CALL_STATUS_MAP[call.status] ?? { label: call.status, cls: "" };
-              const duration = call.duration
-                ? `${Math.floor(call.duration / 60)}:${String(call.duration % 60).padStart(2, "0")}`
-                : "0:00";
+              const outcomeCfg = call.outcome
+                ? (CALL_OUTCOME_MAP[call.outcome] ?? { label: call.outcome, cls: "" })
+                : { label: "—", cls: "" };
               return (
                 <tr key={call.id}>
                   <td className="mono" style={{ paddingRight: 0, width: 32 }}>
@@ -445,16 +432,21 @@ function CallsCard({
                   </td>
                   <td>
                     <div className="crm-contact-cell">
-                      <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>{call.phone.slice(-2)}</div>
-                      <div className="crm-meta"><span className="crm-n">{formatPhone(call.phone)}</span></div>
+                      <div className="crm-avatar sm c1" style={{ fontSize: 10 }}>
+                        {call.leadName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="crm-meta">
+                        <span className="crm-n">{call.leadName}</span>
+                        {call.company && call.company !== call.leadName && (
+                          <span style={{ fontSize: 11, color: "var(--crm-fg-faint)" }}>{call.company}</span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td>
-                    {outcomeCfg
-                      ? <span className={`crm-tag ${outcomeCfg.cls}`}>{outcomeCfg.label}</span>
-                      : <span className={`crm-tag ${statusCfg.cls}`}>{statusCfg.label}</span>}
+                    <span className={`crm-tag ${outcomeCfg.cls}`}>{outcomeCfg.label}</span>
                   </td>
-                  <td className="mono">{duration}</td>
+                  <td style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>{call.userName ?? "—"}</td>
                   <td className="mono right">
                     {formatDistanceToNow(new Date(call.createdAt), { addSuffix: true })}
                   </td>
@@ -714,11 +706,11 @@ export default function DashboardPageClient() {
   const recentCalls = stats?.recentCalls ?? [];
   const outcomeDist = stats?.charts.outcomeDistribution ?? [];
   const callsPerDay = (stats?.charts.callsPerDay ?? []).map((d) => d.count);
-  const connectedCallsPerDay = (stats?.charts.connectedCallsPerDay ?? []).map((d) => d.count);
+  const answeredCallsPerDay = (stats?.charts.answeredCallsPerDay ?? []).map((d) => d.count);
 
   // Call-outcome KPI display values
-  const connectedCallsLast7d = stats?.connectedCallsLast7d ?? 0;
-  const connectedCallsPrev7d = stats?.connectedCallsPrev7d ?? 0;
+  const answeredCallsLast7d = stats?.answeredCallsLast7d ?? 0;
+  const answeredCallsPrev7d = stats?.answeredCallsPrev7d ?? 0;
   const answerRateLast7d = stats?.answerRateLast7d;
   const answerRatePrev7d = stats?.answerRatePrev7d;
   const callsYesterday = stats?.callsYesterday ?? 0;
@@ -808,12 +800,12 @@ export default function DashboardPageClient() {
                 accentColor="var(--crm-accent)"
               />
               <KPICard
-                label="Connected calls · 7d"
+                label="Answered calls · 7d"
                 icon={PhoneOutgoing}
-                value={statsLoading && !stats ? "—" : connectedCallsLast7d.toLocaleString()}
-                sparkData={connectedCallsPerDay}
-                current={connectedCallsLast7d}
-                previous={connectedCallsPrev7d}
+                value={statsLoading && !stats ? "—" : answeredCallsLast7d.toLocaleString()}
+                sparkData={answeredCallsPerDay}
+                current={answeredCallsLast7d}
+                previous={answeredCallsPrev7d}
                 deltaSuffix=" vs last week"
                 accentColor="oklch(68% 0.16 150)"
               />

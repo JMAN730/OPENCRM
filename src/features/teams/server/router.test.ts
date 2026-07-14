@@ -17,6 +17,53 @@ describe("teamsRouter", () => {
     ({ caller, prisma } = createTestCaller());
   });
 
+  describe("memberDetail", () => {
+    it("sources recent calls and call count from touch activities", async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        id: "user-1",
+        name: "Rep",
+        email: "rep@example.com",
+        image: null,
+        role: "USER",
+        teamId: null,
+        team: null,
+      });
+      prisma.lead.findMany.mockResolvedValue([]);
+      prisma.task.findMany.mockResolvedValue([]);
+      prisma.lead.count.mockResolvedValue(0);
+      prisma.activity.findMany.mockResolvedValue([
+        {
+          id: "a1",
+          outcome: "ANSWERED",
+          createdAt: new Date("2026-07-01T10:00:00Z"),
+          leadId: "lead-1",
+          lead: { id: "lead-1", firstName: "Ada", lastName: null, company: "Acme Lawn" },
+        },
+      ]);
+      prisma.activity.count.mockResolvedValue(12);
+
+      const result = await caller.teams.memberDetail({ userId: "user-1" });
+
+      expect(result.callCount).toBe(12);
+      expect(result.recentCalls).toHaveLength(1);
+
+      const findArgs = prisma.activity.findMany.mock.calls[0][0];
+      expect(findArgs.where).toMatchObject({
+        userId: "user-1",
+        organizationId: "org-1",
+        type: "CALL_OUTCOME",
+        outcome: { not: "NOT_CONTACTED" },
+      });
+      const countArgs = prisma.activity.count.mock.calls[0][0];
+      expect(countArgs.where).toMatchObject({
+        userId: "user-1",
+        organizationId: "org-1",
+        type: "CALL_OUTCOME",
+        outcome: { not: "NOT_CONTACTED" },
+      });
+    });
+  });
+
   describe("inviteByEmail", () => {
     it("rejects non-admin callers before granting roles", async () => {
       const { caller } = createTestCaller({

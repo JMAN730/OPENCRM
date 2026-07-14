@@ -167,6 +167,7 @@ export function createMockPrisma() {
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findMany: vi.fn().mockResolvedValue([]),
       groupBy: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
     orgScraperCategory: {
       findMany: vi.fn().mockResolvedValue([]),
