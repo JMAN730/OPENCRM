@@ -20,6 +20,10 @@ _Avoid_: packing Category or location into Source
 A per-Category Demo Site design: layout, sections, visual theme, and curated fallback photos. Business-specific copy is filled in per Lead.
 _Avoid_: "template" alone (ambiguous with the retired generic templates)
 
+**Touch**:
+A recorded call attempt on a Lead — its call outcome set to anything other than NOT_CONTACTED. Calls are made outside the app (the built-in dialer is not in use); updating the outcome is how a call is recorded. Repeat attempts on the same Lead are each their own Touch. The unit behind every "Calls" metric on dashboards.
+_Avoid_: "contacted" meaning only the first Touch; treating CallLog (dialer log) rows as the source of call metrics
+
 **Demo Site**:
 A generated, per-Lead marketing website shown to a prospect during outreach to demonstrate what their web presence could look like. Must be send-ready without manual rework.
 _Avoid_: "demo", "website" unqualified

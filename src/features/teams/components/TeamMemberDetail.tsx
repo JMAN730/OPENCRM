@@ -192,8 +192,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
                       <span style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>{relativeTime(c.createdAt)}</span>
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-                      {c.status.toLowerCase()}
-                      {c.duration ? ` · ${c.duration}s` : ""}
+                      {(c.outcome ?? "").replace(/_/g, " ").toLowerCase()}
                     </div>
                   </div>
                 );

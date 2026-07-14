@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { assertAdmin, assertCanGrantRole, isAdmin, ROLE_VALUES } from "@/server/authz";
 import { invalidateLeadScope } from "@/server/teams/scope";
+import { touchWhere } from "@/server/touches";
 import { sendInvitationEmail } from "@/lib/email";
 import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
 import {
@@ -185,6 +186,8 @@ export const teamsRouter = createTRPCRouter({
 
       if (!allowed) throw new TRPCError({ code: "FORBIDDEN" });
 
+      const memberTouchWhere = { ...touchWhere(ctx.organizationId), userId: target.id };
+
       const [leads, recentCalls, openTasks, leadCount, callCount] = await Promise.all([
         ctx.prisma.lead.findMany({
           where: {
@@ -194,8 +197,8 @@ export const teamsRouter = createTRPCRouter({
           orderBy: { createdAt: "desc" },
           take: 100,
         }),
-        ctx.prisma.callLog.findMany({
-          where: { userId: target.id, lead: { organizationId: ctx.organizationId } },
+        ctx.prisma.activity.findMany({
+          where: memberTouchWhere,
           orderBy: { createdAt: "desc" },
           take: 20,
           include: { lead: { select: { id: true, firstName: true, lastName: true, company: true } } },
@@ -208,8 +211,8 @@ export const teamsRouter = createTRPCRouter({
         ctx.prisma.lead.count({
           where: { organizationId: ctx.organizationId, assignedToId: target.id },
         }),
-        ctx.prisma.callLog.count({
-          where: { userId: target.id, lead: { organizationId: ctx.organizationId } },
+        ctx.prisma.activity.count({
+          where: memberTouchWhere,
         }),
       ]);
 
