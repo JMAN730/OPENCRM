@@ -25,7 +25,7 @@ describe("analyticsRouter", () => {
 
     prisma.lead.groupBy.mockResolvedValue([]);
     prisma.lead.count.mockResolvedValue(0);
-    prisma.callLog.count.mockResolvedValue(0);
+    prisma.activity.count.mockResolvedValue(0);
   }
 
   describe("overview — basic shape", () => {
@@ -62,18 +62,25 @@ describe("analyticsRouter", () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
       prisma.lead.groupBy.mockResolvedValue([]);
+      prisma.activity.count.mockResolvedValue(15);
       // lead.count is called 3 times: total, thisWeek, connected
       prisma.lead.count
         .mockResolvedValueOnce(120)  // totalLeads
         .mockResolvedValueOnce(8)    // leadsThisWeek
         .mockResolvedValueOnce(34);  // connectedCount
-      prisma.callLog.count.mockResolvedValue(15);
 
       const { kpis } = await caller.analytics.overview();
       expect(kpis.totalLeads).toBe(120);
       expect(kpis.leadsThisWeek).toBe(8);
       expect(kpis.callsThisWeek).toBe(15);
       expect(kpis.connectedCount).toBe(34);
+
+      // callsThisWeek counts touch activities, not CallLog rows
+      const touchCount = prisma.activity.count.mock.calls[0][0];
+      expect(touchCount.where.organizationId).toBe("org-1");
+      expect(touchCount.where.type).toBe("CALL_OUTCOME");
+      expect(touchCount.where.outcome).toEqual({ not: "NOT_CONTACTED" });
+      expect(prisma.callLog.count).not.toHaveBeenCalled();
     });
 
     it("computes contactRate as 0.0 when there are no leads", async () => {
@@ -188,10 +195,10 @@ describe("analyticsRouter", () => {
   });
 
   describe("topCallers", () => {
-    it("returns ranked caller stats from call + lead groups", async () => {
-      prisma.callLog.groupBy.mockResolvedValue([
-        { userId: "u1", status: "CONNECTED", _count: { id: 4 } },
-        { userId: "u1", status: "NO_ANSWER", _count: { id: 6 } },
+    it("returns ranked caller stats from touch + lead groups", async () => {
+      prisma.activity.groupBy.mockResolvedValue([
+        { userId: "u1", outcome: "ANSWERED", _count: { id: 4 } },
+        { userId: "u1", outcome: "NO_ANSWER", _count: { id: 6 } },
       ]);
       prisma.lead.groupBy.mockResolvedValue([
         { assignedToId: "u1", status: "CONNECTED", _count: { id: 2 } },

@@ -1,6 +1,7 @@
 import { Webhook } from "svix";
 import { prisma } from "@/lib/prisma";
 import { EmailDraftStatus } from "@prisma/client";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 const STATUS_MAP: Record<string, EmailDraftStatus> = {
   "email.opened": EmailDraftStatus.OPENED,
@@ -91,10 +92,7 @@ export async function POST(req: Request) {
   } catch (err) {
     // Concurrent retries can race past the pre-check; the unique constraint is
     // the backstop. Swallow the duplicate-key error so the retry still 200s.
-    if (
-      err && typeof err === "object" && "code" in err &&
-      (err as { code?: string }).code === "P2002"
-    ) {
+    if (isUniqueConstraintError(err)) {
       return new Response("OK");
     }
     throw err;

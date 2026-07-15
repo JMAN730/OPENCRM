@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCRM",
+  "productName": "ClientCore",
   "version": "0.1.0",
-  "identifier": "com.opencrm.app",
+  "identifier": "com.clientcore.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenCRM",
+        "title": "ClientCore",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

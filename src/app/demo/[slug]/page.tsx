@@ -25,7 +25,19 @@ export default async function DemoPage({
   const { slug } = await params;
   const site = await prisma.generatedWebsite.findUnique({
     where: { slug },
-    include: { lead: { select: { company: true, phone: true, city: true, source: true, mapsUrl: true } } },
+    include: {
+      lead: {
+        select: {
+          company: true,
+          phone: true,
+          city: true,
+          category: true,
+          mapsUrl: true,
+          rating: true,
+          reviewCount: true,
+        },
+      },
+    },
   });
 
   if (!site) notFound();
@@ -37,7 +49,9 @@ export default async function DemoPage({
       businessName={site.lead.company ?? site.title}
       phone={site.lead.phone}
       city={site.lead.city}
-      category={site.lead.source}
+      category={site.lead.category}
+      rating={site.lead.rating}
+      reviewCount={site.lead.reviewCount}
       content={content}
     />
   );

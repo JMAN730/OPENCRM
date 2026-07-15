@@ -7,6 +7,7 @@ export type MockSessionUser = {
   name: string;
   organizationId: string | null;
   role: string;
+  isSuperAdmin: boolean;
 };
 
 export function createTestSession(overrides: Partial<MockSessionUser> = {}) {
@@ -17,6 +18,7 @@ export function createTestSession(overrides: Partial<MockSessionUser> = {}) {
       name: "Test User",
       organizationId: "org-1",
       role: "ADMIN",
+      isSuperAdmin: false,
       image: null,
       ...overrides,
     },
@@ -93,8 +95,11 @@ export function createMockPrisma() {
     organization: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
     organizationSubscription: {
+      groupBy: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue({
         planTier: "PRO",
         status: "ACTIVE",
@@ -155,12 +160,14 @@ export function createMockPrisma() {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     },
     activity: {
       create: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findMany: vi.fn().mockResolvedValue([]),
       groupBy: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
     orgScraperCategory: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -213,6 +220,25 @@ export function createMockPrisma() {
     emailOptOut: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    smsDraft: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      delete: vi.fn(),
+    },
+    smsEvent: {
+      findFirst: vi.fn(),
+      create: vi.fn().mockResolvedValue({}),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+    phoneOptOut: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     outreachJob: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),
@@ -251,6 +277,21 @@ export function createMockPrisma() {
       findUnique: vi.fn(),
       create: vi.fn(),
       count: vi.fn(),
+    },
+    conversation: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      upsert: vi.fn(),
+    },
+    message: {
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      groupBy: vi.fn().mockResolvedValue([]),
     },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (arg: unknown) => {

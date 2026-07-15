@@ -1,12 +1,14 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { PageShell } from "@/components/layout/PageShell";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
 import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,6 +38,7 @@ import {
   isPast,
   isToday,
 } from "date-fns";
+import { leadDisplayName } from "@/lib/leadName";
 
 type CalendarTask = inferRouterOutputs<AppRouter>["tasks"]["getCalendar"][number];
 type OrgMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
@@ -97,8 +100,7 @@ function isOverdue(task: Pick<CalendarTask, "dueDate" | "status">) {
 }
 
 function leadLabel(lead: CalendarTask["lead"]) {
-  if (!lead) return "";
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—";
+  return leadDisplayName(lead, "—");
 }
 
 function fmtDateTime(d: Date | string | null | undefined) {
@@ -202,6 +204,7 @@ function DayPanel({
   onCreateForDay: (date: Date) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const pending = tasks.filter((t) => t.status !== "COMPLETED");
   const done = tasks.filter((t) => t.status === "COMPLETED");
 
@@ -398,6 +401,7 @@ function TaskDrawer({
   onDelete: (t: CalendarTask) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   return (
     <div
       style={{
@@ -592,6 +596,7 @@ function CreateTaskDialog({
   onSave: (data: TaskFormData) => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const [form, setForm] = useState<TaskFormData>({
     title: "",
     description: "",
@@ -789,6 +794,7 @@ function DeleteConfirm({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   return (
     <div
       style={{
@@ -986,31 +992,26 @@ export default function CalendarPage() {
 
   return (
     <DashboardLayout>
-      <div className="crm-content">
-        {/* Header */}
-        <div className="crm-page-head">
-          <div>
-            <h1 className="crm-page-title">Follow-up Calendar</h1>
-            <div className="crm-page-sub">
-              {totalForMonth} scheduled this view ·{" "}
-              {overdueCount > 0 && (
-                <span style={{ color: "#ef4444" }}>{overdueCount} overdue · </span>
-              )}
-              {completedCount} completed
-            </div>
-          </div>
-          <div className="crm-page-head-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <PageShell
+        title="Follow-up Calendar"
+        subtitle={
+          <>
+            {totalForMonth} scheduled this view ·{" "}
+            {overdueCount > 0 && <span style={{ color: "#ef4444" }}>{overdueCount} overdue · </span>}
+            {completedCount} completed
+          </>
+        }
+        actions={
+          <>
             {members.length > 0 && (
               <select
                 value={assigneeFilter}
                 onChange={(e) => setAssigneeFilter(e.target.value)}
+                className="crm-clay-input"
                 style={{
                   padding: "6px 10px",
-                  border: "1px solid var(--crm-border)",
-                  borderRadius: 6,
                   fontSize: 13,
                   color: "var(--crm-fg)",
-                  background: "var(--crm-bg-card)",
                   outline: "none",
                 }}
               >
@@ -1030,9 +1031,9 @@ export default function CalendarPage() {
             >
               <Plus size={13} /> New Follow-up
             </button>
-          </div>
-        </div>
-
+          </>
+        }
+      >
         {/* Month nav */}
         <div className="crm-card flush" style={{ padding: 20 }}>
           <div
@@ -1226,7 +1227,7 @@ export default function CalendarPage() {
             </div>
           ))}
         </div>
-      </div>
+      </PageShell>
 
       {/* Day panel */}
       {activeSelectedDay && !selectedTask && (

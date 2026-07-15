@@ -36,19 +36,24 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          UserRole  @default(USER)
+  id                   String               @id @default(cuid())
+  name                 String?
+  email                String?              @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  role                 UserRole             @default(USER)
+  // Platform-level "master account" flag, orthogonal to the org-scoped `role`.
+  // When true, the user can read across every organization via the read-only
+  // `platform` router (super-admin monitoring console). Never granted through
+  // the app UI — set out-of-band via `scripts/grant-superadmin.ts`.
+  isSuperAdmin         Boolean              @default(false)
   loadingAnimationMode LoadingAnimationMode @default(ALWAYS)
   // Bumped whenever credentials change (password reset / email change) so
   // JWTs minted before the change are rejected on their next refresh (CWE-613).
-  sessionVersion Int      @default(0)
-  accounts      Account[]
-  sessions      Session[]
+  sessionVersion       Int                  @default(0)
+  accounts             Account[]
+  sessions             Session[]
 
   // Organization Context
   organizationId String?
@@ -61,17 +66,20 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
 
-  leads          Lead[]       @relation("AssignedTo")
-  calls          CallLog[]
-  notes          Note[]
-  tasks          Task[]       @relation("TaskCreator")
-  assignedTasks  Task[]       @relation("TaskAssignee")
-  activities     Activity[]
-  scraperJobs    ScraperJob[]
-  scraperRows    ScraperImportedRow[]
-  invitationsSent Invitation[] @relation("InvitationInviter")
+  leads            Lead[]               @relation("AssignedTo")
+  calls            CallLog[]
+  notes            Note[]
+  tasks            Task[]               @relation("TaskCreator")
+  assignedTasks    Task[]               @relation("TaskAssignee")
+  activities       Activity[]
+  scraperJobs      ScraperJob[]
+  scraperRows      ScraperImportedRow[]
+  invitationsSent  Invitation[]         @relation("InvitationInviter")
   trainingSessions TrainingSession[]
-  outreachJobs   OutreachJob[]
+  outreachJobs     OutreachJob[]
+  conversationsAsUserA Conversation[]   @relation("ConversationUserA")
+  conversationsAsUserB Conversation[]   @relation("ConversationUserB")
+  messagesSent         Message[]        @relation("MessageSender")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -90,7 +98,7 @@ enum LoadingAnimationMode {
 }
 
 model Organization {
-  id             String          @id @default(cuid())
+  id             String               @id @default(cuid())
   name           String
   users          User[]
   teams          Team[]
@@ -110,11 +118,14 @@ model Organization {
   scheduledScrapes  ScheduledScrape[]
   emailDrafts       EmailDraft[]
   emailOptOuts      EmailOptOut[]
+  smsDrafts         SmsDraft[]
+  phoneOptOuts      PhoneOptOut[]
   salesScripts      SalesScript[]
   outreachJobs      OutreachJob[]
 
   trainingPersonas TrainingPersona[]
   trainingSessions TrainingSession[]
+  conversations    Conversation[]
 
   subscription OrganizationSubscription?
 
@@ -197,6 +208,9 @@ model Lead {
   status              LeadStatus               @default(NOT_CONTACTED)
   temperatureOverride LeadTemperatureOverride?
   source              String?
+  // Business niche (e.g. "Landscaping") — picks the demo Template Pack.
+  // Provenance stays in `source`; do not pack category into it.
+  category            String?
   value               Float?
   callOutcome         CallOutcome              @default(NOT_CONTACTED)
   callNotes           String?
@@ -216,19 +230,20 @@ model Lead {
   secondaryOutcomeId String?
   secondaryOutcome   CustomOutcome? @relation("SecondaryOutcome", fields: [secondaryOutcomeId], references: [id], onDelete: SetNull)
 
-  pipelineStageId String?
-  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
+  pipelineStageId      String?
+  pipelineStage        PipelineStage? @relation(fields: [pipelineStageId], references: [id], onDelete: SetNull)
   qualificationSummary String?
 
-  calls        CallLog[]
-  notes        Note[]
-  activities   Activity[]
-  tasks        Task[]
-  tags         LeadTag[]
-  websites     GeneratedWebsite[]
-  emailDrafts  EmailDraft[]
+  calls            CallLog[]
+  notes            Note[]
+  activities       Activity[]
+  tasks            Task[]
+  tags             LeadTag[]
+  websites         GeneratedWebsite[]
+  emailDrafts      EmailDraft[]
+  smsDrafts        SmsDraft[]
   trainingSessions TrainingSession[]
-  outreachJob  OutreachJob?
+  outreachJob      OutreachJob?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -341,8 +356,8 @@ model CustomOutcome {
   hint           String?      @db.VarChar(200)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  primaryLeads   Lead[] @relation("PrimaryOutcome")
-  secondaryLeads Lead[] @relation("SecondaryOutcome")
+  primaryLeads   Lead[]       @relation("PrimaryOutcome")
+  secondaryLeads Lead[]       @relation("SecondaryOutcome")
 
   createdAt DateTime @default(now())
 
@@ -389,16 +404,25 @@ enum ActivityType {
   EMAIL_SENT
   DEMO_GENERATED
   LEAD_ENRICHED
+  // Declared last to match the DB: ALTER TYPE ... ADD VALUE (20260713060000)
+  // appends to the end of the Postgres enum, and drift checks compare order.
+  SMS_DRAFT_CREATED
+  SMS_SENT
 }
 
 model Activity {
   id          String       @id @default(cuid())
   type        ActivityType
   description String
+
+  // Structured call outcome for CALL_OUTCOME activities (a "Touch" when not
+  // NOT_CONTACTED). Null for other activity types. Source of all "Calls"
+  // metrics — see docs/adr/0002-call-metrics-from-activity-touches.md.
+  outcome CallOutcome?
   leadId      String
-  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId      String
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Denormalized from Lead.organizationId so org-wide activity feeds (team
   // activityFeed, dashboard "last active") avoid a join through Lead.
@@ -410,6 +434,9 @@ model Activity {
 
   @@index([leadId])
   @@index([organizationId, createdAt])
+  // Touch aggregations: "Calls" metrics filter by (org, type, createdAt) —
+  // see docs/adr/0002-call-metrics-from-activity-touches.md.
+  @@index([organizationId, type, createdAt])
 }
 
 enum TaskPriority {
@@ -512,10 +539,10 @@ enum InvitationStatus {
 // Scraper feature
 // ─────────────────────────────────────────────────────────────────────────────
 model ScraperJob {
-  id     String           @id @default(cuid())
-  status ScraperJobStatus @default(PENDING)
+  id      String           @id @default(cuid())
+  status  ScraperJobStatus @default(PENDING)
   // "SCRAPE" (location/category scrape) or "ENRICH" (map-selected lead enrichment)
-  jobType String @default("SCRAPE")
+  jobType String           @default("SCRAPE")
 
   locations  Json @default("[]")
   categories Json @default("[]")
@@ -523,19 +550,19 @@ model ScraperJob {
   limit       Int @default(20)
   concurrency Int @default(1)
 
-  totalScraped  Int     @default(0)
-  importedCount Int     @default(0)
-  autoImport    Boolean @default(true)
-  autoOutreach  Boolean @default(false)
-  totalQueries     Int @default(0)
-  completedQueries Int @default(0)
-  failedQueries    Int @default(0)
+  totalScraped     Int     @default(0)
+  importedCount    Int     @default(0)
+  autoImport       Boolean @default(true)
+  autoOutreach     Boolean @default(false)
+  totalQueries     Int     @default(0)
+  completedQueries Int     @default(0)
+  failedQueries    Int     @default(0)
 
-  outputDir String?
-  logs      String  @default("")
-  error     String?
-  workerId  String?
-  workerPid Int?
+  outputDir       String?
+  logs            String    @default("")
+  error           String?
+  workerId        String?
+  workerPid       Int?
   lastHeartbeatAt DateTime?
   stopRequestedAt DateTime?
 
@@ -559,7 +586,7 @@ model ScraperJob {
 }
 
 model ScraperImportedRow {
-  id          String @id @default(cuid())
+  id          String     @id @default(cuid())
   jobId       String
   job         ScraperJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   fingerprint String
@@ -570,7 +597,7 @@ model ScraperImportedRow {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   importedById String
-  importedBy   User @relation(fields: [importedById], references: [id], onDelete: Cascade)
+  importedBy   User   @relation(fields: [importedById], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -614,6 +641,7 @@ model GeneratedWebsite {
   slug           String?      @unique
   organizationId String?
   emailDrafts    EmailDraft[]
+  smsDrafts      SmsDraft[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -640,8 +668,8 @@ model ScheduledScrape {
   categories     Json         @default("[]")
   limit          Int          @default(20)
   concurrency    Int          @default(1)
-  dayOfWeek      Int          // 0=Sunday … 6=Saturday
-  hourOfDay      Int          // 0-23 UTC
+  dayOfWeek      Int // 0=Sunday … 6=Saturday
+  hourOfDay      Int // 0-23 UTC
   enabled        Boolean      @default(true)
   lastRunAt      DateTime?
   nextRunAt      DateTime?
@@ -669,22 +697,22 @@ enum EmailDraftStatus {
 }
 
 model EmailDraft {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   organizationId   String
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadId           String
-  lead             Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
   websiteId        String?
   website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
   subject          String
-  body             String           @db.Text
-  status           EmailDraftStatus @default(DRAFT)
-  unsubscribeToken String           @unique
+  body             String            @db.Text
+  status           EmailDraftStatus  @default(DRAFT)
+  unsubscribeToken String            @unique
   resendMessageId  String?
   sentAt           DateTime?
   events           EmailEvent[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([leadId])
   @@index([organizationId, createdAt])
@@ -718,6 +746,68 @@ model EmailOptOut {
   @@index([organizationId])
 }
 
+// SMS outreach is intentionally parallel to email outreach. Keeping separate
+// lifecycle models avoids a channel-polymorphic draft whose fields and status
+// rules would be mostly nullable.
+enum SmsDraftStatus {
+  DRAFT
+  // Kept from the one-off SMS iteration (20260713060000): Postgres enum values
+  // cannot be dropped in place. Unused by the outreach send flow.
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model SmsDraft {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId           String
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteId        String?
+  website          GeneratedWebsite? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  toPhone          String
+  body             String            @db.Text
+  status           SmsDraftStatus    @default(DRAFT)
+  twilioMessageSid String?           @unique
+  sentAt           DateTime?
+  events           SmsEvent[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // At most one DRAFT row per lead — enforced by the partial unique index
+  // "SmsDraft_leadId_active_draft_key" in the migration SQL (Prisma cannot
+  // express partial indexes declaratively).
+  @@index([leadId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([toPhone])
+}
+
+model SmsEvent {
+  id        String   @id @default(cuid())
+  draftId   String
+  draft     SmsDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  event     String
+  dedupKey  String?  @unique
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([draftId, createdAt])
+}
+
+model PhoneOptOut {
+  id             String       @id @default(cuid())
+  phone          String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([phone, organizationId])
+  @@index([organizationId])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Automated outreach pipeline
 // ─────────────────────────────────────────────────────────────────────────────
@@ -743,9 +833,10 @@ model OutreachJob {
   status         OutreachJobStatus @default(PENDING)
   attempts       Int               @default(0)
   error          String?
-  skipReason     String?           // no_email | opted_out | draft_exists | lead_deleted
+  skipReason     String? // no_contact | phone_opted_out | sms_not_configured | opted_out | draft_exists | lead_deleted
   websiteId      String?
   draftId        String?
+  smsDraftId     String?
   processedAt    DateTime?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -773,17 +864,17 @@ model SalesScript {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TrainingPersona {
-  id             String       @id @default(cuid())
+  id             String            @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   description    String
-  systemPrompt   String       @db.Text
+  systemPrompt   String            @db.Text
   firstMessage   String
   voiceId        String
   voiceName      String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   sessions       TrainingSession[]
 
   @@index([organizationId])
@@ -807,4 +898,57 @@ model TrainingSession {
   @@index([organizationId, userId])
   @@index([organizationId, createdAt])
   @@index([leadId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Team messaging feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1:1 conversation between two members of the same organization. The pair is
+// stored in canonical order (userAId < userBId lexicographically) so the
+// unique index guarantees exactly one conversation per pair. The ordering is
+// also enforced by the check constraint
+// "Conversation_canonical_participants_check" in the migration SQL (Prisma
+// cannot express check constraints declaratively).
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userAId String
+  userA   User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId String
+  userB   User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  // Denormalized timestamp of the newest message for conversation-list ordering.
+  lastMessageAt DateTime?
+
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, userAId, userBId])
+  @@index([organizationId, lastMessageAt])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId String
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  body String @db.Text
+
+  // Read receipt for the non-sender participant (conversations are 1:1).
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, readAt])
 }

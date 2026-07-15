@@ -2,6 +2,12 @@ import { EmailDraftStatus, OutreachJobStatus, type PrismaClient } from "@prisma/
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { generateDraftForLead, OutreachEmailError } from "@/features/emails/server/service";
+import {
+  generateSmsDraftForLead,
+  normalizePhoneNumber,
+  OutreachSmsError,
+} from "@/features/sms/server/service";
+import { isSmsConfigured } from "@/features/sms/server/twilio";
 
 const MAX_ATTEMPTS = 3;
 // PROCESSING rows older than this are assumed orphaned (killed worker) and
@@ -18,8 +24,9 @@ export type ProcessQueueResult = {
 
 /**
  * Drains a batch of pending outreach jobs: for each enqueued lead, generates
- * the AI demo website and the outreach email draft. Drafts are never sent
- * here — sending is always an explicit user action from the review queue.
+ * the AI demo website and an SMS-first outreach draft, with email fallback.
+ * Drafts are never sent here — sending is always an explicit user action from
+ * the review queue.
  *
  * Safe to run from overlapping cron ticks: items are claimed with an atomic
  * conditional update, so two workers can never process the same job.
@@ -80,48 +87,83 @@ export async function processOutreachQueue(opts?: {
         await skip("lead_deleted");
         continue;
       }
-      if (!lead.email) {
-        await skip("no_email");
+      const normalizedPhone = normalizePhoneNumber(lead.phone);
+      const useSms = Boolean(normalizedPhone && isSmsConfigured());
+      if (!useSms && !lead.email) {
+        await skip(normalizedPhone ? "sms_not_configured" : "no_contact");
         continue;
       }
-      const optOut = await prisma.emailOptOut.findUnique({
-        where: { email_organizationId: { email: lead.email, organizationId: job.organizationId } },
-        select: { id: true },
-      });
-      if (optOut) {
-        await skip("opted_out");
-        continue;
-      }
-      // Second idempotency layer: a draft created outside the pipeline (e.g.
-      // manually from the lead modal) means there's nothing left to generate.
-      const existingDraft = await prisma.emailDraft.findFirst({
-        where: {
-          leadId: lead.id,
-          organizationId: job.organizationId,
-          status: { in: [EmailDraftStatus.DRAFT, EmailDraftStatus.SENT] },
-        },
-        select: { id: true },
-      });
-      if (existingDraft) {
-        await skip("draft_exists");
-        continue;
+
+      if (useSms) {
+        const optOut = await prisma.phoneOptOut.findUnique({
+          where: {
+            phone_organizationId: {
+              phone: normalizedPhone!,
+              organizationId: job.organizationId,
+            },
+          },
+          select: { id: true },
+        });
+        if (optOut) {
+          await skip("phone_opted_out");
+          continue;
+        }
+        const existingDraft = await prisma.smsDraft.findFirst({
+          where: {
+            leadId: lead.id,
+            organizationId: job.organizationId,
+            status: { in: ["DRAFT", "SENT", "DELIVERED"] },
+          },
+          select: { id: true },
+        });
+        if (existingDraft) {
+          await skip("draft_exists");
+          continue;
+        }
+      } else {
+        const optOut = await prisma.emailOptOut.findUnique({
+          where: { email_organizationId: { email: lead.email!, organizationId: job.organizationId } },
+          select: { id: true },
+        });
+        if (optOut) {
+          await skip("opted_out");
+          continue;
+        }
+        const existingDraft = await prisma.emailDraft.findFirst({
+          where: {
+            leadId: lead.id,
+            organizationId: job.organizationId,
+            status: { in: [EmailDraftStatus.DRAFT, EmailDraftStatus.SENT] },
+          },
+          select: { id: true },
+        });
+        if (existingDraft) {
+          await skip("draft_exists");
+          continue;
+        }
       }
 
       const { website } = await generateWebsiteForLead(prisma, lead, {
         organizationId: job.organizationId,
         userId: job.createdById,
       });
-      const { draftId } = await generateDraftForLead(prisma, lead, {
-        organizationId: job.organizationId,
-        userId: job.createdById,
-      });
+      const { draftId } = useSms
+        ? await generateSmsDraftForLead(prisma, lead, {
+            organizationId: job.organizationId,
+            userId: job.createdById,
+          })
+        : await generateDraftForLead(prisma, lead, {
+            organizationId: job.organizationId,
+            userId: job.createdById,
+          });
 
       await prisma.outreachJob.update({
         where: { id: job.id },
         data: {
           status: OutreachJobStatus.DONE,
           websiteId: website.id,
-          draftId,
+          draftId: useSms ? null : draftId,
+          smsDraftId: useSms ? draftId : null,
           error: null,
           processedAt: new Date(),
         },
@@ -131,7 +173,9 @@ export async function processOutreachQueue(opts?: {
       // OutreachEmailError business failures (e.g. opted out between checks)
       // and transient generation failures are both retried up to MAX_ATTEMPTS.
       const message =
-        err instanceof OutreachEmailError || err instanceof Error ? err.message : String(err);
+        err instanceof OutreachEmailError || err instanceof OutreachSmsError || err instanceof Error
+          ? err.message
+          : String(err);
       const exhausted = job.attempts >= MAX_ATTEMPTS;
       await prisma.outreachJob
         .update({

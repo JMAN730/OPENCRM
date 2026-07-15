@@ -70,13 +70,6 @@ export const scraperRouter = createTRPCRouter({
     };
   }),
 
-  listCategories: organizationProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.orgScraperCategory.findMany({
-      where: { organizationId: ctx.organizationId },
-      orderBy: { name: "asc" },
-    });
-  }),
-
   createCategory: organizationProcedure
     .input(z.object({ name: z.string().min(1).max(100).trim() }))
     .mutation(async ({ ctx, input }) => {

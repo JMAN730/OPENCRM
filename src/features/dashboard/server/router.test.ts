@@ -9,13 +9,12 @@ describe("dashboardRouter.getKpiStats", () => {
     ({ caller, prisma } = createTestCaller());
 
     // Default: zero of everything. Individual tests override as needed.
-    prisma.callLog.count.mockResolvedValue(0);
+    prisma.activity.count.mockResolvedValue(0);
     prisma.task.count.mockResolvedValue(0);
     prisma.lead.count.mockResolvedValue(0);
-    prisma.callLog.groupBy.mockResolvedValue([]);
     prisma.lead.groupBy.mockResolvedValue([]);
-    prisma.callLog.findMany.mockResolvedValue([]);
-    // 2 $queryRaw calls: calls-per-day, connected-calls-per-day
+    prisma.activity.findMany.mockResolvedValue([]);
+    // 2 $queryRaw calls: touches-per-day, answered-touches-per-day
     prisma.$queryRaw.mockResolvedValue([]);
   });
 
@@ -48,16 +47,27 @@ describe("dashboardRouter.getKpiStats", () => {
     expect(result.conversionRate).toBe("25.0%");
   });
 
-  it("returns connected calls in last 7d from callLog.count", async () => {
-    // callLog.count order: callsToday (idx 0), connectedCallsPrev7d (idx 1), totalCallsPrev7d (idx 2)
-    prisma.callLog.count
+  it("counts calls from touch activities (calls today + prev-7d windows)", async () => {
+    // activity.count order: callsToday (idx 0), answeredCallsPrev7d (idx 1), totalCallsPrev7d (idx 2)
+    prisma.activity.count
       .mockResolvedValueOnce(3)  // callsToday
-      .mockResolvedValueOnce(12) // connectedCallsPrev7d
+      .mockResolvedValueOnce(12) // answeredCallsPrev7d
       .mockResolvedValueOnce(50); // totalCallsPrev7d
     const result = await caller.dashboard.getKpiStats();
     expect(result.callsToday).toBe(3);
-    expect(result.connectedCallsPrev7d).toBe(12);
+    expect(result.answeredCallsPrev7d).toBe(12);
     expect(result.totalCallsPrev7d).toBe(50);
+
+    // Verify answeredCallsPrev7d filter uses outcome: "ANSWERED"
+    const answeredCallsWhere = prisma.activity.count.mock.calls[1][0].where;
+    expect(answeredCallsWhere.outcome).toBe("ANSWERED");
+  });
+
+  it("counts only CALL_OUTCOME activities with a non-NOT_CONTACTED outcome as calls", async () => {
+    await caller.dashboard.getKpiStats();
+    const where = prisma.activity.count.mock.calls[0][0].where;
+    expect(where.type).toBe("CALL_OUTCOME");
+    expect(where.outcome).toEqual({ not: "NOT_CONTACTED" });
   });
 
   it("excludes custom call outcomes from generic connected dashboard metrics", async () => {
@@ -128,41 +138,62 @@ describe("dashboardRouter.getKpiStats", () => {
     ]);
   });
 
-  it("substitutes 'Unknown' when a recent call's lead has no phone", async () => {
-    prisma.callLog.findMany.mockResolvedValue([
+  it("maps recent touches to lead identity, outcome, and the user who made the call", async () => {
+    prisma.activity.findMany.mockResolvedValue([
       {
-        id: "c1",
-        status: "CONNECTED",
-        duration: 60,
+        id: "a1",
+        outcome: "ANSWERED",
         createdAt: new Date("2026-05-08T10:00:00Z"),
-        lead: { phone: null, callOutcome: "ANSWERED" },
+        leadId: "lead-1",
+        lead: { id: "lead-1", firstName: "Ada", lastName: "Lovelace", company: "Acme Lawn", phone: "5551234567" },
+        user: { name: "Rep One", email: "rep@example.com" },
       },
     ]);
 
     const result = await caller.dashboard.getKpiStats();
     expect(result.recentCalls[0]).toEqual({
-      id: "c1",
-      status: "CONNECTED",
-      callOutcome: "ANSWERED",
-      duration: 60,
+      id: "a1",
+      outcome: "ANSWERED",
       createdAt: "2026-05-08T10:00:00.000Z",
-      phone: "Unknown",
+      leadId: "lead-1",
+      leadName: "Ada Lovelace",
+      company: "Acme Lawn",
+      userName: "Rep One",
     });
+  });
+
+  it("falls back to company for lead name and email for user name on recent touches", async () => {
+    prisma.activity.findMany.mockResolvedValue([
+      {
+        id: "a2",
+        outcome: "NO_ANSWER",
+        createdAt: new Date("2026-05-08T10:00:00Z"),
+        leadId: "lead-2",
+        lead: { id: "lead-2", firstName: null, lastName: null, company: "Acme Lawn", phone: null },
+        user: { name: null, email: "rep@example.com" },
+      },
+    ]);
+
+    const result = await caller.dashboard.getKpiStats();
+    expect(result.recentCalls[0].leadName).toBe("Acme Lawn");
+    expect(result.recentCalls[0].userName).toBe("rep@example.com");
   });
 
   it("scopes every query to the caller's organizationId", async () => {
     await caller.dashboard.getKpiStats();
 
     // callsTodayCount
-    expect(prisma.callLog.count.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
-    // connectedCallsPrev7d (second callLog.count call)
-    expect(prisma.callLog.count.mock.calls[1][0].where.lead.organizationId).toBe("org-1");
+    expect(prisma.activity.count.mock.calls[0][0].where.organizationId).toBe("org-1");
+    // answeredCallsPrev7d (second activity.count call)
+    expect(prisma.activity.count.mock.calls[1][0].where.organizationId).toBe("org-1");
+    // totalCallsPrev7d (third activity.count call)
+    expect(prisma.activity.count.mock.calls[2][0].where.organizationId).toBe("org-1");
     // outcome distribution groupBy (first lead.groupBy call)
     expect(prisma.lead.groupBy.mock.calls[0][0].where.organizationId).toBe("org-1");
     // lead status/pipeline groupBy (second lead.groupBy call)
     expect(prisma.lead.groupBy.mock.calls[1][0].where.organizationId).toBe("org-1");
-    // recent calls
-    expect(prisma.callLog.findMany.mock.calls[0][0].where.lead.organizationId).toBe("org-1");
+    // recent touches
+    expect(prisma.activity.findMany.mock.calls[0][0].where.organizationId).toBe("org-1");
     // followupsDue uses direct organizationId on Task (non-nullable since 2026-05-17)
     const taskCountCall = prisma.task.count.mock.calls[0][0];
     expect(taskCountCall.where.organizationId).toBe("org-1");
@@ -178,14 +209,15 @@ describe("dashboardRouter.getKpiStats", () => {
   it("issues exactly one query per data source (no fanout)", async () => {
     await caller.dashboard.getKpiStats();
 
-    // 3 callLog.count: callsToday, connectedCallsPrev7d, totalCallsPrev7d
-    expect(prisma.callLog.count).toHaveBeenCalledTimes(3);
+    // 3 activity.count: callsToday, answeredCallsPrev7d, totalCallsPrev7d
+    expect(prisma.activity.count).toHaveBeenCalledTimes(3);
     expect(prisma.task.count).toHaveBeenCalledTimes(1); // followups due
     expect(prisma.lead.count).toHaveBeenCalledTimes(0); // no longer used for KPIs
-    expect(prisma.callLog.groupBy).toHaveBeenCalledTimes(0); // no longer used
+    expect(prisma.callLog.count).toHaveBeenCalledTimes(0); // calls come from touches now
+    expect(prisma.callLog.findMany).toHaveBeenCalledTimes(0);
     expect(prisma.lead.groupBy).toHaveBeenCalledTimes(2); // outcomeDistribution + leadsByStatus
-    expect(prisma.callLog.findMany).toHaveBeenCalledTimes(1);
-    // 2 $queryRaw calls: calls-per-day + connected-calls-per-day
+    expect(prisma.activity.findMany).toHaveBeenCalledTimes(1); // recent touches
+    // 2 $queryRaw calls: touches-per-day + answered-touches-per-day
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
   });
 });
@@ -227,5 +259,72 @@ describe("dashboardRouter.getMyPhoneReach", () => {
     expect(callArgs.where.organizationId).toBe("org-1");
     expect(callArgs.where.assignedToId).toBe("user-1");
     expect(callArgs.where.callOutcome).toEqual({ notIn: ["NOT_CONTACTED", "CUSTOM"] });
+  });
+});
+
+describe("dashboardRouter.getMyStats", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+    prisma.task.count.mockResolvedValue(0);
+    prisma.lead.count.mockResolvedValue(0);
+  });
+
+  it("counts my calls today and this week from my touch activities", async () => {
+    prisma.activity.count
+      .mockResolvedValueOnce(2)  // callsToday
+      .mockResolvedValueOnce(9); // callsThisWeek
+
+    const result = await caller.dashboard.getMyStats();
+
+    expect(result.callsToday).toBe(2);
+    expect(result.callsThisWeek).toBe(9);
+    for (const call of prisma.activity.count.mock.calls.slice(0, 2)) {
+      expect(call[0].where.userId).toBe("user-1");
+      expect(call[0].where.type).toBe("CALL_OUTCOME");
+      expect(call[0].where.outcome).toEqual({ not: "NOT_CONTACTED" });
+    }
+  });
+});
+
+describe("dashboardRouter.getTeamStats", () => {
+  let caller: ReturnType<typeof createTestCaller>["caller"];
+  let prisma: ReturnType<typeof createTestCaller>["prisma"];
+
+  beforeEach(() => {
+    ({ caller, prisma } = createTestCaller());
+    prisma.lead.count.mockResolvedValue(0);
+    prisma.lead.groupBy.mockResolvedValue([]);
+    prisma.user.findMany.mockResolvedValue([]);
+  });
+
+  it("counts org-wide calls and per-member calls from touch activities", async () => {
+    prisma.activity.count
+      .mockResolvedValueOnce(100) // totalCalls
+      .mockResolvedValueOnce(25); // callsThisWeek
+    prisma.activity.groupBy
+      .mockResolvedValueOnce([{ userId: "u1", _count: { id: 7 } }]) // memberCallRows
+      .mockResolvedValueOnce([]); // memberActivityRows (last active)
+    prisma.user.findMany.mockResolvedValue([
+      { id: "u1", name: "Rep One", email: "rep@example.com", image: null },
+    ]);
+
+    const result = await caller.dashboard.getTeamStats();
+
+    expect(result.totalCalls).toBe(100);
+    expect(result.callsThisWeek).toBe(25);
+    expect(result.memberStats[0]).toMatchObject({ userId: "u1", callCount: 7 });
+
+    for (const call of prisma.activity.count.mock.calls.slice(0, 2)) {
+      expect(call[0].where.organizationId).toBe("org-1");
+      expect(call[0].where.type).toBe("CALL_OUTCOME");
+      expect(call[0].where.outcome).toEqual({ not: "NOT_CONTACTED" });
+    }
+    const memberCallGroupBy = prisma.activity.groupBy.mock.calls[0][0];
+    expect(memberCallGroupBy.by).toEqual(["userId"]);
+    expect(memberCallGroupBy.where.type).toBe("CALL_OUTCOME");
+    expect(memberCallGroupBy.where.outcome).toEqual({ not: "NOT_CONTACTED" });
   });
 });

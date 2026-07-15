@@ -8,6 +8,7 @@ import type { AppRouter } from "@/server/api/root";
 import { toast } from "sonner";
 import { Phone, Mail, Star, Plus, MoreVertical, Filter, ArrowUpDown } from "lucide-react";
 import { formatDistanceToNowStrict, differenceInDays } from "date-fns";
+import { leadDisplayName } from "@/lib/leadName";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
+import { PageShell } from "@/components/layout/PageShell";
 import { LeadModal } from "@/features/leads/components/lead-list/LeadModal";
 import type { Lead as ModalLead } from "@/features/leads/components/lead-list/shared";
 
@@ -92,9 +94,6 @@ function fmtValueFull(v: number | null | undefined) {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
-function leadDisplayName(lead: Lead) {
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed";
-}
 
 function leadLocation(lead: Lead) {
   return [lead.city, lead.state].filter(Boolean).join(", ");
@@ -826,11 +825,11 @@ export function PipelineBoard() {
 
   if (isLoading) {
     return (
-      <div className="crm-content">
+      <PageShell>
         <div style={{ padding: "60px 0", textAlign: "center", color: "var(--crm-fg-faint)", fontSize: 14 }}>
           Loading pipeline…
         </div>
-      </div>
+      </PageShell>
     );
   }
   if (!data) return null;
@@ -893,15 +892,11 @@ export function PipelineBoard() {
   ];
 
   return (
-    <div className="crm-content">
-      <div className="crm-page-head">
-        <div>
-          <h1 className="crm-page-title">Pipeline</h1>
-          <div className="crm-page-sub">
-            Sales pipeline · {activeStages.reduce((s, st) => s + st.leads.length, 0)} active deals
-          </div>
-        </div>
-        <div className="crm-page-head-actions">
+    <PageShell
+      title="Pipeline"
+      subtitle={`Sales pipeline · ${activeStages.reduce((s, st) => s + st.leads.length, 0)} active deals`}
+      actions={
+        <>
           <div className="crm-pipeline-tabs" role="group" aria-label="Pipeline view">
             {(["board", "table", "forecast"] as const).map((t) => (
               <button key={t} aria-pressed={viewTab === t} onClick={() => setViewTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>
@@ -915,9 +910,9 @@ export function PipelineBoard() {
           >
             <Plus size={13} /> New deal
           </button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       <KpiStrip stages={stages} />
 
       <div className="crm-pipeline-toolbar">
@@ -1232,6 +1227,6 @@ export function PipelineBoard() {
           onNext={handleModalNext}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

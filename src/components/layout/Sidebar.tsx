@@ -16,13 +16,16 @@ import {
   User,
   Kanban,
   Map,
+  MessageSquare,
   ScrollText,
   Dumbbell,
   Send,
+  ShieldAlert,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/app/_trpc/client";
+import { SCRIPTS_ENABLED, TRAINER_ENABLED } from "@/lib/features";
 
 const NAV_GROUPS = [
   {
@@ -38,6 +41,7 @@ const NAV_GROUPS = [
       { id: "map",      label: "Map",      href: "/map",      icon: Map },
       { id: "pipeline", label: "Pipeline", href: "/pipeline", icon: Kanban },
       { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
+      { id: "messages", label: "Messages", href: "/messages", icon: MessageSquare },
       { id: "trainer",  label: "Trainer",  href: "/trainer",  icon: Dumbbell },
       { id: "scripts",  label: "Scripts",  href: "/scripts",  icon: ScrollText },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
@@ -75,15 +79,25 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
   const userRole = (session?.user as { role?: string })?.role ?? "";
+  const isSuperAdmin = (session?.user as { isSuperAdmin?: boolean })?.isSuperAdmin === true;
 
   const { data: counts } = trpc.dashboard.sidebarCounts.useQuery(
     undefined,
     { enabled: !!session, staleTime: 30_000 },
   );
+  // Polling is required here (incoming messages arrive with no local
+  // mutation to invalidate on); 60s keeps the global badge cheap while the
+  // messages page itself polls faster.
+  const { data: unreadMessages } = trpc.messages.unreadCount.useQuery(
+    undefined,
+    { enabled: !!session, refetchInterval: 60_000 },
+  );
   const countById: Record<string, number | undefined> = {
     leads: counts?.leads,
     tasks: counts?.tasks,
     scraper: counts?.scraperActive,
+    // Badge only when something is actually unread.
+    messages: unreadMessages ? unreadMessages : undefined,
   };
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -122,7 +136,13 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
       {NAV_GROUPS.map((group, gi) => (
         <div key={gi}>
           {group.title && !collapsed && <div className="crm-nav-section">{group.title}</div>}
-          {group.items.map((item) => {
+          {group.items
+            .filter(
+              (item) =>
+                (item.id !== "trainer" || TRAINER_ENABLED) &&
+                (item.id !== "scripts" || SCRIPTS_ENABLED)
+            )
+            .map((item) => {
             const isActive = pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
@@ -146,6 +166,24 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
           })}
         </div>
       ))}
+
+      {isSuperAdmin && (
+        <div>
+          {!collapsed && <div className="crm-nav-section">Platform</div>}
+          <Link
+            href="/admin"
+            className={`crm-nav-item${collapsed ? " collapsed" : ""}`}
+            aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+            title={collapsed ? "Admin" : undefined}
+            onClick={onClose}
+          >
+            <span className="crm-nav-icon">
+              <ShieldAlert size={16} />
+            </span>
+            {!collapsed && <span>Admin</span>}
+          </Link>
+        </div>
+      )}
 
       <div className="crm-sidebar-footer" ref={menuRef} style={{ position: "relative" }}>
         {/* Avatar — navigates to profile/settings */}

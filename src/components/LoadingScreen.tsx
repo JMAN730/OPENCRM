@@ -57,7 +57,7 @@ function HUDChrome({ t }: { t: number }) {
       {corner({ right: 40, bottom: 40, borderWidth: "0 1.5px 1.5px 0" })}
       <div style={{
         position: "absolute", left: 86, top: 44,
-        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
         fontSize: 11, letterSpacing: "0.25em", textTransform: "uppercase",
         color: NW, opacity: op * 0.85,
       }}>
@@ -66,7 +66,7 @@ function HUDChrome({ t }: { t: number }) {
       <div style={{
         position: "absolute", right: 86, top: 48,
         display: "flex", alignItems: "center", gap: 8,
-        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
         fontSize: 11, letterSpacing: "0.25em", textTransform: "uppercase",
         color: NW, opacity: op * 0.85,
       }}>
@@ -79,7 +79,7 @@ function HUDChrome({ t }: { t: number }) {
       </div>
       <div style={{
         position: "absolute", left: 86, bottom: 48,
-        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
         fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase",
         color: NW, opacity: op * 0.5,
       }}>
@@ -315,7 +315,7 @@ function Progress({ t }: { t: number }) {
     <div style={{
       position: "absolute", left: "50%", top: "76%",
       transform: "translateX(-50%)", width: 560, opacity: op,
-      fontFamily: '"JetBrains Mono", ui-monospace, monospace', color: NW,
+      fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", color: NW,
     }}>
       <div style={{
         display: "flex", justifyContent: "space-between",

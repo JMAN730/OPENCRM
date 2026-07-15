@@ -5,12 +5,9 @@ import { Link2, X, Search } from "lucide-react";
 import { trpc } from "@/app/_trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/root";
+import { leadDisplayName } from "@/lib/leadName";
 
 export type LeadResult = inferRouterOutputs<AppRouter>["leads"]["getAll"]["items"][number];
-
-export function leadDisplayName(lead: Pick<LeadResult, "company" | "firstName" | "lastName">) {
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed";
-}
 
 export function LeadCombobox({
   value,

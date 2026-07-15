@@ -4,8 +4,11 @@ import { trpc } from "@/app/_trpc/client";
 import { Button } from "@/components/ui/button";
 import { ScriptsPanel } from "@/features/scripts/components/ScriptsPanel";
 import { EmailDraftPanel } from "@/features/emails/components/EmailDraftPanel";
+import { SmsDraftPanel } from "@/features/sms/components/SmsDraftPanel";
 import { formatLocation, getMapsUrl } from "@/features/leads/location";
 import { formatPhone } from "@/lib/phone";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
+import { DIALER_ENABLED, SCRIPTS_ENABLED, TRAINER_ENABLED } from "@/lib/features";
 import {
   Dialog,
   DialogContent,
@@ -102,6 +105,7 @@ function LogNoteDialog({
   leadId: string;
   onClose: () => void;
 }) {
+  useBodyScrollLock();
   const [text, setText] = useState("");
   const utils = trpc.useUtils();
   const createNote = trpc.leads.createNote.useMutation({
@@ -118,7 +122,7 @@ function LogNoteDialog({
       style={{
         position: "fixed",
         inset: 0,
-        background: "oklch(15% 0.012 70 / 0.45)",
+        background: "var(--crm-overlay)",
         backdropFilter: "blur(2px)",
         zIndex: 70,
         display: "grid",
@@ -207,6 +211,7 @@ function ViewNotesDialog({
   onClose: () => void;
   onAddNote: () => void;
 }) {
+  useBodyScrollLock();
   const utils = trpc.useUtils();
   const deleteNote = trpc.leads.deleteNote.useMutation({
     onSuccess: () => {
@@ -225,7 +230,7 @@ function ViewNotesDialog({
       style={{
         position: "fixed",
         inset: 0,
-        background: "oklch(15% 0.012 70 / 0.45)",
+        background: "var(--crm-overlay)",
         backdropFilter: "blur(2px)",
         zIndex: 70,
         display: "grid",
@@ -408,12 +413,13 @@ function ViewNotesDialog({
 }
 
 function ScriptsDialog({ onClose }: { onClose: () => void }) {
+  useBodyScrollLock();
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "oklch(15% 0.012 70 / 0.45)",
+        background: "var(--crm-overlay)",
         backdropFilter: "blur(2px)",
         zIndex: 70,
         display: "grid",
@@ -497,6 +503,7 @@ type LeadModalProps = {
 };
 
 export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
+  useBodyScrollLock();
   const name = fullNameOf(lead);
   const temp = effectiveTempOf(lead);
   const websiteHref = normalizeWebsiteHref(lead.website);
@@ -519,6 +526,10 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
   const [editingOutcomeId, setEditingOutcomeId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editHint, setEditHint] = useState("");
+  const [confirmDeleteOutcome, setConfirmDeleteOutcome] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [dispositionOpen, setDispositionOpen] = useState(false);
   const [dispositionId, setDispositionId] = useState<string | null>(
     lead.secondaryOutcome?.id ?? null,
@@ -627,6 +638,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
     onSuccess: () => {
       toast.success("Outcome deleted");
       setEditingOutcomeId(null);
+      setConfirmDeleteOutcome(null);
       void utils.leads.customOutcomes.list.invalidate();
       void utils.leads.getAll.invalidate();
       void utils.leads.getStatusCounts.invalidate();
@@ -724,12 +736,8 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId: lead.id });
       void utils.leads.getActivities.invalidate({ leadId: lead.id });
-      if (data.needsPhotos && data.id) {
-        window.dispatchEvent(
-          new CustomEvent("opulence:request-photos", {
-            detail: { websiteId: data.id, businessName: lead.company ?? fullNameOf(lead) },
-          })
-        );
+      if (data.needsPhotos) {
+        toast.info("Demo generated, but no photos were found automatically.");
       }
     },
     onError: (error: { message: string }) => toast.error(error.message),
@@ -848,6 +856,42 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
       ) : null}
       {viewScriptsOpen ? <ScriptsDialog onClose={() => setViewScriptsOpen(false)} /> : null}
       {editOpen ? <EditLeadDialog lead={lead} onClose={() => setEditOpen(false)} /> : null}
+      <Dialog
+        open={confirmDeleteOutcome !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !deleteCustomOutcome.isPending) setConfirmDeleteOutcome(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete outcome</DialogTitle>
+            <DialogDescription>
+              Delete the &quot;{confirmDeleteOutcome?.label}&quot; outcome? Leads using it will be
+              reset to Not Contacted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              disabled={deleteCustomOutcome.isPending}
+              onClick={() => setConfirmDeleteOutcome(null)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={deleteCustomOutcome.isPending}
+              variant="destructive"
+              onClick={() => {
+                if (confirmDeleteOutcome) {
+                  deleteCustomOutcome.mutate({ id: confirmDeleteOutcome.id });
+                }
+              }}
+            >
+              {deleteCustomOutcome.isPending ? "Deleting…" : "Delete outcome"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="crm-modal-backdrop" onClick={onClose}>
         <div className="crm-modal crm-app" onClick={(event) => event.stopPropagation()}>
           <div className="crm-modal-head">
@@ -867,7 +911,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
           </div>
 
           <div className="crm-modal-actions">
-            {lead.phone ? (
+            {DIALER_ENABLED && lead.phone ? (
               <Link
                 className="crm-btn primary"
                 href={`/dialer?leadId=${lead.id}&phone=${encodeURIComponent(lead.phone)}`}
@@ -880,9 +924,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 <Mail size={13} /> Email
               </a>
             ) : null}
-            <Link className="crm-btn" href={`/trainer?leadId=${lead.id}`}>
-              <Dumbbell size={13} /> Practice Call
-            </Link>
+            {TRAINER_ENABLED ? (
+              <Link className="crm-btn" href={`/trainer?leadId=${lead.id}`}>
+                <Dumbbell size={13} /> Practice Call
+              </Link>
+            ) : null}
             <button className="crm-btn" onClick={() => setNoteOpen(true)}>
               <NotebookPen size={13} /> Log note
             </button>
@@ -1024,15 +1070,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                           title="Delete outcome"
                           aria-label={`Delete ${item.label}`}
                           disabled={deleteCustomOutcome.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
-                              )
-                            ) {
-                              deleteCustomOutcome.mutate({ id: item.id });
-                            }
-                          }}
+                          onClick={() =>
+                            setConfirmDeleteOutcome({ id: item.id, label: item.label })
+                          }
                         >
                           <Trash2 size={11} />
                         </button>
@@ -1242,15 +1282,9 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                             title="Delete outcome"
                             aria-label={`Delete ${item.label}`}
                             disabled={deleteCustomOutcome.isPending}
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Delete the "${item.label}" outcome? Leads using it will be reset to Not Contacted.`,
-                                )
-                              ) {
-                                deleteCustomOutcome.mutate({ id: item.id });
-                              }
-                            }}
+                            onClick={() =>
+                              setConfirmDeleteOutcome({ id: item.id, label: item.label })
+                            }
                           >
                             <Trash2 size={11} />
                           </button>
@@ -1282,9 +1316,11 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
                 ) : null}
               </div>
 
-            <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
-              <BookOpen size={13} /> Scripts
-            </button>
+            {SCRIPTS_ENABLED ? (
+              <button className="crm-btn" onClick={() => setViewScriptsOpen(true)}>
+                <BookOpen size={13} /> Scripts
+              </button>
+            ) : null}
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button
@@ -1896,7 +1932,7 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
               )}
             </div>
 
-            <DemoSiteSection leadId={lead.id} leadName={lead.company ?? fullNameOf(lead)} sectionRef={demoSectionRef} />
+            <DemoSiteSection leadId={lead.id} sectionRef={demoSectionRef} />
 
             <div
               style={{
@@ -1907,6 +1943,18 @@ export function LeadModal({ lead, onClose, onPrev, onNext }: LeadModalProps) {
             >
               <EmailDraftPanel leadId={lead.id} />
             </div>
+
+            {lead.phone ? (
+              <div
+                style={{
+                  marginTop: 18,
+                  paddingTop: 18,
+                  borderTop: "1px solid var(--crm-border)",
+                }}
+              >
+                <SmsDraftPanel leadId={lead.id} />
+              </div>
+            ) : null}
 
             <div>
               <h4>Recent activity</h4>
@@ -2107,7 +2155,7 @@ function CreateLeadTaskDialog({
   );
 }
 
-function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; leadName: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
+function DemoSiteSection({ leadId, sectionRef }: { leadId: string; sectionRef?: RefObject<HTMLDivElement | null> }) {
   const utils = trpc.useUtils();
   const { data: site } = trpc.websites.getForLead.useQuery({ leadId });
   const [isDownloading, setIsDownloading] = useState(false);
@@ -2117,12 +2165,8 @@ function DemoSiteSection({ leadId, leadName, sectionRef }: { leadId: string; lea
       toast.success("Demo website generated");
       void utils.websites.getForLead.invalidate({ leadId });
       void utils.leads.getActivities.invalidate({ leadId });
-      if (data.needsPhotos && data.id) {
-        window.dispatchEvent(
-          new CustomEvent("opulence:request-photos", {
-            detail: { websiteId: data.id, businessName: leadName },
-          })
-        );
+      if (data.needsPhotos) {
+        toast.info("Demo generated, but no photos were found automatically.");
       }
     },
     onError: (error: { message: string }) => toast.error(error.message),

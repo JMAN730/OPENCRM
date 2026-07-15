@@ -20,10 +20,12 @@ function LoadingWrapper({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storage = getBrowserStorage();
     const mode = readLoadingAnimationMode(storage);
-    // The intro animation is an app-boot experience — never play it over the
-    // public marketing page at "/".
+    // The intro animation is an app-boot experience. Keep public entry points
+    // immediately usable.
     const shouldShow =
-      window.location.pathname !== "/" && shouldShowLoadingAnimation(storage, mode);
+      window.location.pathname !== "/" &&
+      !window.location.pathname.startsWith("/auth") &&
+      shouldShowLoadingAnimation(storage, mode);
     if (shouldShow) recordLoadingAnimationShown(storage, mode);
     let cancelled = false;
     queueMicrotask(() => {

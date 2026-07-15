@@ -8,7 +8,6 @@ import {
   Columns,
   Mail,
   MapPin,
-  Phone,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -25,12 +24,6 @@ const FEATURES = [
     title: "AI Qualification & Outreach",
     description:
       "AI scores every lead, drafts personalized outreach emails, and even spins up a demo website for each prospect — ready for your review.",
-  },
-  {
-    icon: Phone,
-    title: "Built-in Dialer",
-    description:
-      "Call leads right from the browser with the Twilio-powered dialer. Every call is logged against the lead automatically.",
   },
   {
     icon: Columns,
@@ -64,9 +57,9 @@ const STEPS = [
       "The outreach pipeline scores each lead, writes a tailored email, and generates a demo site — queued up for your approval, never auto-sent.",
   },
   {
-    title: "Dial, track, and close",
+    title: "Track and close",
     description:
-      "Work the queue with the dialer, log outcomes, schedule follow-up tasks, and watch deals move across the pipeline board.",
+      "Work the queue, log outcomes, schedule follow-up tasks, and watch deals move across the pipeline board.",
   },
 ];
 
@@ -78,7 +71,6 @@ const PLANS = [
       "Up to 3 team seats",
       "Lead scraping & CSV import",
       "AI qualification & email drafts",
-      "Browser dialer & call logging",
       "25 lead tags",
     ],
     highlighted: false,
@@ -112,7 +104,7 @@ const PLANS = [
 const FAQS = [
   {
     q: "Do I own my data?",
-    a: "Yes. ClientCore is open source (MIT) and can be fully self-hosted with Docker on your own infrastructure — your leads, calls, and emails stay in your own PostgreSQL database.",
+    a: "Yes. Your leads, calls, and emails belong to you — export your data at any time.",
   },
   {
     q: "Where do the leads come from?",
@@ -121,10 +113,6 @@ const FAQS = [
   {
     q: "Does the AI send emails on its own?",
     a: "No. The AI drafts outreach emails and demo websites into a review queue — a human always approves before anything is sent. All outreach includes unsubscribe links and your physical address for CAN-SPAM compliance.",
-  },
-  {
-    q: "Can I call leads without leaving the app?",
-    a: "Yes. Connect a Twilio account and the browser dialer lets you place calls directly from a lead's record, with outcomes and notes logged automatically.",
   },
   {
     q: "How do team roles work?",
@@ -139,7 +127,7 @@ const FAQS = [
 function BrandMark({ size = "h-8 w-8 text-base" }: { size?: string }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] font-black text-white ${size}`}
+      className={`landing-brand-mark inline-flex items-center justify-center rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] font-black text-white ${size}`}
       aria-hidden="true"
     >
       C
@@ -154,7 +142,7 @@ function NavCtas() {
     return (
       <Link
         href="/dashboard"
-        className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        className="landing-primary-action inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
       >
         Go to dashboard
         <ArrowUpRight className="h-4 w-4" />
@@ -172,7 +160,7 @@ function NavCtas() {
       </Link>
       <Link
         href="/auth/register"
-        className="inline-flex h-9 items-center whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:px-4"
+        className="landing-primary-action inline-flex h-9 items-center whitespace-nowrap rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:px-4"
       >
         Get started
       </Link>
@@ -183,8 +171,8 @@ function NavCtas() {
 function DashboardMockup() {
   return (
     <div aria-hidden="true" className="relative mx-auto mt-16 max-w-5xl px-4 sm:px-6">
-      <div className="absolute inset-x-8 -top-8 h-40 rounded-full bg-[#7C3AED]/25 blur-3xl" />
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#100F2A] shadow-[0_40px_120px_-40px_rgba(124,58,237,0.45)]">
+      <div className="landing-dashboard-aura absolute inset-x-8 -top-8 h-40 bg-[#7C3AED]/25 blur-3xl" />
+      <div className="landing-dashboard-shell relative overflow-hidden rounded-2xl border border-white/10 bg-[#100F2A] shadow-[0_40px_120px_-40px_rgba(124,58,237,0.45)]">
         {/* Browser chrome */}
         <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-4 py-3">
           <span className="h-3 w-3 rounded-full bg-white/15" />
@@ -201,7 +189,7 @@ function DashboardMockup() {
               <BrandMark size="h-6 w-6 text-xs" />
               <span className="text-xs font-semibold text-white/80">ClientCore</span>
             </div>
-            {["Dashboard", "Leads", "Dialer", "Pipeline", "Tasks", "Analytics"].map((item, i) => (
+            {["Dashboard", "Leads", "Pipeline", "Tasks", "Analytics"].map((item, i) => (
               <div
                 key={item}
                 className={`rounded-md px-3 py-1.5 text-[11px] ${
@@ -237,7 +225,7 @@ function DashboardMockup() {
                     <div
                       key={i}
                       style={{ height: `${h}%` }}
-                      className="flex-1 rounded-t bg-gradient-to-t from-[#4F46E5] to-[#7C3AED] opacity-80"
+                      className="landing-chart-bar flex-1 rounded-t bg-gradient-to-t from-[#4F46E5] to-[#7C3AED] opacity-80"
                     />
                   ))}
                 </div>
@@ -261,9 +249,9 @@ function DashboardMockup() {
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen scroll-smooth bg-[#0B0A1E] text-white">
+    <div className="clientcore-landing min-h-screen scroll-smooth bg-[#0B0A1E] text-white">
       {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0B0A1E]/80 backdrop-blur-md">
+      <header className="landing-nav sticky top-0 z-40 border-b border-white/10 bg-[#0B0A1E]/80 backdrop-blur-md">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark />
@@ -286,10 +274,10 @@ export function LandingPage() {
         <section className="relative overflow-hidden pt-20 pb-8 sm:pt-28">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.28),transparent_55%)]"
+            className="landing-hero-ambient pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.28),transparent_55%)]"
           />
           <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/50 bg-[#7C3AED]/15 px-4 py-1.5 text-sm font-medium text-violet-200">
+            <span className="landing-pill inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/50 bg-[#7C3AED]/15 px-4 py-1.5 text-sm font-medium text-violet-200">
               <Sparkles className="h-3.5 w-3.5" />
               AI-powered CRM & lead automation
             </span>
@@ -304,19 +292,19 @@ export function LandingPage() {
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href="/auth/register"
-                className="inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-7 text-base font-semibold text-white shadow-[0_8px_30px_-8px_rgba(124,58,237,0.7)] transition-opacity hover:opacity-90"
+                className="landing-primary-action inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-7 text-base font-semibold text-white shadow-[0_8px_30px_-8px_rgba(124,58,237,0.7)] transition-opacity hover:opacity-90"
               >
                 Start for free
                 <ArrowUpRight className="h-5 w-5" />
               </Link>
               <Link
                 href="/auth/signin"
-                className="inline-flex h-12 items-center rounded-xl border border-white/15 px-7 text-base font-medium text-white/90 transition-colors hover:bg-white/5"
+                className="landing-secondary-action inline-flex h-12 items-center rounded-xl border border-white/15 px-7 text-base font-medium text-white/90 transition-colors hover:bg-white/5"
               >
                 Sign in
               </Link>
             </div>
-            <p className="mt-4 text-sm text-white/50">14-day free trial · Open source & self-hostable</p>
+            <p className="mt-4 text-sm text-white/50">14-day free trial</p>
           </div>
 
           <DashboardMockup />
@@ -337,9 +325,9 @@ export function LandingPage() {
               {FEATURES.map((feature) => (
                 <div
                   key={feature.title}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-[#7C3AED]/40 hover:bg-white/[0.05]"
+                  className="landing-glass-card rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-[#7C3AED]/40 hover:bg-white/[0.05]"
                 >
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[#7C3AED]/15 text-violet-300">
+                  <span className="landing-icon-tile inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[#7C3AED]/15 text-violet-300">
                     <feature.icon className="h-5 w-5" />
                   </span>
                   <h3 className="mt-4 text-lg font-semibold">{feature.title}</h3>
@@ -351,7 +339,7 @@ export function LandingPage() {
         </section>
 
         {/* How it works */}
-        <section id="how-it-works" className="scroll-mt-20 border-y border-white/10 bg-white/[0.02] py-20 sm:py-28">
+        <section id="how-it-works" className="landing-band scroll-mt-20 border-y border-white/10 bg-white/[0.02] py-20 sm:py-28">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -364,7 +352,7 @@ export function LandingPage() {
             <div className="mt-14 grid gap-8 md:grid-cols-3">
               {STEPS.map((step, i) => (
                 <div key={step.title} className="relative">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] text-base font-bold text-white">
+                  <span className="landing-step-index inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] text-base font-bold text-white">
                     {i + 1}
                   </span>
                   <h3 className="mt-4 text-lg font-semibold">{step.title}</h3>
@@ -384,21 +372,21 @@ export function LandingPage() {
               </h2>
               <p className="mt-4 text-lg text-white/60">
                 Every workspace starts on a free 14-day trial — upgrade to any plan whenever
-                you&apos;re ready. Prefer full control? Self-host it free forever.
+                you&apos;re ready.
               </p>
             </div>
             <div className="mt-14 grid gap-6 md:grid-cols-3">
               {PLANS.map((plan) => (
                 <div
                   key={plan.name}
-                  className={`relative flex flex-col rounded-2xl border p-7 ${
+                  className={`landing-price-card relative flex flex-col rounded-2xl border p-7 ${
                     plan.highlighted
-                      ? "border-[#7C3AED] bg-[#7C3AED]/10 shadow-[0_20px_60px_-20px_rgba(124,58,237,0.5)]"
+                      ? "is-highlighted border-[#7C3AED] bg-[#7C3AED]/10 shadow-[0_20px_60px_-20px_rgba(124,58,237,0.5)]"
                       : "border-white/10 bg-white/[0.03]"
                   }`}
                 >
                   {plan.highlighted && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-3 py-1 text-xs font-semibold text-white">
+                    <span className="landing-primary-action absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-3 py-1 text-xs font-semibold text-white">
                       Most popular
                     </span>
                   )}
@@ -407,7 +395,7 @@ export function LandingPage() {
                   <ul className="mt-6 flex-1 space-y-3">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2.5 text-sm text-white/80">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
+                        <Check className="landing-check mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
                         {feature}
                       </li>
                     ))}
@@ -416,8 +404,8 @@ export function LandingPage() {
                     href="/auth/register"
                     className={`mt-8 inline-flex h-11 items-center justify-center rounded-xl text-sm font-semibold transition-opacity hover:opacity-90 ${
                       plan.highlighted
-                        ? "bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] text-white"
-                        : "border border-white/15 text-white hover:bg-white/5"
+                        ? "landing-primary-action bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] text-white"
+                        : "landing-secondary-action border border-white/15 text-white hover:bg-white/5"
                     }`}
                   >
                     Get started
@@ -429,7 +417,7 @@ export function LandingPage() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="scroll-mt-20 border-t border-white/10 bg-white/[0.02] py-20 sm:py-28">
+        <section id="faq" className="landing-band scroll-mt-20 border-t border-white/10 bg-white/[0.02] py-20 sm:py-28">
           <div className="mx-auto max-w-3xl px-4 sm:px-6">
             <div className="text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -440,7 +428,7 @@ export function LandingPage() {
               {FAQS.map((faq) => (
                 <details
                   key={faq.q}
-                  className="group rounded-xl border border-white/10 bg-white/[0.03] open:border-[#7C3AED]/40"
+                  className="landing-faq group rounded-xl border border-white/10 bg-white/[0.03] open:border-[#7C3AED]/40"
                 >
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-white/90 [&::-webkit-details-marker]:hidden">
                     {faq.q}
@@ -457,7 +445,7 @@ export function LandingPage() {
         <section className="relative overflow-hidden py-20 sm:py-28">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.25),transparent_60%)]"
+            className="landing-cta-ambient pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.25),transparent_60%)]"
           />
           <div className="relative mx-auto max-w-2xl px-4 text-center sm:px-6">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -468,7 +456,7 @@ export function LandingPage() {
             </p>
             <Link
               href="/auth/register"
-              className="mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-8 text-base font-semibold text-white shadow-[0_8px_30px_-8px_rgba(124,58,237,0.7)] transition-opacity hover:opacity-90"
+              className="landing-primary-action mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#4F46E5] px-8 text-base font-semibold text-white shadow-[0_8px_30px_-8px_rgba(124,58,237,0.7)] transition-opacity hover:opacity-90"
             >
               Get started free
               <ArrowUpRight className="h-5 w-5" />
@@ -478,7 +466,7 @@ export function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-12">
+      <footer className="landing-footer border-t border-white/10 py-12">
         <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 sm:px-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-xs">
             <div className="flex items-center gap-2.5">
@@ -510,7 +498,7 @@ export function LandingPage() {
         </div>
         <div className="mx-auto mt-10 max-w-6xl px-4 sm:px-6">
           <p className="border-t border-white/10 pt-6 text-xs text-white/40">
-            © {new Date().getFullYear()} ClientCore. Open source under the MIT license.
+            © {new Date().getFullYear()} ClientCore. All rights reserved.
           </p>
         </div>
       </footer>

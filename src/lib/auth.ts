@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rateLimit";
 import { safeGet, safeSetEx } from "@/lib/redis";
 import { isUserRole, type UserRole } from "@/server/authz";
+import { provisionUserWithOrganization } from "@/features/auth/server/provision";
 import { keys } from "@/lib/cacheKeys";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 // Pre-computed bcrypt hash used when the email is not found, so we always
 // spend roughly the same time as a real compare. Prevents user enumeration
@@ -20,6 +22,7 @@ type CachedUser = {
   name: string | null;
   email: string | null;
   role: UserRole;
+  isSuperAdmin: boolean;
   organizationId: string | null;
   teamId: string | null;
   loadingAnimationMode: LoadingAnimationMode;
@@ -54,6 +57,8 @@ async function readCachedUser(userId: string): Promise<CachedUser | null> {
     if (typeof parsed.sessionVersion !== "number") return null;
     return {
       ...parsed,
+      // Default missing flag to false so pre-feature cache entries fail closed.
+      isSuperAdmin: parsed.isSuperAdmin === true,
       loadingAnimationMode: normalizeLoadingAnimationMode(parsed.loadingAnimationMode),
     };
   } catch {
@@ -77,7 +82,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+    select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
   });
   if (!dbUser) return null;
 
@@ -86,6 +91,7 @@ async function loadAuthSnapshot(userId: string): Promise<CachedUser | null> {
     name: dbUser.name,
     email: dbUser.email,
     role: normalizeRole(dbUser.role),
+    isSuperAdmin: dbUser.isSuperAdmin === true,
     organizationId: dbUser.organizationId,
     teamId: dbUser.teamId,
     loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
@@ -129,12 +135,12 @@ export const authOptions: NextAuthOptions = {
         // IP here (NextAuth doesn't pass the request in App Router), so we
         // key on email alone — sufficient to block credential stuffing on a
         // single account.
-        const rl = await rateLimit({
+        const rateLimitResult = await rateLimit({
           key: keys.authSigninBucket(email),
           limit: 10,
           windowSeconds: 60,
         });
-        if (!rl.ok) {
+        if (!rateLimitResult.ok) {
           // Returning null surfaces as "invalid credentials" on the client,
           // which is the right user-facing message — we don't want to leak
           // that this account is being attacked.
@@ -163,10 +169,61 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days — persists across browser close
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") return true;
+
+      // Google marks whether it verified the address. Refuse unverified
+      // emails — otherwise anyone controlling an unverified Google account
+      // for victim@example.com could take over that CRM account.
+      const emailVerified = (profile as { email_verified?: boolean } | undefined)
+        ?.email_verified;
+      if (emailVerified !== true) return false;
+
+      const email = (user.email ?? "").toLowerCase().trim();
+      if (!email) return false;
+
+      try {
+        const existing = await prisma.user.findUnique({ where: { email } });
+        if (existing) return true;
+
+        // Provisioning creates an org + trial + Stripe customer, so treat it
+        // like registration and rate-limit it. Keyed on email — NextAuth
+        // doesn't expose the request IP here (same constraint as the
+        // credentials authorize() above).
+        const rateLimitResult = await rateLimit({
+          key: keys.authOauthProvisionBucket(email),
+          limit: 5,
+          windowSeconds: 60 * 60,
+        });
+        if (!rateLimitResult.ok) return false;
+
+        // First-time Google sign-in: provision an organization + ADMIN user,
+        // same as credentials registration but without a password.
+        try {
+          await provisionUserWithOrganization({
+            prisma,
+            name: user.name?.trim() || email,
+            email,
+          });
+        } catch (err) {
+          if (!isUniqueConstraintError(err)) throw err;
+
+          const concurrentlyProvisionedUser = await prisma.user.findUnique({
+            where: { email },
+          });
+          if (!concurrentlyProvisionedUser) throw err;
+        }
+        return true;
+      } catch (err) {
+        console.error("[auth] Google sign-in provisioning error:", err);
+        return false;
+      }
+    },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id;
         session.user.role = token.role;
+        session.user.isSuperAdmin = token.isSuperAdmin ?? false;
         session.user.organizationId = token.organizationId;
         session.user.teamId = token.teamId ?? null;
         session.user.loadingAnimationMode = token.loadingAnimationMode ?? "ALWAYS";
@@ -179,13 +236,14 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: (user.email ?? "").toLowerCase() || undefined },
-            select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+            select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
           });
           if (dbUser) {
             token.id = dbUser.id;
             token.name = dbUser.name ?? undefined;
             token.email = dbUser.email ?? undefined;
             token.role = normalizeRole(dbUser.role);
+            token.isSuperAdmin = dbUser.isSuperAdmin === true;
             token.organizationId = dbUser.organizationId;
             token.teamId = dbUser.teamId;
             token.loadingAnimationMode = normalizeLoadingAnimationMode(dbUser.loadingAnimationMode);
@@ -195,6 +253,7 @@ export const authOptions: NextAuthOptions = {
               name: dbUser.name,
               email: dbUser.email,
               role: normalizeRole(dbUser.role),
+              isSuperAdmin: dbUser.isSuperAdmin === true,
               organizationId: dbUser.organizationId,
               teamId: dbUser.teamId,
               loadingAnimationMode: normalizeLoadingAnimationMode(dbUser.loadingAnimationMode),
@@ -232,6 +291,7 @@ export const authOptions: NextAuthOptions = {
           token.name = snapshot.name ?? undefined;
           token.email = snapshot.email ?? undefined;
           token.role = snapshot.role;
+          token.isSuperAdmin = snapshot.isSuperAdmin === true;
           token.organizationId = snapshot.organizationId;
           token.teamId = snapshot.teamId;
           token.loadingAnimationMode = snapshot.loadingAnimationMode;

@@ -83,7 +83,10 @@ vi.mock("@/hooks/use-debounce", () => ({
 
 vi.mock("./ImportLeadsDialog", () => ({
   ImportLeadsDialog: ({ onImported }: { onImported: () => void }) => (
-    <button onClick={onImported}>Import</button>
+    <div>
+      <div>Import dialog loaded</div>
+      <button onClick={onImported}>Confirm import</button>
+    </div>
   ),
 }));
 
@@ -476,12 +479,23 @@ describe("LeadsList", () => {
     expect(mockReplace).toHaveBeenCalledWith("/leads");
   });
 
-  it("opens the lead details modal from the ?leadId route flag", () => {
+  it("opens the lead details modal from the ?leadId route flag", async () => {
     searchParamLeadId = "lead-1";
 
     render(<LeadsList />);
 
-    expect(screen.getByText("Lead modal for lead-1")).toBeInTheDocument();
+    expect(await screen.findByText("Lead modal for lead-1")).toBeInTheDocument();
+  });
+
+  it("lazy-loads the import dialog only after clicking the Import trigger", async () => {
+    render(<LeadsList />);
+
+    expect(screen.getByRole("button", { name: /import/i })).toBeInTheDocument();
+    expect(screen.queryByText("Import dialog loaded")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /import/i }));
+
+    expect(await screen.findByText("Import dialog loaded")).toBeInTheDocument();
   });
 
   it("preserves the selected layout when clearing the ?new=1 route flag", () => {
@@ -772,6 +786,73 @@ describe("LeadsList", () => {
       expect(invalidateDueToday).toHaveBeenCalled();
       expect(invalidateOverdue).toHaveBeenCalled();
     });
+  });
+
+  it("virtualizes the focus card list so only a window of a 100-lead page mounts", () => {
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    render(<LeadsList />);
+
+    const cardCount = document.querySelectorAll(".focus-card").length;
+    expect(cardCount).toBeGreaterThan(0);
+    expect(cardCount).toBeLessThan(100);
+  });
+
+  it("swaps the mounted window as the scroll container scrolls", async () => {
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    // Wrap in the dashboard's scroll pane so the list anchors to it, the
+    // same element it scrolls inside in production.
+    render(
+      <div className="crm-main-scroll">
+        <LeadsList />
+      </div>,
+    );
+
+    expect(screen.getByText("Company 1")).toBeInTheDocument();
+
+    const scroller = document.querySelector(".crm-main-scroll") as HTMLElement;
+    scroller.scrollTop = 5000;
+    fireEvent.scroll(scroller);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Company 1")).not.toBeInTheDocument();
+    });
+    const cardCount = document.querySelectorAll(".focus-card").length;
+    expect(cardCount).toBeGreaterThan(0);
+    expect(cardCount).toBeLessThan(100);
+  });
+
+  it("virtualizes the classic table so only a window of a 100-lead page mounts", () => {
+    searchParamView = "classic";
+    leadPages = {
+      root: {
+        items: Array.from({ length: 100 }, (_, index) =>
+          makeLead({ id: `lead-${index + 1}`, company: `Company ${index + 1}` }),
+        ),
+        nextCursor: null,
+      },
+    };
+
+    render(<LeadsList />);
+
+    const rowCount = document.querySelectorAll("tbody tr[data-lead-row]").length;
+    expect(rowCount).toBeGreaterThan(0);
+    expect(rowCount).toBeLessThan(100);
   });
 
   it("renders a focus fallback when task signals fail without breaking the lead list", () => {

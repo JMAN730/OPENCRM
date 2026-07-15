@@ -5,15 +5,16 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { ImportLeadsDialog } from "./ImportLeadsDialog";
+import { LazyImportLeadsDialog } from "./LazyImportLeadsDialog";
 import { AddLeadForm } from "./lead-list/AddLeadForm";
 import { LeadBulkActionBar } from "./lead-list/LeadBulkActionBar";
 import { LeadCardList } from "./lead-list/LeadCardList";
-import { LeadModal } from "./lead-list/LeadModal";
 import { LeadsFocusHero } from "./lead-list/LeadsFocusHero";
 import { LeadsManagementBar } from "./lead-list/LeadsManagementBar";
 import { LeadsTable } from "./lead-list/LeadsTable";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   buildFocusSpotlightLeads,
   filterLeadByQuickFilter,
@@ -33,6 +34,14 @@ import {
   type LeadVisibleColumn,
   type ScoringRuleConfig,
 } from "./lead-list/shared";
+
+// Lazy-load the lead details modal so its code stays out of the route's
+// first-load bundle; the conditional render below defers the chunk fetch
+// until a lead is first opened.
+const LeadModal = dynamic(
+  () => import("./lead-list/LeadModal").then((m) => ({ default: m.LeadModal })),
+  { ssr: false },
+);
 
 type LeadsViewMode = "focus" | "classic";
 
@@ -548,6 +557,29 @@ export function LeadsList() {
     ? "Loading your leads…"
     : `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
 
+  const viewToggle = (
+    <div
+      role="group"
+      aria-label="Lead layout"
+      style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}
+    >
+      <button
+        className="crm-chip"
+        aria-pressed={viewMode === "focus"}
+        onClick={() => replaceLeadsRoute({ view: null })}
+      >
+        Focus view
+      </button>
+      <button
+        className="crm-chip"
+        aria-pressed={viewMode === "classic"}
+        onClick={() => replaceLeadsRoute({ view: "classic" })}
+      >
+        Classic view
+      </button>
+    </div>
+  );
+
   return (
     <>
       {showAdd ? (
@@ -567,35 +599,29 @@ export function LeadsList() {
         />
       ) : null}
 
-      <div className="crm-content">
-        <div
-          className="crm-page-head-actions"
-          style={{ justifyContent: "flex-end", marginBottom: 12 }}
-        >
-          <div
-            role="group"
-            aria-label="Lead layout"
-            style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}
-          >
-            <button
-              className="crm-chip"
-              aria-pressed={viewMode === "focus"}
-              onClick={() => replaceLeadsRoute({ view: null })}
-            >
-              Focus view
-            </button>
-            <button
-              className="crm-chip"
-              aria-pressed={viewMode === "classic"}
-              onClick={() => replaceLeadsRoute({ view: "classic" })}
-            >
-              Classic view
-            </button>
-          </div>
-        </div>
-
+      <PageShell
+        title={viewMode === "classic" ? "Leads" : undefined}
+        subtitle={viewMode === "classic" ? classicSubtitle : undefined}
+        actions={
+          viewMode === "classic" ? (
+            <>
+              {viewToggle}
+              <LazyImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
+              <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
+                New lead
+              </button>
+            </>
+          ) : undefined
+        }
+      >
         {viewMode === "focus" ? (
           <>
+            <div
+              className="crm-page-head-actions"
+              style={{ justifyContent: "flex-end", marginBottom: 12 }}
+            >
+              {viewToggle}
+            </div>
             <LeadsFocusHero
               focusCards={focusCards}
               isLoading={dueTodayQuery.isLoading || overdueQuery.isLoading}
@@ -624,7 +650,7 @@ export function LeadsList() {
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
-              importAction={<ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
+              importAction={<LazyImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />}
               isExporting={isExporting}
               members={assignableUsers}
               orgTags={orgTags}
@@ -695,19 +721,6 @@ export function LeadsList() {
           </>
         ) : (
           <>
-            <div className="crm-page-head">
-              <div>
-                <h1 className="crm-page-title">Leads</h1>
-                <div className="crm-page-sub">{classicSubtitle}</div>
-              </div>
-              <div className="crm-page-head-actions">
-                <ImportLeadsDialog onImported={() => { void utils.leads.getAll.invalidate(); void utils.leads.getStatusCounts.invalidate(); }} />
-                <button className="crm-btn primary" onClick={() => setShowAdd(true)}>
-                  New lead
-                </button>
-              </div>
-            </div>
-
             <LeadsTable
               allLeadsCount={allLeads.length}
               customOutcomes={customOutcomes}
@@ -790,7 +803,7 @@ export function LeadsList() {
             showAssignMenu={showAssign}
           />
         ) : null}
-      </div>
+      </PageShell>
     </>
   );
 }

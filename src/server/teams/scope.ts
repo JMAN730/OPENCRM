@@ -5,6 +5,13 @@ export type LeadScope =
   | { kind: "all"; organizationId: string }
   | { kind: "users"; organizationId: string; userIds: string[] };
 
+/** Stable cache-key suffix so scoped analytics don't leak across users. */
+export function scopeCacheKey(scope: LeadScope): string {
+  return scope.kind === "all"
+    ? `all:${scope.organizationId}`
+    : `u:${scope.organizationId}:${[...scope.userIds].sort().join("-")}`;
+}
+
 const SCOPE_TTL_SECONDS = 60;
 
 function scopeKey(userId: string): string {

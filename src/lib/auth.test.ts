@@ -1,21 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const { mockPrisma, mockProvision, mockRateLimit } = vi.hoisted(() => ({
   mockPrisma: {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
     },
   },
+  mockProvision: vi.fn(),
+  mockRateLimit: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
+vi.mock("@/features/auth/server/provision", () => ({
+  provisionUserWithOrganization: mockProvision,
+}));
+vi.mock("@/lib/rateLimit", () => ({ rateLimit: mockRateLimit }));
 
 import { authOptions } from "./auth";
 import bcrypt from "bcryptjs";
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  mockRateLimit.mockResolvedValue({ ok: true, remaining: 9, resetAt: 0 });
 });
 
 // authOptions.callbacks should always be defined; capture them with non-null assertions.
@@ -78,7 +85,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "x@y.com" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+      select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       id: "u1",
@@ -127,7 +134,7 @@ describe("jwt callback", () => {
 
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: "u1" },
-      select: { id: true, name: true, email: true, role: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
+      select: { id: true, name: true, email: true, role: true, isSuperAdmin: true, organizationId: true, teamId: true, loadingAnimationMode: true, sessionVersion: true },
     });
     expect(token).toMatchObject({
       name: "Updated Name",
@@ -226,6 +233,185 @@ describe("jwt callback", () => {
     } as never);
 
     expect(token).toBeDefined(); // doesn't throw
+    consoleSpy.mockRestore();
+  });
+});
+
+describe("signIn callback (Google OAuth)", () => {
+  const signInCallback = authOptions.callbacks!.signIn!;
+
+  it("allows non-Google providers through without provisioning", async () => {
+    const result = await signInCallback({
+      user: { id: "u1", email: "x@y.com" },
+      account: { provider: "credentials" },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockProvision).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects Google sign-in when the email is not verified", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: false },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("rejects Google sign-in when the profile has no email", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: null, name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("rejects Google sign-in when the profile object is missing entirely", async () => {
+    const result = await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: undefined,
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a Google email with surrounding whitespace and mixed case before lookup", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "  X@Y.COM  ", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "x@y.com" },
+    });
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("allows an existing user to sign in with Google without re-provisioning", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "X@Y.COM", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "x@y.com" },
+    });
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("provisions an organization and user for a first-time Google sign-in", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockResolvedValueOnce({ userId: "u-new" });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "New@Y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockProvision).toHaveBeenCalledWith({
+      prisma: mockPrisma,
+      name: "New User",
+      email: "new@y.com",
+    });
+  });
+
+  it("allows sign-in when a concurrent callback wins the provisioning race", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockImplementationOnce(async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: "u-new",
+        email: "new@y.com",
+      });
+      throw { code: "P2002" };
+    });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(true);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.user.findUnique).toHaveBeenLastCalledWith({
+      where: { email: "new@y.com" },
+    });
+  });
+
+  it("falls back to the email as the name when Google returns no name", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockResolvedValueOnce({ userId: "u-new" });
+
+    await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: null },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(mockProvision).toHaveBeenCalledWith({
+      prisma: mockPrisma,
+      name: "new@y.com",
+      email: "new@y.com",
+    });
+  });
+
+  it("rate-limits first-time provisioning per email", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockRateLimit.mockResolvedValueOnce({ ok: false, remaining: 0, resetAt: 0 });
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
+    expect(mockProvision).not.toHaveBeenCalled();
+  });
+
+  it("does not consume the rate limit for existing users signing in", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: "u1", email: "x@y.com" });
+
+    await signInCallback({
+      user: { id: "g1", email: "x@y.com", name: "X" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(mockRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("denies sign-in (does not throw) when provisioning fails", async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+    mockProvision.mockRejectedValueOnce(new Error("db down"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await signInCallback({
+      user: { id: "g1", email: "new@y.com", name: "New User" },
+      account: { provider: "google" },
+      profile: { email_verified: true },
+    } as never);
+
+    expect(result).toBe(false);
     consoleSpy.mockRestore();
   });
 });

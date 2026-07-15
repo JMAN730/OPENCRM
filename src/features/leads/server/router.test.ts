@@ -787,10 +787,29 @@ describe("leadsRouter", () => {
           userId: "user-1",
           type: "CALL_OUTCOME",
           description: "Marked call outcome as answered",
+          outcome: "ANSWERED",
           organizationId: "org-1",
         },
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("records the structured outcome even when reverting to NOT_CONTACTED", async () => {
+      prisma.lead.findFirst.mockResolvedValue({
+        id: "lead-1",
+        organizationId: "org-1",
+        callOutcome: "ANSWERED",
+      });
+      prisma.lead.update.mockResolvedValue({ id: "lead-1", callOutcome: "NOT_CONTACTED" });
+
+      await caller.leads.updateCallOutcome({
+        id: "lead-1",
+        callOutcome: "NOT_CONTACTED",
+      });
+
+      expect(prisma.activity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: "CALL_OUTCOME", outcome: "NOT_CONTACTED" }),
+      });
     });
 
     it("counts the first custom call outcome as a lead touch without forcing connected status", async () => {
@@ -859,6 +878,7 @@ describe("leadsRouter", () => {
           userId: "user-1",
           type: "CALL_OUTCOME",
           description: "Marked call outcome as no answer",
+          outcome: "NO_ANSWER",
           organizationId: "org-1",
         },
       });
@@ -965,46 +985,6 @@ describe("leadsRouter", () => {
       );
     });
 
-    it("stores a generated qualification summary on the scoped lead", async () => {
-      prisma.lead.findFirst.mockResolvedValue({
-        id: "lead-1",
-        firstName: null,
-        lastName: null,
-        company: "Big Rapids Fleet",
-        city: "Big Rapids",
-        state: "MI",
-        source: "Mobile Mechanics",
-        phone: "1234567890",
-        email: null,
-        website: null,
-        rating: 4.3,
-        reviewCount: 6,
-        status: "NOT_CONTACTED",
-        callOutcome: "NOT_CONTACTED",
-        temperatureOverride: "COOL",
-      });
-      prisma.lead.update.mockResolvedValue({ id: "lead-1", qualificationSummary: "summary" });
-
-      await caller.leads.qualify({ id: "lead-1" });
-
-      expect(prisma.lead.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: "lead-1" },
-          data: {
-            qualificationSummary: expect.stringContaining("Big Rapids Fleet in Big Rapids, MI"),
-          },
-        }),
-      );
-      expect(prisma.activity.create).toHaveBeenCalledWith({
-        data: {
-          leadId: "lead-1",
-          userId: "user-1",
-          type: "LEAD_QUALIFIED",
-          description: "Generated lead qualification summary",
-          organizationId: "org-1",
-        },
-      });
-    });
   });
 
   describe("export", () => {
@@ -1155,48 +1135,6 @@ describe("leadsRouter", () => {
     });
   });
 
-  describe("generateQualification", () => {
-    it("uses heuristic fallback when DEEPSEEK_API_KEY is not set", async () => {
-      delete process.env.DEEPSEEK_API_KEY;
-
-      const leadFixture = {
-        id: "lead-1",
-        organizationId: "org-1",
-        firstName: "Alice",
-        lastName: "Smith",
-        company: "Acme",
-        city: "Tampa",
-        state: "FL",
-        rating: 4.8,
-        reviewCount: 120,
-        status: "CONNECTED",
-        callOutcome: "ANSWERED",
-        source: "Google Maps",
-        phone: "555-0000",
-        email: "alice@acme.com",
-        qualificationSummary: null,
-        assignedTo: null,
-      };
-      prisma.lead.findFirst.mockResolvedValue(leadFixture);
-      prisma.lead.update.mockResolvedValue({ ...leadFixture, qualificationSummary: "summary" });
-
-      const result = await caller.leads.generateQualification({ id: "lead-1" });
-
-      expect(prisma.lead.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ qualificationSummary: expect.any(String) }) }),
-      );
-      expect(result.summary).toBeTruthy();
-    });
-
-    it("throws NOT_FOUND when lead is outside caller scope", async () => {
-      prisma.lead.findFirst.mockResolvedValue(null);
-
-      await expect(caller.leads.generateQualification({ id: "other-lead" })).rejects.toMatchObject({
-        code: "NOT_FOUND",
-      });
-    });
-  });
-
   describe("listOrgTags", () => {
     it("returns org tags ordered by name", async () => {
       prisma.leadTag.findMany.mockResolvedValue([
@@ -1238,23 +1176,6 @@ describe("leadsRouter", () => {
     it("throws NOT_FOUND for tags outside the org", async () => {
       prisma.leadTag.findFirst.mockResolvedValue(null);
       await expect(caller.leads.deleteTag({ id: "tag-other" })).rejects.toMatchObject({
-        code: "NOT_FOUND",
-      });
-    });
-  });
-
-  describe("getLeadTags", () => {
-    it("returns tags for a lead in scope", async () => {
-      prisma.lead.findFirst.mockResolvedValue({
-        tags: [{ id: "tag-1", name: "VIP" }],
-      });
-      const result = await caller.leads.getLeadTags({ leadId: "lead-1" });
-      expect(result).toEqual([{ id: "tag-1", name: "VIP" }]);
-    });
-
-    it("throws NOT_FOUND when lead is outside scope", async () => {
-      prisma.lead.findFirst.mockResolvedValue(null);
-      await expect(caller.leads.getLeadTags({ leadId: "other" })).rejects.toMatchObject({
         code: "NOT_FOUND",
       });
     });

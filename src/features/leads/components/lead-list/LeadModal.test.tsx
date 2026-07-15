@@ -20,6 +20,12 @@ let createTaskOptions: { onSuccess?: () => void; onError?: (error: Error) => voi
 let leadTasksMock: Array<{ id: string; title: string; dueDate: string | Date | null; status: string }> = [];
 let scriptsMock: Array<{ id: string; category: string; title: string; body: string }> = [];
 
+vi.mock("@/lib/features", () => ({
+  TRAINER_ENABLED: true,
+  DIALER_ENABLED: true,
+  SCRIPTS_ENABLED: true,
+}));
+
 vi.mock("next-auth/react", () => ({
   useSession: vi.fn(() => ({
     data: {
@@ -54,6 +60,9 @@ vi.mock("@/app/_trpc/client", () => ({
       emails: {
         getDraftForLead: { invalidate: vi.fn() },
       },
+      sms: {
+        getForLead: { invalidate: vi.fn() },
+      },
       scripts: {
         getAll: { invalidate: vi.fn() },
       },
@@ -80,9 +89,6 @@ vi.mock("@/app/_trpc/client", () => ({
       listOrgTags: {
         useQuery: vi.fn(() => ({ data: [] })),
       },
-      qualify: {
-        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, data: undefined })),
-      },
       addTagToLead: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
@@ -106,9 +112,6 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       delete: {
         useMutation: vi.fn(() => ({ mutate: deleteLeadMutate, isPending: false })),
-      },
-      generateQualification: {
-        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },
@@ -169,6 +172,23 @@ vi.mock("@/app/_trpc/client", () => ({
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       deleteDraft: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+    },
+    sms: {
+      configuration: {
+        useQuery: vi.fn(() => ({ data: { configured: false } })),
+      },
+      getForLead: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: false })),
+      },
+      generate: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      updateBody: {
+        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+      },
+      send: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
     },
@@ -269,6 +289,25 @@ describe("LeadModal", () => {
     render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Task" })).toBeInTheDocument();
+  });
+
+  it("shows the SMS panel for a lead with a phone number", () => {
+    render(<LeadModal lead={lead} onClose={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+
+    expect(screen.getByText(/Twilio SMS is not configured/i)).toBeInTheDocument();
+  });
+
+  it("hides the SMS panel for a lead without a phone number", () => {
+    render(
+      <LeadModal
+        lead={{ ...lead, phone: null }}
+        onClose={vi.fn()}
+        onPrev={vi.fn()}
+        onNext={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/Twilio SMS is not configured/i)).not.toBeInTheDocument();
   });
 
   it("opens scripts from the shared scripts data source", () => {

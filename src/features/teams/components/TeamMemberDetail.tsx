@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import type { AppRouter } from "@/server/api/root";
+import { PageShell } from "@/components/layout/PageShell";
 
 type MemberDetail = inferRouterOutputs<AppRouter>["teams"]["memberDetail"];
 type MemberLead = MemberDetail["leads"][number];
@@ -60,18 +61,18 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <div className="crm-content">
+      <PageShell>
         <div style={{ padding: 32, textAlign: "center", color: "var(--crm-fg-faint)" }}>Loading…</div>
-      </div>
+      </PageShell>
     );
   }
   if (error) {
     return (
-      <div className="crm-content">
+      <PageShell>
         <div className="crm-card" style={{ padding: 24, color: "var(--crm-neg)" }}>
           {error.message}
         </div>
-      </div>
+      </PageShell>
     );
   }
   if (!data) return null;
@@ -80,7 +81,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
   const name = user.name || user.email || "Member";
 
   return (
-    <div className="crm-content">
+    <PageShell>
       <div className="crm-page-head">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Link href="/team" className="crm-btn ghost icon" style={{ textDecoration: "none" }}>
@@ -102,13 +103,11 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
                     })
                   }
                   disabled={promoteRole.isPending}
+                  className="crm-clay-input"
                   style={{
                     padding: "2px 6px",
-                    background: "var(--crm-surface)",
-                    border: "1px solid var(--crm-border)",
-                    borderRadius: "var(--crm-radius-sm)",
-                    color: "var(--crm-fg-faint)",
                     fontSize: 12,
+                    color: "var(--crm-fg-faint)",
                   }}
                 >
                   <option value="USER">User</option>
@@ -124,7 +123,6 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
           </div>
         </div>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
         <StatCard label="Leads owned" value={leadCount} />
         <StatCard label="Calls logged" value={callCount} />
@@ -194,8 +192,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
                       <span style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>{relativeTime(c.createdAt)}</span>
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--crm-fg-faint)" }}>
-                      {c.status.toLowerCase()}
-                      {c.duration ? ` · ${c.duration}s` : ""}
+                      {(c.outcome ?? "").replace(/_/g, " ").toLowerCase()}
                     </div>
                   </div>
                 );
@@ -225,7 +222,7 @@ export function TeamMemberDetail({ userId }: { userId: string }) {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

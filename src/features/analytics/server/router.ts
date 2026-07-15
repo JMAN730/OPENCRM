@@ -2,13 +2,15 @@ import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { subDays } from "date-fns";
 import { cached } from "@/lib/cache";
 import { getLeadScope } from "@/server/teams/scope";
-import { scopeCacheKey } from "@/features/ai/server/context";
+import { scopeCacheKey } from "@/server/teams/scope";
 import {
   getTopCallers,
   getLeadQuality,
   getRepPerformance,
 } from "./salesAnalytics";
 import { keys } from "@/lib/cacheKeys";
+import { touchWhere, touchWhereSql } from "@/server/touches";
+import { Prisma } from "@prisma/client";
 
 const SALES_TTL_SECONDS = 60;
 
@@ -54,12 +56,13 @@ export const analyticsRouter = createTRPCRouter({
           AND "createdAt" >= ${thirtyDaysAgo}
         GROUP BY 1 ORDER BY 1 ASC
       `,
+      // Calls are Touch activities (see docs/adr/0002).
       ctx.prisma.$queryRaw<Array<{ day: Date; count: bigint }>>`
-        SELECT date_trunc('day', cl."createdAt") AS day, COUNT(*)::bigint AS count
-        FROM "CallLog" cl
-        JOIN "Lead" l ON cl."leadId" = l.id
-        WHERE l."organizationId" = ${organizationId}
-          AND cl."createdAt" >= ${thirtyDaysAgo}
+        SELECT date_trunc('day', a."createdAt") AS day, COUNT(*)::bigint AS count
+        FROM "Activity" a
+        WHERE a."organizationId" = ${organizationId}
+          AND ${touchWhereSql()}
+          AND a."createdAt" >= ${thirtyDaysAgo}
         GROUP BY 1 ORDER BY 1 ASC
       `,
       ctx.prisma.lead.groupBy({
@@ -83,8 +86,8 @@ export const analyticsRouter = createTRPCRouter({
       ctx.prisma.lead.count({
         where: { organizationId, createdAt: { gte: sevenDaysAgo } },
       }),
-      ctx.prisma.callLog.count({
-        where: { lead: { organizationId }, createdAt: { gte: sevenDaysAgo } },
+      ctx.prisma.activity.count({
+        where: { ...touchWhere(organizationId), createdAt: { gte: sevenDaysAgo } },
       }),
       ctx.prisma.lead.count({
         where: { organizationId, status: "CONNECTED", callOutcome: { not: "CUSTOM" } },

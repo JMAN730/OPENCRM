@@ -37,14 +37,20 @@ type MockLead = {
   assignedTo: { id: string; name: string | null; email: string | null; image: string | null } | null;
 };
 
+type MockTaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
+type MockTaskPriority = "LOW" | "MEDIUM" | "HIGH";
+type MockRole = "ADMIN" | "MANAGER" | "USER";
+
 type MockTask = {
   id: string;
   title: string;
   description?: string;
   dueDate?: string;
-  completed: boolean;
+  status: MockTaskStatus;
+  priority: MockTaskPriority;
   lead: null;
   user: { name: string; image: string | null };
+  assignedTo: { name: string; image: string | null } | null;
 };
 
 type MockMember = {
@@ -52,7 +58,7 @@ type MockMember = {
   name: string | null;
   email: string | null;
   image: string | null;
-  role: "ADMIN" | "USER";
+  role: MockRole;
   teamId: string | null;
   team: { id: string; name: string } | null;
 };
@@ -67,7 +73,7 @@ type MockTeam = {
     name: string | null;
     email: string | null;
     image: string | null;
-    role: "ADMIN" | "USER";
+    role: MockRole;
   }>;
 };
 
@@ -160,6 +166,7 @@ async function seedAuthenticatedSession(context: BrowserContext, user: SessionUs
       email: user.email,
       name: user.name,
       role: user.role,
+      isSuperAdmin: false,
       organizationId: user.organizationId,
       teamId: user.teamId,
       loadingAnimationMode: "ALWAYS",
@@ -209,7 +216,7 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
     case "dashboard.sidebarCounts":
       return {
         leads: state.leads.length,
-        tasks: state.tasks.filter((task) => !task.completed).length,
+        tasks: state.tasks.filter((task) => task.status !== "COMPLETED").length,
         scraperActive: 0,
       };
 
@@ -260,6 +267,22 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
     case "leads.getNotes":
       return [];
 
+    case "leads.getActivities":
+      return [];
+
+    case "leads.listOrgTags":
+      return [];
+
+    case "leads.getStatusCounts":
+      return state.leads.reduce<Record<string, number>>((counts, lead) => {
+        if (lead.callOutcome === "CUSTOM") return counts;
+        counts[lead.status] = (counts[lead.status] ?? 0) + 1;
+        return counts;
+      }, {});
+
+    case "leads.customOutcomes.list":
+      return [];
+
     case "leads.updateCallOutcome": {
       const payload = input as { id: string; callOutcome: string; callNotes?: string };
       const lead = state.leads.find((item) => item.id === payload.id);
@@ -287,26 +310,60 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
         nextCursor: null,
       };
 
+    case "tasks.getDueToday":
+    case "tasks.getOverdue":
+    case "tasks.getUpcomingFollowUps":
+    case "tasks.getAllForLead":
+      return [];
+
+    case "websites.getForLead":
+      return null;
+
+    case "emails.getDraftForLead":
+      return null;
+
+    case "sms.configuration":
+      return { configured: false };
+
+    case "sms.getForLead":
+      return null;
+
     case "tasks.create": {
-      const payload = (input ?? {}) as { title: string; dueDate?: string };
+      const payload = (input ?? {}) as {
+        title: string;
+        description?: string;
+        dueDate?: string;
+        status?: MockTaskStatus;
+        priority?: MockTaskPriority;
+      };
       const task: MockTask = {
         id: `task-${uniqueId()}`,
         title: payload.title,
+        description: payload.description,
         dueDate: payload.dueDate,
-        completed: false,
+        status: payload.status ?? "PENDING",
+        priority: payload.priority ?? "MEDIUM",
         lead: null,
         user: { name: user.name, image: null },
+        assignedTo: { name: user.name, image: null },
       };
       state.tasks.unshift(task);
       return clone(task);
     }
 
     case "tasks.update": {
-      const payload = input as { taskId: string; completed?: boolean };
+      const payload = input as {
+        taskId: string;
+        completed?: boolean;
+        status?: MockTaskStatus;
+      };
       const task = state.tasks.find((item) => item.id === payload.taskId);
       if (!task) throw new Error(`Unknown task ${payload.taskId}`);
       if (typeof payload.completed === "boolean") {
-        task.completed = payload.completed;
+        task.status = payload.completed ? "COMPLETED" : "PENDING";
+      }
+      if (payload.status) {
+        task.status = payload.status;
       }
       return clone(task);
     }
@@ -315,6 +372,9 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
       return null;
 
     case "teams.activityFeed":
+      return [];
+
+    case "scoring.getRules":
       return [];
 
     case "teams.list":
@@ -336,11 +396,16 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
       return clone(team);
     }
 
-    case "teams.inviteUser": {
-      const payload = input as { name: string; email: string; role: "ADMIN" | "USER" };
+    case "teams.inviteUser":
+    case "teams.inviteByEmail": {
+      const payload = input as {
+        name?: string;
+        email: string;
+        role: MockRole;
+      };
       const member: MockMember = {
         id: `user-${uniqueId()}`,
-        name: payload.name,
+        name: payload.name ?? null,
         email: payload.email,
         image: null,
         role: payload.role,
@@ -513,9 +578,30 @@ async function seedSmokeSession(context: BrowserContext, page: Page) {
   return user;
 }
 
+async function navigateViaSidebar(page: Page, href: string) {
+  const sidebar = page.locator(".crm-sidebar");
+  const menuToggle = page.getByRole("button", { name: "Toggle menu" });
+
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+    await expect(sidebar).toHaveClass(/is-open/);
+  }
+
+  await sidebar.locator(`a[href="${href}"]`).first().click();
+  await expect(page).toHaveURL(new URL(href, BASE_URL).toString());
+}
+
 test("redirects anonymous users to sign in for protected routes", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fdashboard/);
+});
+
+test("serves providers through the real NextAuth catch-all route", async ({ request }) => {
+  const response = await request.get("/api/auth/providers");
+
+  expect(response.ok()).toBe(true);
+  const providers = await response.json();
+  expect(providers.credentials.id).toBe("credentials");
 });
 
 test("covers authenticated leads, tasks, and team admin flows in the browser", async ({
@@ -586,9 +672,9 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
 
   await page.goto("/leads");
   const leadsMain = page.getByRole("main");
-  await expect(leadsMain.getByRole("heading", { name: "Leads" })).toBeVisible();
-  const seededLeadRow = leadsMain.locator("tr").filter({ hasText: "Signal Labs" });
-  await seededLeadRow.click();
+  await expect(leadsMain.getByRole("heading", { name: /^Leads - Focus$/ })).toBeVisible();
+  const seededLeadCard = leadsMain.getByRole("button", { name: /Ava Lane.*Signal Labs/ });
+  await seededLeadCard.click();
   await expect(page.getByText("4.6 ★ (128 reviews)").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "signallabs.example.com" })).toHaveAttribute(
     "href",
@@ -603,25 +689,24 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
 
   const searchInput = leadsMain.getByPlaceholder(/search leads/i);
   await searchInput.fill(leadCompany);
-  const leadRow = leadsMain.locator("tr").filter({ hasText: leadCompany });
-  await expect(leadRow).toBeVisible();
+  const leadCard = leadsMain.getByRole("button", { name: new RegExp(leadCompany) });
+  await expect(leadCard).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
-  await leadRow.getByTitle("Delete").click();
-  await expect(leadRow).toHaveCount(0);
+  await leadCard.getByTitle("Delete").click();
+  await expect(leadCard).toHaveCount(0);
 
-  await page.goto("/tasks");
+  await navigateViaSidebar(page, "/tasks");
   const tasksMain = page.getByRole("main");
   await expect(tasksMain.getByRole("heading", { name: "Tasks" })).toBeVisible();
   await tasksMain.getByRole("button", { name: /new task/i }).click();
-  await tasksMain.getByPlaceholder(/task title/i).fill(taskTitle);
-  await tasksMain.getByRole("button", { name: /^add$/i }).click();
-  const taskCard = tasksMain.locator(".crm-task").filter({ hasText: taskTitle }).first();
-  await expect(taskCard).toBeVisible();
-  await taskCard.click();
-  const completedTasks = tasksMain.locator(".crm-card.flush").filter({ hasText: "Completed" });
-  await expect(completedTasks.getByText(taskTitle)).toBeVisible();
+  await page.getByPlaceholder(/call bob smith/i).fill(taskTitle);
+  await page.getByRole("button", { name: /^create task$/i }).click();
+  const taskRow = tasksMain.getByRole("row").filter({ hasText: taskTitle });
+  await expect(taskRow).toBeVisible();
+  await taskRow.getByTitle("Mark complete").click();
+  await expect(taskRow.getByText("Completed")).toBeVisible();
 
-  await page.goto("/team");
+  await navigateViaSidebar(page, "/team");
   const teamMain = page.getByRole("main");
   await expect(teamMain.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
   const adminTeamsPanel = teamMain.locator(".crm-card.flush").filter({ hasText: "Teams (admin)" }).first();
@@ -630,11 +715,10 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await adminTeamsPanel.getByRole("button", { name: /^create$/i }).click();
   await expect(adminTeamsPanel.getByText(teamName, { exact: true })).toBeVisible();
 
-  await adminTeamsPanel.getByRole("button", { name: /create user account/i }).click();
-  await adminTeamsPanel.getByPlaceholder("Full name").fill(memberName);
+  await adminTeamsPanel.getByRole("button", { name: /invite user/i }).click();
+  await adminTeamsPanel.getByPlaceholder(/full name/i).fill(memberName);
   await adminTeamsPanel.getByPlaceholder("Email address").fill(memberEmail);
-  await adminTeamsPanel.getByPlaceholder(/password \(min 8 chars\)/i).fill("Password123!");
-  await adminTeamsPanel.getByRole("button", { name: /add user/i }).click();
+  await adminTeamsPanel.getByRole("button", { name: /send invite/i }).click();
 
   await adminTeamsPanel.getByRole("button", { name: /add member/i }).click();
   await page.getByPlaceholder(/search by name or email/i).fill(memberEmail);

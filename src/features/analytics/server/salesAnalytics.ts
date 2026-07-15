@@ -1,10 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { type LeadScope, leadWhereFromScope } from "@/server/teams/scope";
+import { touchWhere, touchWhereSql } from "@/server/touches";
 
 /**
- * Sales analytics service — pure, scope-aware metric functions shared by the
- * analytics tRPC router and the AI context builder. Every query is constrained
+ * Sales analytics service — pure, scope-aware metric functions used by the
+ * analytics tRPC router. Every query is constrained
  * by the caller's LeadScope (ADMIN → whole org; team leader → their team's
  * assignees; everyone else → only themselves), mirroring how lead access is
  * restricted elsewhere via resolveLeadScope/leadWhereFromScope. Metrics are
@@ -75,11 +76,12 @@ export async function getTopCallers(
 ): Promise<CallerStat[]> {
   const callUserFilter = scope.kind === "users" ? { userId: { in: scope.userIds } } : {};
 
+  // Calls are Touch activities (see docs/adr/0002); "connected" means ANSWERED.
   const [callRows, leadRows] = await Promise.all([
-    db.callLog.groupBy({
-      by: ["userId", "status"],
+    db.activity.groupBy({
+      by: ["userId", "outcome"],
       where: {
-        lead: { organizationId: scope.organizationId },
+        ...touchWhere(scope.organizationId),
         ...callUserFilter,
         ...(opts.since ? { createdAt: { gte: opts.since } } : {}),
       },
@@ -96,7 +98,7 @@ export async function getTopCallers(
   for (const r of callRows) {
     const cur = calls.get(r.userId) ?? { total: 0, connected: 0 };
     cur.total += r._count.id;
-    if (r.status === "CONNECTED") cur.connected += r._count.id;
+    if (r.outcome === "ANSWERED") cur.connected += r._count.id;
     calls.set(r.userId, cur);
   }
 
@@ -241,14 +243,17 @@ export async function getRepPerformance(db: Db, scope: LeadScope): Promise<RepPe
       where: { ...where, status: "CONNECTED" },
       _count: { id: true },
     }),
-    // Avg first-response time per rep: first call timestamp minus lead creation.
+    // Avg first-response time per rep: first touch timestamp minus lead creation
+    // (calls are Touch activities — see docs/adr/0002).
     db.$queryRaw<Array<{ userId: string; avg_seconds: number | null }>>(Prisma.sql`
       SELECT l."assignedToId" AS "userId",
              AVG(EXTRACT(EPOCH FROM (fc.first_call - l."createdAt"))) AS avg_seconds
       FROM "Lead" l
       JOIN (
         SELECT "leadId", MIN("createdAt") AS first_call
-        FROM "CallLog"
+        FROM "Activity" a
+        WHERE a."organizationId" = ${scope.organizationId}
+          AND ${touchWhereSql()}
         GROUP BY "leadId"
       ) fc ON fc."leadId" = l.id
       WHERE l."organizationId" = ${scope.organizationId}
@@ -296,58 +301,3 @@ export async function getRepPerformance(db: Db, scope: LeadScope): Promise<RepPe
   })).sort((a, b) => b.conversions - a.conversions || b.pipelineValue - a.pipelineValue);
 }
 
-export type PipelineMetrics = {
-  total: number;
-  connected: number;
-  conversionRate: number;
-  byStatus: Array<{ status: string; count: number }>;
-};
-
-export async function getPipelineMetrics(db: Db, scope: LeadScope): Promise<PipelineMetrics> {
-  const rows = await db.lead.groupBy({
-    by: ["status"],
-    where: leadWhereFromScope(scope),
-    _count: { id: true },
-  });
-  const byStatus = rows.map((r) => ({ status: String(r.status), count: r._count.id }));
-  const total = byStatus.reduce((a, r) => a + r.count, 0);
-  const connected = byStatus.find((r) => r.status === "CONNECTED")?.count ?? 0;
-  return {
-    total,
-    connected,
-    conversionRate: rate(connected, total),
-    byStatus: byStatus.sort((a, b) => b.count - a.count),
-  };
-}
-
-export type ConversionInsights = {
-  bestNiche: QualityBucket | null;
-  bestCity: QualityBucket | null;
-  bestSource: QualityBucket | null;
-  topNiches: QualityBucket[];
-  topCities: QualityBucket[];
-};
-
-/**
- * Highest-converting niche/city/source for the caller's scope. Buckets with
- * fewer than `minSample` leads are ignored so a single lucky lead can't show
- * as a 100% niche.
- */
-export async function getConversionInsights(
-  db: Db,
-  scope: LeadScope,
-  minSample = 3,
-): Promise<ConversionInsights> {
-  const quality = await getLeadQuality(db, scope);
-  const eligible = (b: QualityBucket[]) => b.filter((x) => x.total >= minSample);
-  const niches = eligible(quality.byNiche);
-  const cities = eligible(quality.byCity);
-  const sources = eligible(quality.bySource);
-  return {
-    bestNiche: niches[0] ?? null,
-    bestCity: cities[0] ?? null,
-    bestSource: sources[0] ?? null,
-    topNiches: niches.slice(0, 5),
-    topCities: cities.slice(0, 5),
-  };
-}

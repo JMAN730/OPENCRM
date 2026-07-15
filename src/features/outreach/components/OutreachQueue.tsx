@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmailStatusBadge } from "@/features/emails/components/EmailStatusBadge";
+import { SmsStatusBadge } from "@/features/sms/components/SmsStatusBadge";
 import { toast } from "sonner";
 import { ExternalLink, Loader2, RefreshCw, Send } from "lucide-react";
 
@@ -41,15 +42,65 @@ const FILTERS: Array<{ id: JobStatus | "ALL"; label: string }> = [
 
 const SKIP_LABELS: Record<string, string> = {
   no_email: "No email address",
+  no_contact: "No phone or email",
   opted_out: "Opted out",
+  phone_opted_out: "Phone opted out",
+  sms_not_configured: "SMS not configured",
   draft_exists: "Draft already existed",
   lead_deleted: "Lead deleted",
 };
+
+type DraftSummary =
+  | {
+      id: string;
+      channel: "EMAIL";
+      subject: string;
+      body: string;
+      status: "DRAFT" | "SENT" | "OPENED" | "CLICKED" | "BOUNCED" | "COMPLAINED" | "UNSUBSCRIBED";
+      sentAt: Date | string | null;
+    }
+  | {
+      id: string;
+      channel: "SMS";
+      body: string;
+      status: "DRAFT" | "SENDING" | "SENT" | "DELIVERED" | "FAILED";
+      sentAt: Date | string | null;
+    };
+
+export function OutreachDraftSummary({
+  draft,
+  onReview,
+}: {
+  draft: DraftSummary;
+  onReview: () => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <Badge variant={draft.channel === "SMS" ? "default" : "outline"}>{draft.channel}</Badge>
+        {draft.channel === "SMS" ? (
+          <SmsStatusBadge status={draft.status} />
+        ) : (
+          <EmailStatusBadge status={draft.status} />
+        )}
+      </div>
+      <button
+        type="button"
+        className="block max-w-72 truncate text-left text-sm underline-offset-2 hover:underline"
+        title="Review draft"
+        onClick={onReview}
+      >
+        {draft.channel === "SMS" ? draft.body : draft.subject}
+      </button>
+    </div>
+  );
+}
 
 export function OutreachQueue() {
   const [filter, setFilter] = useState<JobStatus | "ALL">("DONE");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
+  const [previewChannel, setPreviewChannel] = useState<"EMAIL" | "SMS" | null>(null);
 
   const utils = trpc.useUtils();
   const stats = trpc.outreach.stats.useQuery();
@@ -60,7 +111,22 @@ export function OutreachQueue() {
 
   const items = useMemo(() => list.data?.pages.flatMap((p) => p.items) ?? [], [list.data]);
   const sendableIds = useMemo(
-    () => items.filter((i) => i.draft?.status === "DRAFT").map((i) => i.draft!.id),
+    () =>
+      items
+        .filter((item) => item.draft?.status === "DRAFT")
+        .map((item) => `${item.draft!.channel}:${item.draft!.id}`),
+    [items],
+  );
+  const draftsByKey = useMemo<Map<string, { id: string; channel: "EMAIL" | "SMS" }>>(
+    () =>
+      new Map(
+        items
+          .filter((item) => item.draft)
+          .map((item) => [
+            `${item.draft!.channel}:${item.draft!.id}`,
+            { id: item.draft!.id, channel: item.draft!.channel },
+          ] as const),
+      ),
     [items],
   );
 
@@ -71,7 +137,7 @@ export function OutreachQueue() {
 
   const bulkSend = trpc.outreach.bulkSend.useMutation({
     onSuccess: (res) => {
-      if (res.sent.length > 0) toast.success(`Sent ${res.sent.length} email${res.sent.length === 1 ? "" : "s"}.`);
+      if (res.sent.length > 0) toast.success(`Sent ${res.sent.length} outreach message${res.sent.length === 1 ? "" : "s"}.`);
       for (const f of res.failed) toast.error(`Send failed: ${f.error}`);
       setSelected(new Set());
       invalidate();
@@ -87,19 +153,22 @@ export function OutreachQueue() {
     onError: (err) => toast.error(err.message),
   });
 
-  const toggle = (draftId: string) => {
+  const toggle = (draftKey: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(draftId)) next.delete(draftId);
-      else next.add(draftId);
+      if (next.has(draftKey)) next.delete(draftKey);
+      else next.add(draftKey);
       return next;
     });
   };
 
-  const sendSelected = async (draftIds: string[]) => {
+  const sendSelected = async (draftKeys: string[]) => {
     // The mutation accepts at most 20 drafts per call (matches the send rate limit).
-    for (let i = 0; i < draftIds.length; i += 20) {
-      await bulkSend.mutateAsync({ draftIds: draftIds.slice(i, i + 20) }).catch(() => {});
+    const drafts = draftKeys
+      .map((key) => draftsByKey.get(key))
+      .filter((draft): draft is { id: string; channel: "EMAIL" | "SMS" } => Boolean(draft));
+    for (let i = 0; i < drafts.length; i += 20) {
+      await bulkSend.mutateAsync({ drafts: drafts.slice(i, i + 20) }).catch(() => {});
     }
   };
 
@@ -125,7 +194,7 @@ export function OutreachQueue() {
             <div>
               <CardTitle>Outreach queue</CardTitle>
               <CardDescription>
-                Demo sites and email drafts generated from scraped leads. Review, then send.
+                Demo sites with SMS-first outreach and email fallback. Review every draft, then send.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -191,7 +260,7 @@ export function OutreachQueue() {
                   <TableRow>
                     <TableHead className="w-8" />
                     <TableHead>Business</TableHead>
-                    <TableHead>Email</TableHead>
+                    <TableHead>Contact</TableHead>
                     <TableHead>Draft</TableHead>
                     <TableHead>Demo site</TableHead>
                     <TableHead>Status</TableHead>
@@ -201,13 +270,16 @@ export function OutreachQueue() {
                 <TableBody>
                   {items.map((item) => {
                     const sendable = item.draft?.status === "DRAFT";
+                    const draftKey = item.draft
+                      ? `${item.draft.channel}:${item.draft.id}`
+                      : null;
                     return (
                       <TableRow key={item.id}>
                         <TableCell>
                           {sendable ? (
                             <Checkbox
-                              checked={selected.has(item.draft!.id)}
-                              onCheckedChange={() => toggle(item.draft!.id)}
+                              checked={selected.has(draftKey!)}
+                              onCheckedChange={() => toggle(draftKey!)}
                             />
                           ) : null}
                         </TableCell>
@@ -220,17 +292,20 @@ export function OutreachQueue() {
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{item.lead.email ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {item.draft?.channel === "SMS"
+                            ? item.lead.phone ?? "—"
+                            : item.lead.email ?? item.lead.phone ?? "—"}
+                        </TableCell>
                         <TableCell>
                           {item.draft ? (
-                            <button
-                              type="button"
-                              className="max-w-56 truncate text-left underline-offset-2 hover:underline"
-                              title="Review draft"
-                              onClick={() => setPreviewLeadId(item.lead.id)}
-                            >
-                              {item.draft.subject}
-                            </button>
+                            <OutreachDraftSummary
+                              draft={item.draft}
+                              onReview={() => {
+                                setPreviewLeadId(item.lead.id);
+                                setPreviewChannel(item.draft!.channel);
+                              }}
+                            />
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -249,9 +324,7 @@ export function OutreachQueue() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {item.draft ? (
-                            <EmailStatusBadge status={item.draft.status} />
-                          ) : item.status === "SKIPPED" ? (
+                          {item.status === "SKIPPED" ? (
                             <Badge variant="outline" title={item.skipReason ?? undefined}>
                               {SKIP_LABELS[item.skipReason ?? ""] ?? "Skipped"}
                             </Badge>
@@ -259,6 +332,10 @@ export function OutreachQueue() {
                             <Badge variant="destructive" title={item.error ?? undefined}>
                               Failed
                             </Badge>
+                          ) : item.draft ? (
+                            // The Draft column already shows this draft's own
+                            // status badge — don't repeat it here.
+                            <span className="text-muted-foreground">—</span>
                           ) : (
                             <Badge variant="secondary">{item.status === "PROCESSING" ? "Generating…" : "Queued"}</Badge>
                           )}
@@ -270,7 +347,7 @@ export function OutreachQueue() {
                               size="sm"
                               className="gap-1"
                               disabled={bulkSend.isPending}
-                              onClick={() => void sendSelected([item.draft!.id])}
+                              onClick={() => void sendSelected([draftKey!])}
                             >
                               <Send size={12} /> Send
                             </Button>
@@ -309,8 +386,19 @@ export function OutreachQueue() {
       </Card>
 
       <DraftPreviewDialog
-        leadId={previewLeadId}
-        onClose={() => setPreviewLeadId(null)}
+        leadId={previewChannel === "EMAIL" ? previewLeadId : null}
+        onClose={() => {
+          setPreviewLeadId(null);
+          setPreviewChannel(null);
+        }}
+        onChanged={invalidate}
+      />
+      <SmsDraftPreviewDialog
+        leadId={previewChannel === "SMS" ? previewLeadId : null}
+        onClose={() => {
+          setPreviewLeadId(null);
+          setPreviewChannel(null);
+        }}
         onChanged={invalidate}
       />
     </div>
@@ -329,6 +417,85 @@ function StatCard({ label, value, loading }: { label: string; value: number; loa
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function SmsDraftPreviewDialog({
+  leadId,
+  onClose,
+  onChanged,
+}: {
+  leadId: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const draft = trpc.sms.getForLead.useQuery(
+    { leadId: leadId ?? "" },
+    { enabled: Boolean(leadId) },
+  );
+  const [body, setBody] = useState<string | null>(null);
+  const update = trpc.sms.updateBody.useMutation({
+    onSuccess: () => {
+      toast.success("SMS draft updated.");
+      setBody(null);
+      void draft.refetch();
+      onChanged();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const data = draft.data;
+  const editable = data?.status === "DRAFT";
+  const currentBody = body ?? data?.body ?? "";
+  const dirty = Boolean(data && currentBody !== data.body);
+
+  return (
+    <Dialog
+      open={Boolean(leadId)}
+      onOpenChange={(open) => {
+        if (!open) {
+          setBody(null);
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Outreach SMS</DialogTitle>
+          <DialogDescription>
+            {editable ? "Review and edit before sending." : "This SMS has already been sent."}
+          </DialogDescription>
+        </DialogHeader>
+        {draft.isLoading || !data ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="outreach-sms-body">Message</Label>
+              <textarea
+                id="outreach-sms-body"
+                value={currentBody}
+                disabled={!editable}
+                rows={8}
+                maxLength={1600}
+                onChange={(event) => setBody(event.target.value)}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            {editable ? (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  disabled={!dirty || update.isPending}
+                  onClick={() => update.mutate({ id: data.id, body: currentBody })}
+                >
+                  {update.isPending ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
