@@ -26,7 +26,11 @@ const TAG_COLORS: Record<ReleaseNoteTag, { bg: string; fg: string }> = {
   Fixed: { bg: "var(--crm-surface-2)", fg: "var(--crm-fg-faint)" },
 };
 
-const newestDate = RELEASE_NOTES[0]?.date ?? "";
+// Dates can repeat across notes, so the seen marker includes the title too —
+// a new note on an already-seen date still shows the dot.
+const newestKey = RELEASE_NOTES[0]
+  ? `${RELEASE_NOTES[0].date}::${RELEASE_NOTES[0].title}`
+  : "";
 
 const LAST_SEEN_EVENT = "whatsnew:lastseen";
 
@@ -36,7 +40,7 @@ const subscribeToLastSeen = (cb: () => void) => {
 };
 const getUnreadSnapshot = () => {
   const lastSeen = localStorage.getItem(LAST_SEEN_STORAGE_KEY);
-  return newestDate !== "" && (!lastSeen || lastSeen < newestDate);
+  return newestKey !== "" && lastSeen !== newestKey;
 };
 // Server render never shows the dot; localStorage only exists on the client.
 const getServerUnreadSnapshot = () => false;
@@ -49,8 +53,8 @@ export function WhatsNew({ open, onToggle }: { open: boolean; onToggle: () => vo
   );
 
   useEffect(() => {
-    if (open && newestDate) {
-      localStorage.setItem(LAST_SEEN_STORAGE_KEY, newestDate);
+    if (open && newestKey) {
+      localStorage.setItem(LAST_SEEN_STORAGE_KEY, newestKey);
       window.dispatchEvent(new Event(LAST_SEEN_EVENT));
     }
   }, [open]);
@@ -59,6 +63,7 @@ export function WhatsNew({ open, onToggle }: { open: boolean; onToggle: () => vo
     <>
       <button
         className="crm-btn ghost icon"
+        type="button"
         title="What's new"
         aria-label="What's new"
         aria-pressed={open}

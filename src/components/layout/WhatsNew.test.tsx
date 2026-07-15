@@ -10,7 +10,7 @@ function Harness({ initialOpen = false }: { initialOpen?: boolean }) {
   return <WhatsNew open={open} onToggle={() => setOpen((o) => !o)} />;
 }
 
-const newestDate = RELEASE_NOTES[0].date;
+const newestKey = `${RELEASE_NOTES[0].date}::${RELEASE_NOTES[0].title}`;
 
 describe("WhatsNew", () => {
   beforeEach(() => {
@@ -41,13 +41,22 @@ describe("WhatsNew", () => {
   });
 
   it("shows the unread dot when last-seen is older than the newest note", () => {
-    localStorage.setItem(LAST_SEEN_STORAGE_KEY, "2020-01-01");
+    localStorage.setItem(LAST_SEEN_STORAGE_KEY, "2020-01-01::Some old note");
+    render(<Harness />);
+    expect(screen.getByTestId("whatsnew-unread-dot")).toBeInTheDocument();
+  });
+
+  it("shows the unread dot when a new note shares the last-seen date", () => {
+    localStorage.setItem(
+      LAST_SEEN_STORAGE_KEY,
+      `${RELEASE_NOTES[0].date}::A previously seen note`,
+    );
     render(<Harness />);
     expect(screen.getByTestId("whatsnew-unread-dot")).toBeInTheDocument();
   });
 
   it("hides the unread dot when the newest note has been seen", () => {
-    localStorage.setItem(LAST_SEEN_STORAGE_KEY, newestDate);
+    localStorage.setItem(LAST_SEEN_STORAGE_KEY, newestKey);
     render(<Harness />);
     expect(screen.queryByTestId("whatsnew-unread-dot")).not.toBeInTheDocument();
   });
@@ -57,6 +66,6 @@ describe("WhatsNew", () => {
     fireEvent.click(screen.getByRole("button", { name: /what's new/i }));
 
     expect(screen.queryByTestId("whatsnew-unread-dot")).not.toBeInTheDocument();
-    expect(localStorage.getItem(LAST_SEEN_STORAGE_KEY)).toBe(newestDate);
+    expect(localStorage.getItem(LAST_SEEN_STORAGE_KEY)).toBe(newestKey);
   });
 });

@@ -192,10 +192,12 @@ Format:
 2. **Add a Release Note** if your change is user-visible — add an entry (newest-first) to `src/content/releaseNotes.ts`, written in end-user voice (see `docs/adr/0001-curated-release-notes.md`)
 3. **Add/update tests** for your changes
 4. **Run linting and tests:**
+
    ```bash
    npm run lint
    npx vitest run
    ```
+
 5. **Fill out the PR template** completely
 6. **Link related issues** in the PR description
 7. **Request review** from maintainers
