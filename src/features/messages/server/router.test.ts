@@ -187,6 +187,15 @@ describe("messagesRouter.getMessages", () => {
         },
       }),
     );
+    // The query is scoped to the thread and takes the newest 200 (reversed
+    // to oldest-first above).
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { conversationId: "conv-1" },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+    );
   });
 
   it("throws NOT_FOUND for a conversation the caller is not part of", async () => {
