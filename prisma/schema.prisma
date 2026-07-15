@@ -66,20 +66,21 @@ model User {
 
   passwordResetTokens PasswordResetToken[]
 
-  leads            Lead[]               @relation("AssignedTo")
-  calls            CallLog[]
-  notes            Note[]
-  tasks            Task[]               @relation("TaskCreator")
-  assignedTasks    Task[]               @relation("TaskAssignee")
-  activities       Activity[]
-  scraperJobs      ScraperJob[]
-  scraperRows      ScraperImportedRow[]
-  invitationsSent  Invitation[]         @relation("InvitationInviter")
-  trainingSessions TrainingSession[]
-  outreachJobs     OutreachJob[]
-  conversationsAsUserA Conversation[]   @relation("ConversationUserA")
-  conversationsAsUserB Conversation[]   @relation("ConversationUserB")
-  messagesSent         Message[]        @relation("MessageSender")
+  leads                Lead[]               @relation("AssignedTo")
+  calls                CallLog[]
+  notes                Note[]
+  tasks                Task[]               @relation("TaskCreator")
+  assignedTasks        Task[]               @relation("TaskAssignee")
+  activities           Activity[]
+  scraperJobs          ScraperJob[]
+  scraperRows          ScraperImportedRow[]
+  invitationsSent      Invitation[]         @relation("InvitationInviter")
+  trainingSessions     TrainingSession[]
+  outreachJobs         OutreachJob[]
+  conversationsAsUserA Conversation[]       @relation("ConversationUserA")
+  conversationsAsUserB Conversation[]       @relation("ConversationUserB")
+  messagesSent         Message[]            @relation("MessageSender")
+  bugReports           BugReport[]          @relation("BugReportSubmitter")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -126,6 +127,7 @@ model Organization {
   trainingPersonas TrainingPersona[]
   trainingSessions TrainingSession[]
   conversations    Conversation[]
+  bugReports       BugReport[]
 
   subscription OrganizationSubscription?
 
@@ -419,10 +421,10 @@ model Activity {
   // NOT_CONTACTED). Null for other activity types. Source of all "Calls"
   // metrics — see docs/adr/0002-call-metrics-from-activity-touches.md.
   outcome CallOutcome?
-  leadId      String
-  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadId  String
+  lead    Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Denormalized from Lead.organizationId so org-wide activity feeds (team
   // activityFeed, dashboard "last active") avoid a join through Lead.
@@ -951,4 +953,30 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@index([conversationId, readAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-app bug / issue reports
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A bug or issue report submitted by a member from the Settings → Support tab.
+// Org-scoped so admins can review their organization's reports. The submitter
+// relation is SetNull: reports outlive the account that filed them (useful as an
+// org record even after the member leaves).
+model BugReport {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  submittedById String?
+  submittedBy   User?   @relation("BugReportSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+
+  // Free-text description of the problem.
+  message String  @db.Text
+  // Optional page/route the reporter was on when they hit the issue.
+  pageUrl String?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, createdAt])
 }

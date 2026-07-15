@@ -7,7 +7,7 @@ import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { trpc } from "@/app/_trpc/client";
 import { toast } from "sonner";
-import { Plus, Trash2, UserPlus } from "lucide-react";
+import { Plus, Trash2, UserPlus, Bug } from "lucide-react";
 import { avatarClass, initials, type InviteRole } from "@/features/teams/components/team-page/shared";
 import { BillingPanel } from "@/features/billing/components/BillingPanel";
 import {
@@ -17,7 +17,7 @@ import {
 } from "@/lib/loading-animation";
 
 // Only surface tabs that have a working backend.
-const NAV = ["Profile", "Members", "Tags", "Billing"];
+const NAV = ["Profile", "Members", "Tags", "Billing", "Support"];
 
 export default function SettingsPage() {
   return (
@@ -141,6 +141,7 @@ function SettingsPageContent() {
     Members: "Manage who has access to this workspace.",
     Tags: "Manage labels you can attach to leads to categorize and filter them.",
     Billing: "Subscription plan, seat usage, and payment management.",
+    Support: "Report a bug or issue you've run into.",
   };
 
   const editableKeys = new Set(["Name", "Email"]);
@@ -318,6 +319,8 @@ function SettingsPageContent() {
               <TagsPanel />
             ) : active === "Billing" ? (
               <BillingPanel isAdmin={isAdmin} />
+            ) : active === "Support" ? (
+              <SupportPanel isAdmin={isAdmin} />
             ) : (
               <MembersPanel
                 isAdmin={isAdmin}
@@ -577,6 +580,107 @@ function TagsPanel() {
           <div style={{ fontSize: 12, color: "var(--crm-fg-faint)", marginTop: 8 }}>
             {tags.length} / {maxTags} tags used
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MAX_REPORT_LENGTH = 4000;
+
+function SupportPanel({ isAdmin }: { isAdmin: boolean }) {
+  const utils = trpc.useUtils();
+  const [message, setMessage] = useState("");
+
+  const submit = trpc.support.submit.useMutation({
+    onSuccess: () => {
+      toast.success("Thanks — your report was submitted.");
+      setMessage("");
+      if (isAdmin) void utils.support.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to submit report"),
+  });
+
+  const { data: reports = [], isLoading } = trpc.support.list.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+
+  const handleSubmit = () => {
+    const text = message.trim();
+    if (!text) return;
+    // Capture the page the reporter was on for extra context.
+    const pageUrl = typeof window !== "undefined" ? window.location.href : undefined;
+    submit.mutate({ message: text, pageUrl });
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <textarea
+          placeholder="Describe the bug or issue — what you expected, what happened, and how to reproduce it."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          maxLength={MAX_REPORT_LENGTH}
+          rows={5}
+          style={{
+            width: "100%", padding: "8px 10px", fontSize: 13, resize: "vertical",
+            border: "1px solid var(--crm-border)", borderRadius: "var(--crm-radius-sm)",
+            background: "var(--crm-surface)", color: "var(--crm-fg)", outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            className="crm-btn primary"
+            style={{ height: 32, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
+            disabled={!message.trim() || submit.isPending}
+            onClick={handleSubmit}
+          >
+            <Bug size={13} /> {submit.isPending ? "Submitting…" : "Submit report"}
+          </button>
+          <span style={{ fontSize: 12, color: "var(--crm-fg-faint)" }}>
+            {message.length} / {MAX_REPORT_LENGTH}
+          </span>
+        </div>
+      </div>
+
+      {isAdmin && (
+        <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--crm-border)" }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--crm-fg)", marginBottom: 12 }}>
+            Submitted reports
+          </div>
+          {isLoading ? (
+            <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
+          ) : reports.length === 0 ? (
+            <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>No reports yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {reports.map((r) => (
+                <div
+                  key={r.id}
+                  style={{
+                    padding: "12px 14px", border: "1px solid var(--crm-border)",
+                    borderRadius: "var(--crm-radius-sm)", background: "var(--crm-surface)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, color: "var(--crm-fg)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {r.message}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--crm-fg-faint)", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span>{r.submittedBy?.name ?? r.submittedBy?.email ?? "Unknown member"}</span>
+                    <span>·</span>
+                    <span>{new Date(r.createdAt).toLocaleString()}</span>
+                    {r.pageUrl && (
+                      <>
+                        <span>·</span>
+                        <span style={{ wordBreak: "break-all" }}>{r.pageUrl}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
