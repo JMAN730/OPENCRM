@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { trpc } from "@/app/_trpc/client";
 import { MarkdownMessage } from "@/components/ui/markdown";
+import { WhatsNew } from "@/components/layout/WhatsNew";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -17,7 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-type Panel = "bell" | "inbox" | "ai" | null;
+type Panel = "bell" | "inbox" | "whatsnew" | "ai" | null;
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const POPOVER_STYLE: React.CSSProperties = {
@@ -271,6 +272,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         >
           <Inbox size={15} />
         </button>
+        <WhatsNew open={openPanel === "whatsnew"} onToggle={() => toggle("whatsnew")} />
         <button
           className="crm-btn ghost icon"
           title={isDark ? "Switch to light mode" : "Switch to dark mode"}
