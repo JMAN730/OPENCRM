@@ -189,17 +189,20 @@ Format:
 ## Pull Request Process
 
 1. **Update documentation** (README, ARCHITECTURE, etc.)
-2. **Add/update tests** for your changes
-3. **Run linting and tests:**
+2. **Add a Release Note** if your change is user-visible — add an entry (newest-first) to `src/content/releaseNotes.ts`, written in end-user voice (see `docs/adr/0003-curated-release-notes.md`)
+3. **Add/update tests** for your changes
+4. **Run linting and tests:**
+
    ```bash
    npm run lint
    npx vitest run
    ```
-4. **Fill out the PR template** completely
-5. **Link related issues** in the PR description
-6. **Request review** from maintainers
-7. **Address review feedback** in follow-up commits
-8. **Squash commits** before merging if requested
+
+5. **Fill out the PR template** completely
+6. **Link related issues** in the PR description
+7. **Request review** from maintainers
+8. **Address review feedback** in follow-up commits
+9. **Squash commits** before merging if requested
 
 ## Release Process
 

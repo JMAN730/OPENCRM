@@ -27,3 +27,16 @@ _Avoid_: "contacted" meaning only the first Touch; treating CallLog (dialer log)
 **Demo Site**:
 A generated, per-Lead marketing website shown to a prospect during outreach to demonstrate what their web presence could look like. Must be send-ready without manual rework.
 _Avoid_: "demo", "website" unqualified
+
+### Release communication
+
+**Release Note**:
+A user-facing announcement of a product change, written in end-user voice, curated by hand, and identified by date (not by version number).
+_Avoid_: Changelog entry, update note, version note
+
+**What's New feed**:
+The in-app surface that presents Release Notes to logged-in users.
+_Avoid_: Changelog page, update changelog
+
+**CHANGELOG.md**:
+The dev-facing repo file (Keep a Changelog format) recording technical changes. Not shown to users and not the source of the What's New feed.
