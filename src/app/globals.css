@@ -1399,7 +1399,7 @@
 
 .crm-modal-actions {
   padding: 14px 20px;
-  display: flex; gap: 8px;
+  display: flex; gap: 8px; flex-wrap: wrap;
   border-bottom: 1px solid var(--crm-border-soft);
   background: var(--crm-surface-2);
   position: relative;
