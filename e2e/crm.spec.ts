@@ -518,6 +518,9 @@ function handleProcedure(procedure: string, input: unknown, state: MockState, us
     case "map.leadsInBounds":
       return [];
 
+    case "messages.unreadCount":
+      return 0;
+
     case "billing.getSubscription":
       return {
         configured: false,
