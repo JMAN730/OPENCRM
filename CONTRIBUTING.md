@@ -189,7 +189,7 @@ Format:
 ## Pull Request Process
 
 1. **Update documentation** (README, ARCHITECTURE, etc.)
-2. **Add a Release Note** if your change is user-visible — add an entry (newest-first) to `src/content/releaseNotes.ts`, written in end-user voice (see `docs/adr/0001-curated-release-notes.md`)
+2. **Add a Release Note** if your change is user-visible — add an entry (newest-first) to `src/content/releaseNotes.ts`, written in end-user voice (see `docs/adr/0003-curated-release-notes.md`)
 3. **Add/update tests** for your changes
 4. **Run linting and tests:**
 

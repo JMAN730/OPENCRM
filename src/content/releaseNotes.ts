@@ -9,7 +9,7 @@ export interface ReleaseNote {
 }
 
 // Keep newest-first. Any PR that changes user-visible behavior adds an entry
-// here in the same PR (see docs/adr/0001-curated-release-notes.md).
+// here in the same PR (see docs/adr/0003-curated-release-notes.md).
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-07-01",

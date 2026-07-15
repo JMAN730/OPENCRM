@@ -34,13 +34,32 @@ const newestKey = RELEASE_NOTES[0]
 
 const LAST_SEEN_EVENT = "whatsnew:lastseen";
 
+// localStorage can throw in restricted-storage contexts (private browsing,
+// storage-blocked embeds, quota errors); fall back to an in-memory value so
+// only persistence is lost, not the whole header.
+let inMemoryLastSeen: string | null = null;
+const readLastSeen = () => {
+  try {
+    return localStorage.getItem(LAST_SEEN_STORAGE_KEY);
+  } catch {
+    return inMemoryLastSeen;
+  }
+};
+const writeLastSeen = (value: string) => {
+  inMemoryLastSeen = value;
+  try {
+    localStorage.setItem(LAST_SEEN_STORAGE_KEY, value);
+  } catch {
+    // Persistence unavailable; the in-memory value keeps this session correct.
+  }
+};
+
 const subscribeToLastSeen = (cb: () => void) => {
   window.addEventListener(LAST_SEEN_EVENT, cb);
   return () => window.removeEventListener(LAST_SEEN_EVENT, cb);
 };
 const getUnreadSnapshot = () => {
-  const lastSeen = localStorage.getItem(LAST_SEEN_STORAGE_KEY);
-  return newestKey !== "" && lastSeen !== newestKey;
+  return newestKey !== "" && readLastSeen() !== newestKey;
 };
 // Server render never shows the dot; localStorage only exists on the client.
 const getServerUnreadSnapshot = () => false;
@@ -54,7 +73,7 @@ export function WhatsNew({ open, onToggle }: { open: boolean; onToggle: () => vo
 
   useEffect(() => {
     if (open && newestKey) {
-      localStorage.setItem(LAST_SEEN_STORAGE_KEY, newestKey);
+      writeLastSeen(newestKey);
       window.dispatchEvent(new Event(LAST_SEEN_EVENT));
     }
   }, [open]);
