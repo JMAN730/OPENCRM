@@ -142,7 +142,10 @@ const enforceUserHasOrg = enforceUserIsAuthed.use(({ ctx, next }) => {
 });
 
 const enforceActiveSubscription = enforceUserHasOrg.use(async ({ ctx, next, type, path }) => {
-  if (type === "mutation" && !path.startsWith("billing.")) {
+  // billing.* is exempt so a lapsed org can still resubscribe; support.* is
+  // exempt so users can always report a problem — including one that blocks
+  // billing itself — regardless of subscription state.
+  if (type === "mutation" && !path.startsWith("billing.") && !path.startsWith("support.")) {
     const { assertSubscriptionActiveForOrg } = await import(
       "@/features/billing/server/enforcement"
     );
