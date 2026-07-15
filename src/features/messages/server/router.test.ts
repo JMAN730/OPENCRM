@@ -46,6 +46,7 @@ describe("messagesRouter.listConversations", () => {
     // Unread counts exclude the caller's own messages.
     const groupByArgs = prisma.message.groupBy.mock.calls[0][0];
     expect(groupByArgs.where).toMatchObject({
+      conversationId: { in: ["conv-1"] },
       senderId: { not: "user-1" },
       readAt: null,
     });
@@ -127,6 +128,13 @@ describe("messagesRouter.start", () => {
     await c2.messages.start({ userId: "user-2" });
 
     const args = p2.conversation.upsert.mock.calls[0][0];
+    expect(args.where).toEqual({
+      organizationId_userAId_userBId: {
+        organizationId: "org-1",
+        userAId: "user-2",
+        userBId: "user-9",
+      },
+    });
     expect(args.create).toEqual({
       organizationId: "org-1",
       userAId: "user-2",
@@ -217,13 +225,15 @@ describe("messagesRouter.send", () => {
       },
     });
     // Conditional update: a slower concurrent send must not move
-    // lastMessageAt backward.
+    // lastMessageAt backward, and it must be stamped with the exact same
+    // timestamp as the created message.
+    const createdAt = prisma.message.create.mock.calls[0][0].data.createdAt;
     expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
       where: {
         id: "conv-1",
-        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: expect.any(Date) } }],
+        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: createdAt } }],
       },
-      data: { lastMessageAt: expect.any(Date) },
+      data: { lastMessageAt: createdAt },
     });
     expect(result.id).toBe("msg-1");
   });
