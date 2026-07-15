@@ -8,6 +8,7 @@ import { safeGet, safeSetEx } from "@/lib/redis";
 import { isUserRole, type UserRole } from "@/server/authz";
 import { provisionUserWithOrganization } from "@/features/auth/server/provision";
 import { keys } from "@/lib/cacheKeys";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 // Pre-computed bcrypt hash used when the email is not found, so we always
 // spend roughly the same time as a real compare. Prevents user enumeration
@@ -205,7 +206,7 @@ export const authOptions: NextAuthOptions = {
             email,
           });
         } catch (err) {
-          if ((err as { code?: string })?.code !== "P2002") throw err;
+          if (!isUniqueConstraintError(err)) throw err;
 
           const concurrentlyProvisionedUser = await prisma.user.findUnique({
             where: { email },

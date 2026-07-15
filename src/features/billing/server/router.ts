@@ -14,6 +14,7 @@ import {
   defaultSeatLimitForTier,
   invalidateSubscriptionCache,
 } from "@/features/billing/server/enforcement";
+import { appBaseUrl } from "@/lib/appUrl";
 
 const planTierSchema = z.enum(["STARTER", "PRO", "BUSINESS"]);
 
@@ -95,7 +96,7 @@ export const billingRouter = createTRPCRouter({
       }
 
       const stripe = requireStripe();
-      const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const baseUrl = appBaseUrl("http://localhost:3000");
 
       let subscription = await ctx.prisma.organizationSubscription.findUnique({
         where: { organizationId: ctx.organizationId },
@@ -213,7 +214,7 @@ export const billingRouter = createTRPCRouter({
     }
 
     const stripe = requireStripe();
-    const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const baseUrl = appBaseUrl("http://localhost:3000");
 
     const session = await stripe.billingPortal.sessions.create({
       customer: subscription.stripeCustomerId,

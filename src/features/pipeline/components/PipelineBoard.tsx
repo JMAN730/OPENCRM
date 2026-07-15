@@ -8,6 +8,7 @@ import type { AppRouter } from "@/server/api/root";
 import { toast } from "sonner";
 import { Phone, Mail, Star, Plus, MoreVertical, Filter, ArrowUpDown } from "lucide-react";
 import { formatDistanceToNowStrict, differenceInDays } from "date-fns";
+import { leadDisplayName } from "@/lib/leadName";
 import {
   Dialog,
   DialogContent,
@@ -93,9 +94,6 @@ function fmtValueFull(v: number | null | undefined) {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
-function leadDisplayName(lead: Lead) {
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unnamed";
-}
 
 function leadLocation(lead: Lead) {
   return [lead.city, lead.state].filter(Boolean).join(", ");

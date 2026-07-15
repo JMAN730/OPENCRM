@@ -1,6 +1,8 @@
 import { SmsDraftStatus, type Lead, type PrismaClient } from "@prisma/client";
 import { ActivityType, logActivity } from "@/server/activity";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 import { isSmsConfigured, sendSmsMessage } from "./twilio";
+import { appBaseUrl } from "@/lib/appUrl";
 
 export type SmsErrorCode =
   | "NO_PHONE"
@@ -48,17 +50,7 @@ export function normalizePhoneNumber(raw: string | null | undefined): string | n
 }
 
 function demoUrl(slug: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
-  return `${base}/demo/${slug}`;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "P2002"
-  );
+  return `${appBaseUrl()}/demo/${slug}`;
 }
 
 function isTwilioBlockedRecipient(error: unknown): boolean {

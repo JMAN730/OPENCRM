@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { appBaseUrl } from "@/lib/appUrl";
 
 export function isSmsConfigured(): boolean {
   return Boolean(
@@ -10,11 +11,7 @@ export function isSmsConfigured(): boolean {
 }
 
 export function smsStatusCallbackUrl(draftId?: string): string {
-  const baseUrl = (process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").replace(
-    /\/$/,
-    "",
-  );
-  const url = `${baseUrl}/api/webhooks/twilio/status`;
+  const url = `${appBaseUrl()}/api/webhooks/twilio/status`;
   return draftId ? `${url}?draftId=${encodeURIComponent(draftId)}` : url;
 }
 

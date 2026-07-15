@@ -21,6 +21,7 @@ import {
 import { getTaskSummaryCounts, isTaskOverdue } from "./task-summary";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import { LeadCombobox } from "@/features/leads/components/LeadCombobox";
+import { leadDisplayName } from "@/lib/leadName";
 
 type TaskItem = inferRouterOutputs<AppRouter>["tasks"]["getAll"]["items"][number];
 type OrgMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
@@ -89,8 +90,7 @@ function isOverdue(task: Pick<TaskItem, "dueDate" | "status">) {
 }
 
 function leadName(lead: TaskItem["lead"]) {
-  if (!lead) return "";
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—";
+  return leadDisplayName(lead, "—");
 }
 
 // ── Modal Overlay (shared dialog behaviors: focus, Escape, backdrop close) ────

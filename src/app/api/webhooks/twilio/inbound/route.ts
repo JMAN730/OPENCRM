@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizePhoneNumber } from "@/features/sms/server/service";
-import { isPrismaUniqueError, verifiedTwilioForm } from "@/features/sms/server/webhook";
+import { verifiedTwilioForm } from "@/features/sms/server/webhook";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 const STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const START_KEYWORDS = new Set(["START", "UNSTOP"]);
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (!isPrismaUniqueError(error)) throw error;
+    if (!isUniqueConstraintError(error)) throw error;
   }
   return new Response("OK");
 }

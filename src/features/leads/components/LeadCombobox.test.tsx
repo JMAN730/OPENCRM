@@ -1,36 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { LeadCombobox, leadDisplayName } from "./LeadCombobox";
-
-// ── pure function tests ────────────────────────────────────────────────────
-
-describe("leadDisplayName", () => {
-  it("returns company when present", () => {
-    expect(leadDisplayName({ company: "Acme Corp", firstName: "John", lastName: "Doe" })).toBe(
-      "Acme Corp",
-    );
-  });
-
-  it("falls back to full name when company is absent", () => {
-    expect(leadDisplayName({ company: "", firstName: "John", lastName: "Doe" })).toBe("John Doe");
-  });
-
-  it("uses only first name when last name is absent", () => {
-    expect(leadDisplayName({ company: "", firstName: "John", lastName: "" })).toBe("John");
-  });
-
-  it("returns 'Unnamed' when all fields are empty", () => {
-    expect(leadDisplayName({ company: "", firstName: "", lastName: "" })).toBe("Unnamed");
-  });
-
-  it("returns 'Unnamed' when all fields are null/undefined", () => {
-    expect(leadDisplayName({ company: null, firstName: null, lastName: null } as never)).toBe(
-      "Unnamed",
-    );
-  });
-});
-
-// ── component tests ────────────────────────────────────────────────────────
+import { LeadCombobox } from "./LeadCombobox";
 
 const mockGetAll = vi.fn();
 

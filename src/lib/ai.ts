@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import type { Lead } from "@prisma/client";
 import { nicheForCategory } from "@/features/websites/packs";
+import { leadDisplayName } from "@/lib/leadName";
 
 export interface DemoContent {
   headline: string;
@@ -31,13 +32,8 @@ function client() {
 
 const model = () => process.env.AI_MODEL ?? "deepseek-chat";
 
-function leadDisplayName(lead: Lead) {
-  const contactName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-  return lead.company ?? (contactName || "Your Local Business");
-}
-
 function fallbackDemoContent(lead: Lead): DemoContent {
-  const name = leadDisplayName(lead);
+  const name = leadDisplayName(lead, "Your Local Business");
   const niche = nicheForCategory(lead.category) ?? "local service";
   const city = lead.city ?? "the local area";
   const phone = lead.phone ? ` Call ${lead.phone} to talk through availability and next steps.` : "";
