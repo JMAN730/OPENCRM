@@ -1,3 +1,5 @@
+import { leadDisplayName } from "@/lib/leadName";
+
 export interface LeadContextInput {
   company: string | null;
   firstName: string | null;
@@ -13,10 +15,8 @@ export interface LeadContext {
 
 /** Derives the prospect-facing context from a lead, with safe fallbacks. */
 export function buildLeadContext(lead: LeadContextInput): LeadContext {
-  const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-  const leadName = lead.company ?? (fullName || "Your Local Business");
   return {
-    leadName,
+    leadName: leadDisplayName(lead, "Your Local Business"),
     company: lead.company ?? "the company",
     industry: lead.source ?? "your industry",
   };

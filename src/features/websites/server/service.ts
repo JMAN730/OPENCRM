@@ -2,6 +2,7 @@ import { Prisma, type GeneratedWebsite, type Lead, type PrismaClient } from "@pr
 import { generateDemoContent } from "@/lib/ai";
 import { slugify, uniqueSlug } from "@/lib/slug";
 import { logActivity, ActivityType } from "@/server/activity";
+import { leadDisplayName } from "@/lib/leadName";
 
 /**
  * Generates (or regenerates) the AI demo website for a lead. Shared by the
@@ -30,7 +31,7 @@ export async function generateWebsiteForLead(
   // Template Pack's curated set (resolved from Lead.category at render time,
   // so curation improvements apply to existing demos too).
   const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
-  const businessName = lead.company ?? [lead.firstName, lead.lastName].filter(Boolean).join(" ");
+  const businessName = leadDisplayName(lead, "");
   let needsPhotos = true;
 
   if (lead.mapsUrl && googleApiKey) {

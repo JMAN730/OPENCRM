@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { validateTwilioWebhook } from "./twilio";
 
 export async function verifiedTwilioForm(request: Request): Promise<
@@ -32,6 +31,3 @@ export async function verifiedTwilioForm(request: Request): Promise<
   return { ok: true, params };
 }
 
-export function isPrismaUniqueError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}

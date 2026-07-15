@@ -8,6 +8,7 @@ import { assertWithinRateLimit, getClientIp } from "@/lib/rateLimit";
 import { invalidateAuthSnapshot } from "@/lib/auth";
 import { provisionUserWithOrganization } from "./provision";
 import { keys } from "@/lib/cacheKeys";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 const loadingAnimationModeSchema = z.enum(["ALWAYS", "ONCE_DAILY", "OFF"]);
 
@@ -140,7 +141,7 @@ export const authRouter = createTRPCRouter({
           organizationName: input.organizationName,
         });
       } catch (err) {
-        if ((err as { code?: string })?.code !== "P2002") throw err;
+        if (!isUniqueConstraintError(err)) throw err;
 
         throw new TRPCError({
           code: "CONFLICT",

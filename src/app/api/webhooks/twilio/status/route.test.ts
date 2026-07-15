@@ -21,7 +21,7 @@ function request(status: string, signature = "valid-signature", draftId?: string
       "content-type": "application/x-www-form-urlencoded",
       "x-twilio-signature": signature,
     },
-    body: new URLSearchParams({ MessageSid: "SM123", MessageStatus: status }),
+    body: new URLSearchParams({ MessageSid: "SM123", MessageStatus: status }).toString(),
   });
 }
 

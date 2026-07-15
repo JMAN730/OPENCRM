@@ -1,7 +1,6 @@
 import { createTRPCRouter, organizationProcedure } from "@/server/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { Prisma } from "@prisma/client";
 import { generateWebsiteForLead } from "@/features/websites/server/service";
 import { assertWithinRateLimit } from "@/lib/rateLimit";
 import { requireVisibleLead, visibleLeadWhere } from "@/server/lead-visibility";
@@ -50,23 +49,5 @@ export const websitesRouter = createTRPCRouter({
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       return ctx.prisma.generatedWebsite.delete({ where: { id: input.id } });
-    }),
-
-  setPhotos: organizationProcedure
-    .input(z.object({
-      id: z.string(),
-      photos: z.array(z.string().url()).min(1).max(10),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.prisma.generatedWebsite.findFirst({
-        where: { id: input.id, lead: await visibleLeadWhere(ctx) },
-        select: { id: true, content: true },
-      });
-      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
-      const content = existing.content as Record<string, unknown>;
-      return ctx.prisma.generatedWebsite.update({
-        where: { id: existing.id },
-        data: { content: { ...content, photos: input.photos } as Prisma.InputJsonValue },
-      });
     }),
 });

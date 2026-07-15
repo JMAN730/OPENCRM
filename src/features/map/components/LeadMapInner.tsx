@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { trpc } from "@/app/_trpc/client";
 import type { MapBounds } from "@/features/map/shared/coords";
 import { SelectionPanel } from "./SelectionPanel";
+import { leadDisplayName } from "@/lib/leadName";
 
 export type MapLead = {
   id: string;
@@ -53,11 +54,7 @@ function osmKey(b: DiscoveredBusiness): string {
 }
 
 function leadLabel(lead: MapLead): string {
-  return (
-    lead.company ||
-    [lead.firstName, lead.lastName].filter(Boolean).join(" ") ||
-    "Unnamed lead"
-  );
+  return leadDisplayName(lead, "Unnamed lead");
 }
 
 function pinIcon(kind: "lead" | "osm", selected: boolean): L.DivIcon {

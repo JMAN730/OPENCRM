@@ -1,6 +1,7 @@
 import { SmsDraftStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isPrismaUniqueError, verifiedTwilioForm } from "@/features/sms/server/webhook";
+import { verifiedTwilioForm } from "@/features/sms/server/webhook";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 const STATUS_MAP: Record<string, SmsDraftStatus> = {
   accepted: SmsDraftStatus.SENT,
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (!isPrismaUniqueError(error)) throw error;
+    if (!isUniqueConstraintError(error)) throw error;
   }
   return new Response("OK");
 }

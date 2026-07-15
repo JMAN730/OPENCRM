@@ -7,6 +7,7 @@ import {
   defaultSeatLimitForTier,
   invalidateSubscriptionCache,
 } from "@/features/billing/server/enforcement";
+import { isUniqueConstraintError } from "@/lib/prismaErrors";
 
 function subscriptionPeriodEnd(subscription: Stripe.Subscription): Date | null {
   const item = subscription.items.data[0];
@@ -279,7 +280,7 @@ export async function processStripeWebhookEvent(
   await prisma.stripeWebhookEvent
     .create({ data: { eventId: event.id, type: event.type } })
     .catch((err: unknown) => {
-      if ((err as { code?: string })?.code === "P2002") return;
+      if (isUniqueConstraintError(err)) return;
       throw err;
     });
 }

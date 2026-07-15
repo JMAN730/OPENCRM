@@ -38,6 +38,7 @@ import {
   isPast,
   isToday,
 } from "date-fns";
+import { leadDisplayName } from "@/lib/leadName";
 
 type CalendarTask = inferRouterOutputs<AppRouter>["tasks"]["getCalendar"][number];
 type OrgMember = inferRouterOutputs<AppRouter>["teams"]["organizationMembers"][number];
@@ -99,8 +100,7 @@ function isOverdue(task: Pick<CalendarTask, "dueDate" | "status">) {
 }
 
 function leadLabel(lead: CalendarTask["lead"]) {
-  if (!lead) return "";
-  return lead.company || [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "—";
+  return leadDisplayName(lead, "—");
 }
 
 function fmtDateTime(d: Date | string | null | undefined) {

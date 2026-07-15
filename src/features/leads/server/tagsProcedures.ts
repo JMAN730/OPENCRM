@@ -124,15 +124,4 @@ export const leadTagsProcedures = {
 
       return { count: uniqueIds.length };
     }),
-
-  getLeadTags: organizationProcedure
-    .input(z.object({ leadId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const lead = await ctx.prisma.lead.findFirst({
-        where: { id: input.leadId, ...(await scopedLeadWhere(ctx)) },
-        select: { tags: { select: { id: true, name: true } } },
-      });
-      if (!lead) throw new TRPCError({ code: "NOT_FOUND" });
-      return lead.tags;
-    }),
 };
