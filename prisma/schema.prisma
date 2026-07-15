@@ -77,6 +77,9 @@ model User {
   invitationsSent  Invitation[]         @relation("InvitationInviter")
   trainingSessions TrainingSession[]
   outreachJobs     OutreachJob[]
+  conversationsAsUserA Conversation[]   @relation("ConversationUserA")
+  conversationsAsUserB Conversation[]   @relation("ConversationUserB")
+  messagesSent         Message[]        @relation("MessageSender")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -122,6 +125,7 @@ model Organization {
 
   trainingPersonas TrainingPersona[]
   trainingSessions TrainingSession[]
+  conversations    Conversation[]
 
   subscription OrganizationSubscription?
 
@@ -894,4 +898,57 @@ model TrainingSession {
   @@index([organizationId, userId])
   @@index([organizationId, createdAt])
   @@index([leadId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Team messaging feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1:1 conversation between two members of the same organization. The pair is
+// stored in canonical order (userAId < userBId lexicographically) so the
+// unique index guarantees exactly one conversation per pair. The ordering is
+// also enforced by the check constraint
+// "Conversation_canonical_participants_check" in the migration SQL (Prisma
+// cannot express check constraints declaratively).
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userAId String
+  userA   User   @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId String
+  userB   User   @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  // Denormalized timestamp of the newest message for conversation-list ordering.
+  lastMessageAt DateTime?
+
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, userAId, userBId])
+  @@index([organizationId, lastMessageAt])
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId String
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  body String @db.Text
+
+  // Read receipt for the non-sender participant (conversations are 1:1).
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, readAt])
 }

@@ -16,6 +16,7 @@ import {
   User,
   Kanban,
   Map,
+  MessageSquare,
   ScrollText,
   Dumbbell,
   Send,
@@ -40,6 +41,7 @@ const NAV_GROUPS = [
       { id: "map",      label: "Map",      href: "/map",      icon: Map },
       { id: "pipeline", label: "Pipeline", href: "/pipeline", icon: Kanban },
       { id: "team",     label: "Team",     href: "/team",     icon: Users2 },
+      { id: "messages", label: "Messages", href: "/messages", icon: MessageSquare },
       { id: "trainer",  label: "Trainer",  href: "/trainer",  icon: Dumbbell },
       { id: "scripts",  label: "Scripts",  href: "/scripts",  icon: ScrollText },
       { id: "scraper",  label: "Scraper",  href: "/scraper",  icon: Bot },
@@ -83,10 +85,19 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
     undefined,
     { enabled: !!session, staleTime: 30_000 },
   );
+  // Polling is required here (incoming messages arrive with no local
+  // mutation to invalidate on); 60s keeps the global badge cheap while the
+  // messages page itself polls faster.
+  const { data: unreadMessages } = trpc.messages.unreadCount.useQuery(
+    undefined,
+    { enabled: !!session, refetchInterval: 60_000 },
+  );
   const countById: Record<string, number | undefined> = {
     leads: counts?.leads,
     tasks: counts?.tasks,
     scraper: counts?.scraperActive,
+    // Badge only when something is actually unread.
+    messages: unreadMessages ? unreadMessages : undefined,
   };
 
   const [menuOpen, setMenuOpen] = useState(false);
