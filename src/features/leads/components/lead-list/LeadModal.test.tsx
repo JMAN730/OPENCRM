@@ -89,9 +89,6 @@ vi.mock("@/app/_trpc/client", () => ({
       listOrgTags: {
         useQuery: vi.fn(() => ({ data: [] })),
       },
-      qualify: {
-        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false, data: undefined })),
-      },
       addTagToLead: {
         useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
@@ -115,9 +112,6 @@ vi.mock("@/app/_trpc/client", () => ({
       },
       delete: {
         useMutation: vi.fn(() => ({ mutate: deleteLeadMutate, isPending: false })),
-      },
-      generateQualification: {
-        useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
       },
       customOutcomes: {
         list: { useQuery: vi.fn(() => ({ data: [] })) },

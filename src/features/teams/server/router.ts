@@ -508,42 +508,6 @@ export const teamsRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  /** Admin: list pending invitations for the current org. */
-  listInvitations: organizationProcedure.query(({ ctx }) => {
-    assertAdmin(ctx.session.user.role);
-    return ctx.prisma.invitation.findMany({
-      where: { organizationId: ctx.organizationId, status: "PENDING" },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        teamId: true,
-        expires: true,
-        createdAt: true,
-        invitedBy: { select: { name: true } },
-      },
-    });
-  }),
-
-  /** Admin: revoke a pending invitation. */
-  revokeInvitation: organizationProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      assertAdmin(ctx.session.user.role);
-      const inv = await ctx.prisma.invitation.findFirst({
-        where: { id: input.id, organizationId: ctx.organizationId },
-        select: { id: true },
-      });
-      if (!inv) throw new TRPCError({ code: "NOT_FOUND" });
-      await ctx.prisma.invitation.update({
-        where: { id: inv.id },
-        data: { status: "REVOKED" },
-      });
-      return { ok: true };
-    }),
-
   /**
    * Public: preview an invitation by raw token. Used by the accept-invite
    * page to show "You've been invited to {Org}" before the user sets a

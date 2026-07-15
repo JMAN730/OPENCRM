@@ -29,23 +29,6 @@ export function assertManagerOrAdmin(role: string | null | undefined): void {
 }
 
 /**
- * Platform-level "master account" check. Orthogonal to the org `role`: a
- * super admin can read across every organization via the `platform` router.
- */
-export function isSuperAdmin(value: unknown): boolean {
-  return value === true;
-}
-
-export function assertSuperAdmin(value: unknown): void {
-  if (!isSuperAdmin(value)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Platform administrator privileges required.",
-    });
-  }
-}
-
-/**
  * Only ADMIN can grant ADMIN. MANAGER can grant USER. USER cannot grant anything.
  * Throws FORBIDDEN if the grant would escalate privilege beyond the caller.
  */

@@ -25,7 +25,7 @@ function request(body: Record<string, string>) {
       "content-type": "application/x-www-form-urlencoded",
       "x-twilio-signature": "valid-signature",
     },
-    body: new URLSearchParams(body),
+    body: new URLSearchParams(body).toString(),
   });
 }
 

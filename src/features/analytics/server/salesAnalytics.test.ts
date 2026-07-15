@@ -7,8 +7,6 @@ import {
   getTopCallers,
   getLeadQuality,
   getRepPerformance,
-  getPipelineMetrics,
-  getConversionInsights,
 } from "./salesAnalytics";
 
 const ORG = "org-1";
@@ -180,32 +178,3 @@ describe("getRepPerformance", () => {
   });
 });
 
-describe("getPipelineMetrics", () => {
-  it("derives total, connected and conversion rate from status groups", async () => {
-    const prisma = createMockPrisma();
-    prisma.lead.groupBy.mockResolvedValue([
-      { status: "CONNECTED", _count: { id: 38 } },
-      { status: "NO_ANSWER", _count: { id: 153 } },
-    ]);
-    const m = await getPipelineMetrics(db(prisma), ALL);
-    expect(m.total).toBe(191);
-    expect(m.connected).toBe(38);
-    expect(m.conversionRate).toBe(19.9);
-    expect(m.byStatus[0]).toEqual({ status: "NO_ANSWER", count: 153 });
-  });
-});
-
-describe("getConversionInsights", () => {
-  it("ignores buckets below the minimum sample size", async () => {
-    const prisma = createMockPrisma();
-    prisma.lead.groupBy.mockResolvedValue([
-      { source: "GoogleMaps / Landscaping / Toledo, Ohio", city: null, status: "CONNECTED", _count: { id: 2 } },
-      { source: "GoogleMaps / Landscaping / Toledo, Ohio", city: null, status: "NO_ANSWER", _count: { id: 8 } },
-      // Cleaning has only 1 lead → below minSample of 3, must be excluded
-      { source: "GoogleMaps / Cleaning / Maumee, Ohio", city: null, status: "CONNECTED", _count: { id: 1 } },
-    ]);
-    const insights = await getConversionInsights(db(prisma), ALL);
-    expect(insights.bestNiche?.key).toBe("Landscaping");
-    expect(insights.topNiches.some((n) => n.key === "Cleaning")).toBe(false);
-  });
-});
