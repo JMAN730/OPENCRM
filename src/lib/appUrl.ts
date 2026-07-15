@@ -2,7 +2,7 @@
 function resolveBaseUrl(candidates: Array<string | undefined>): string {
   for (const candidate of candidates) {
     const trimmed = candidate?.trim();
-    if (trimmed) return trimmed.replace(/\/$/, "");
+    if (trimmed) return trimmed.replace(/\/+$/, "");
   }
   return "";
 }
