@@ -85,9 +85,12 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: { isOp
     undefined,
     { enabled: !!session, staleTime: 30_000 },
   );
+  // Polling is required here (incoming messages arrive with no local
+  // mutation to invalidate on); 60s keeps the global badge cheap while the
+  // messages page itself polls faster.
   const { data: unreadMessages } = trpc.messages.unreadCount.useQuery(
     undefined,
-    { enabled: !!session, refetchInterval: 30_000 },
+    { enabled: !!session, refetchInterval: 60_000 },
   );
   const countById: Record<string, number | undefined> = {
     leads: counts?.leads,

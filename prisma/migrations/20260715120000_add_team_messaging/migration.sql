@@ -12,6 +12,10 @@ CREATE TABLE "Conversation" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
+    -- Enforce canonical ordering (and no self-conversations) at the DB level
+    -- so writers outside the messages router cannot violate the invariant.
+    -- Prisma cannot express check constraints declaratively.
+    CONSTRAINT "Conversation_canonical_participants_check" CHECK ("userAId" < "userBId"),
     CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
 );
 

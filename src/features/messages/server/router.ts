@@ -164,17 +164,25 @@ export const messagesRouter = createTRPCRouter({
         input.conversationId,
       );
 
+      const sentAt = new Date();
       const [message] = await ctx.prisma.$transaction([
         ctx.prisma.message.create({
           data: {
             conversationId: input.conversationId,
             senderId: userId,
             body: input.body,
+            createdAt: sentAt,
           },
         }),
-        ctx.prisma.conversation.update({
-          where: { id: input.conversationId },
-          data: { lastMessageAt: new Date() },
+        // Conditional update keeps lastMessageAt monotonic: a slower
+        // concurrent send must not move the thread's ordering timestamp
+        // backward.
+        ctx.prisma.conversation.updateMany({
+          where: {
+            id: input.conversationId,
+            OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: sentAt } }],
+          },
+          data: { lastMessageAt: sentAt },
         }),
       ]);
       return message;

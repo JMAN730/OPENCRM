@@ -283,6 +283,7 @@ export function createMockPrisma() {
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       upsert: vi.fn(),
     },
     message: {

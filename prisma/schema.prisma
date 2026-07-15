@@ -906,7 +906,10 @@ model TrainingSession {
 
 // 1:1 conversation between two members of the same organization. The pair is
 // stored in canonical order (userAId < userBId lexicographically) so the
-// unique index guarantees exactly one conversation per pair.
+// unique index guarantees exactly one conversation per pair. The ordering is
+// also enforced by the check constraint
+// "Conversation_canonical_participants_check" in the migration SQL (Prisma
+// cannot express check constraints declaratively).
 model Conversation {
   id             String       @id @default(cuid())
   organizationId String

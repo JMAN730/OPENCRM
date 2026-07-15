@@ -199,10 +199,9 @@ describe("messagesRouter.send", () => {
     ({ caller, prisma } = createTestCaller());
   });
 
-  it("creates the message and bumps lastMessageAt", async () => {
+  it("creates the message and bumps lastMessageAt monotonically", async () => {
     prisma.conversation.findFirst.mockResolvedValue({ id: "conv-1" });
     prisma.message.create.mockResolvedValue({ id: "msg-1", body: "hello" });
-    prisma.conversation.update.mockResolvedValue({ id: "conv-1" });
 
     const result = await caller.messages.send({
       conversationId: "conv-1",
@@ -210,19 +209,30 @@ describe("messagesRouter.send", () => {
     });
 
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: { conversationId: "conv-1", senderId: "user-1", body: "hello" },
+      data: {
+        conversationId: "conv-1",
+        senderId: "user-1",
+        body: "hello",
+        createdAt: expect.any(Date),
+      },
     });
-    expect(prisma.conversation.update).toHaveBeenCalledWith({
-      where: { id: "conv-1" },
+    // Conditional update: a slower concurrent send must not move
+    // lastMessageAt backward.
+    expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "conv-1",
+        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: expect.any(Date) } }],
+      },
       data: { lastMessageAt: expect.any(Date) },
     });
     expect(result.id).toBe("msg-1");
   });
 
-  it("rejects an empty body", async () => {
+  it("rejects an empty body with BAD_REQUEST before touching the database", async () => {
     await expect(
       caller.messages.send({ conversationId: "conv-1", body: "   " }),
-    ).rejects.toBeDefined();
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(prisma.conversation.findFirst).not.toHaveBeenCalled();
     expect(prisma.message.create).not.toHaveBeenCalled();
   });
 
@@ -232,6 +242,16 @@ describe("messagesRouter.send", () => {
     await expect(
       caller.messages.send({ conversationId: "conv-foreign", body: "hi" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // The membership gate must carry the full authorization scope.
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "conv-foreign",
+          organizationId: "org-1",
+          OR: [{ userAId: "user-1" }, { userBId: "user-1" }],
+        },
+      }),
+    );
     expect(prisma.message.create).not.toHaveBeenCalled();
   });
 });
@@ -265,6 +285,16 @@ describe("messagesRouter.markRead", () => {
     await expect(
       caller.messages.markRead({ conversationId: "conv-foreign" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // The membership gate must carry the full authorization scope.
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "conv-foreign",
+          organizationId: "org-1",
+          OR: [{ userAId: "user-1" }, { userBId: "user-1" }],
+        },
+      }),
+    );
     expect(prisma.message.updateMany).not.toHaveBeenCalled();
   });
 });

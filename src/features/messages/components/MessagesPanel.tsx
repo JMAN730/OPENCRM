@@ -51,7 +51,14 @@ export function MessagesPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
-  const [draft, setDraft] = useState("");
+  // Composer drafts are keyed by conversation so switching threads can never
+  // carry text over and post it to the wrong person.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draft = selectedId ? (drafts[selectedId] ?? "") : "";
+  const setDraft = (text: string) => {
+    if (!selectedId) return;
+    setDrafts((d) => ({ ...d, [selectedId]: text }));
+  };
 
   const utils = trpc.useUtils();
 
@@ -77,9 +84,18 @@ export function MessagesPanel() {
   });
 
   const send = trpc.messages.send.useMutation({
-    onSuccess: () => {
-      setDraft("");
-      void utils.messages.getMessages.invalidate({ conversationId: selectedId ?? "" });
+    // Use the mutation variables, not the closed-over selectedId: the user may
+    // have switched threads while the send was in flight. Only clear that
+    // conversation's draft if it still holds the text that was just sent.
+    onSuccess: (_data, variables) => {
+      setDrafts((d) =>
+        (d[variables.conversationId] ?? "").trim() === variables.body
+          ? { ...d, [variables.conversationId]: "" }
+          : d,
+      );
+      void utils.messages.getMessages.invalidate({
+        conversationId: variables.conversationId,
+      });
       void utils.messages.listConversations.invalidate();
     },
     onError: (err) => toast.error(err.message || "Message failed to send"),
@@ -275,7 +291,9 @@ export function MessagesPanel() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  // isComposing guards IME input (CJK): Enter that confirms a
+                  // composition candidate must not send the message.
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     handleSend();
                   }
