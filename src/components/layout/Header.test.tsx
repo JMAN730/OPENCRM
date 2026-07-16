@@ -29,8 +29,12 @@ describe("Header", () => {
     ["/trainer", "Trainer"],
     ["/scripts", "Scripts"],
     ["/outreach", "Outreach"],
+    ["/scraper", "Scraper"],
     ["/calendar", "Calendar"],
+    ["/tasks", "Tasks"],
+    ["/dialer", "Dialer"],
     ["/settings/scoring", "Lead Scoring"],
+    ["/settings/scoring/details", "Lead Scoring"],
     ["/admin", "Admin"],
   ])("shows the current page title on %s", (route, title) => {
     pathname = route;

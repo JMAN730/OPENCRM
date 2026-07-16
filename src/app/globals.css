@@ -1299,6 +1299,8 @@
   max-width: 260px;
 }
 .crm-leads-company-name {
+  display: block;
+  max-width: 100%;
   color: var(--crm-fg);
   overflow: hidden;
   text-overflow: ellipsis;

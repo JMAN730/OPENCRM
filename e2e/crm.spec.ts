@@ -686,6 +686,8 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await expect(leadTableRegion).toBeVisible();
   expect(await leadTableRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   expect(await companyName.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe("nowrap");
+  expect(await companyName.evaluate((element) => getComputedStyle(element).display)).toBe("block");
+  expect(await companyName.evaluate((element) => getComputedStyle(element).maxWidth)).toBe("100%");
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await leadTableRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);

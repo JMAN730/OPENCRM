@@ -38,7 +38,14 @@ vi.mock("@/app/_trpc/client", () => ({
           }],
         }),
       },
-      leadQuality: { useQuery: () => ({ data: undefined }) },
+      leadQuality: {
+        useQuery: () => ({
+          data: {
+            byNiche: [{ key: "Dental", total: 3, converted: 1, conversionRate: 33.3 }],
+            byCity: [{ key: "Austin", total: 3, converted: 1, conversionRate: 33.3 }],
+          },
+        }),
+      },
     },
     dashboard: {
       getTeamStats: { useQuery: () => ({ data: undefined }) },
@@ -57,5 +64,11 @@ describe("AnalyticsPage", () => {
     expect(screen.getByText("· all-time calling and pipeline performance")).toBeInTheDocument();
     expect(screen.getByText("all time · in pipeline")).toBeInTheDocument();
     expect(screen.getByText("all time · 0 of 0 touched")).toBeInTheDocument();
+    expect(screen.getByText("new leads · 7d")).toBeInTheDocument();
+    expect(screen.getByText("logged · 7d")).toBeInTheDocument();
+    expect(screen.getAllByText("last 30 days")).toHaveLength(2);
+    expect(screen.getAllByText("all time · ≥3 leads")).toHaveLength(2);
+    expect(screen.getByText("all-time leads")).toBeInTheDocument();
+    expect(screen.getAllByText("all time")).toHaveLength(3);
   });
 });
