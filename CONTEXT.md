@@ -40,6 +40,10 @@ _Avoid_: "message" (a Step is the plan; a Campaign Message is the concrete send)
 A single Lead's journey through one Campaign — tracks progress and why it ended. A Lead has at most one active Enrollment across the whole Organization.
 _Avoid_: "subscription", "membership"
 
+**Lead Consent**:
+A recorded, per-channel grant of prior express written consent from a Lead, with provenance (source, timestamp, consent text). Absence of a record means no consent; an opt-out overrides any consent record.
+_Avoid_: treating opt-out absence as consent; channel-blind "consent" flags
+
 **Campaign Message**:
 One concrete outbound message produced when an Enrollment reaches a Step.
 _Avoid_: conflating with SMS Draft
