@@ -4,6 +4,7 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, Columns, Download, Filter, Search, X } from "lucide-react";
 import {
   LEAD_VISIBLE_COLUMNS,
+  formatLeadCount,
   STAGE_ORDER,
   STATUS_LABELS,
   type AssignableUser,
@@ -26,8 +27,8 @@ type CustomOutcomeTab = { id: string; label: string };
 type OrgTag = { id: string; name: string };
 
 type LeadsManagementBarProps = {
-  allLeadsCount: number;
-  filteredCount: number;
+  countSummary: string;
+  nonStageFilteredLeadCount: number;
   filterOpen: boolean;
   columnsOpen: boolean;
   customOutcomes?: CustomOutcomeTab[];
@@ -59,8 +60,8 @@ type LeadsManagementBarProps = {
 };
 
 export function LeadsManagementBar({
-  allLeadsCount,
-  filteredCount,
+  countSummary,
+  nonStageFilteredLeadCount,
   filterOpen,
   columnsOpen,
   customOutcomes,
@@ -109,8 +110,6 @@ export function LeadsManagementBar({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [columnsOpen, filterOpen, onColumnsOpenChange, onFilterOpenChange]);
 
-  const totalStageCount = Object.values(stageCounts).reduce((sum, n) => sum + n, 0);
-
   const activeFilterCount =
     (ownerFilter.size > 0 ? 1 : 0) +
     (scoreMin !== null ? 1 : 0) +
@@ -136,9 +135,7 @@ export function LeadsManagementBar({
       <div className="focus-management-head">
         <div>
           <h3>All leads</h3>
-          <p>
-            {filteredCount} of {allLeadsCount} leads in the current view
-          </p>
+          <p>{countSummary}</p>
         </div>
         <div className="focus-management-actions">
           <button
@@ -334,7 +331,7 @@ export function LeadsManagementBar({
       <div className="focus-chip-row">
         <button className="crm-chip" aria-pressed={stageFilter.size === 0} onClick={onClearStageFilters}>
           All
-          <span className="crm-chip-count">{totalStageCount}</span>
+          <span className="crm-chip-count">{formatLeadCount(nonStageFilteredLeadCount)}</span>
         </button>
         {STAGE_ORDER.map((stage) => (
           <button
@@ -344,7 +341,7 @@ export function LeadsManagementBar({
             onClick={() => onToggleStage(stage)}
           >
             {STATUS_LABELS[stage]?.label ?? stage}
-            <span className="crm-chip-count">{stageCounts[stage] ?? 0}</span>
+            <span className="crm-chip-count">{formatLeadCount(stageCounts[stage] ?? 0)}</span>
           </button>
         ))}
         {customOutcomes?.map((co) => (
@@ -355,7 +352,7 @@ export function LeadsManagementBar({
             onClick={() => onToggleStage(`CUSTOM:${co.id}`)}
           >
             {co.label}
-            <span className="crm-chip-count">{stageCounts[`CUSTOM:${co.id}`] ?? 0}</span>
+            <span className="crm-chip-count">{formatLeadCount(stageCounts[`CUSTOM:${co.id}`] ?? 0)}</span>
           </button>
         ))}
       </div>

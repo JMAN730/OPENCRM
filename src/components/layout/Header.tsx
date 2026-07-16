@@ -9,11 +9,21 @@ import { WhatsNew } from "@/components/layout/WhatsNew";
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/leads": "Leads",
+  "/map": "Map",
+  "/pipeline": "Pipeline",
+  "/team": "Team",
+  "/messages": "Messages",
+  "/trainer": "Trainer",
+  "/scripts": "Scripts",
   "/scraper": "Scraper",
+  "/outreach": "Outreach",
   "/tasks": "Tasks",
+  "/calendar": "Calendar",
   "/dialer": "Dialer",
   "/analytics": "Analytics",
+  "/settings/scoring": "Lead Scoring",
   "/settings": "Settings",
+  "/admin": "Admin",
 };
 
 type Panel = "bell" | "inbox" | "whatsnew" | null;
@@ -43,7 +53,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const title =
     PAGE_TITLES[pathname] ??
-    PAGE_TITLES[Object.keys(PAGE_TITLES).find((k) => pathname.startsWith(k)) ?? ""] ??
+    PAGE_TITLES[
+      Object.keys(PAGE_TITLES)
+        .sort((left, right) => right.length - left.length)
+        .find((route) => pathname.startsWith(`${route}/`)) ?? ""
+    ] ??
     "Dashboard";
 
   const [openPanel, setOpenPanel] = useState<Panel>(null);
