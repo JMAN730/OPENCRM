@@ -28,6 +28,26 @@ _Avoid_: "contacted" meaning only the first Touch; treating CallLog (dialer log)
 A generated, per-Lead marketing website shown to a prospect during outreach to demonstrate what their web presence could look like. Must be send-ready without manual rework.
 _Avoid_: "demo", "website" unqualified
 
+**Campaign**:
+A multi-step outreach sequence with a selected audience of Leads, approved and launched as a whole; once active, its Steps send automatically.
+_Avoid_: "campaign" meaning the A2P 10DLC carrier registration (a Twilio/carrier artifact, not this entity)
+
+**Campaign Step**:
+One position in a Campaign's sequence — a channel plus a delay relative to the previous Step's send (the first Step is relative to Enrollment).
+_Avoid_: "message" (a Step is the plan; a Campaign Message is the concrete send)
+
+**Enrollment**:
+A single Lead's journey through one Campaign — tracks progress and why it ended. A Lead has at most one active Enrollment across the whole Organization.
+_Avoid_: "subscription", "membership"
+
+**Campaign Message**:
+One concrete outbound message produced when an Enrollment reaches a Step.
+_Avoid_: conflating with SMS Draft
+
+**SMS Draft**:
+A user-reviewed, one-shot SMS composed for a Lead outside any Campaign. The user sends it manually.
+_Avoid_: using SMS Draft rows to represent Campaign Messages
+
 ### Release communication
 
 **Release Note**:
