@@ -594,6 +594,34 @@ async function navigateViaSidebar(page: Page, href: string) {
   await expect(page).toHaveURL(new URL(href, BASE_URL).toString());
 }
 
+test("keeps desktop page content centered when the sidebar collapses", async ({ context, page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await seedSmokeSession(context, page);
+
+  await page.goto("/pipeline");
+  const sidebar = page.locator(".crm-sidebar");
+  const content = page.locator(".crm-content");
+  const main = page.locator(".crm-main");
+  await expect(content).toBeVisible();
+
+  await page.getByTitle("Collapse sidebar").click();
+  await expect(sidebar).toHaveClass(/is-collapsed/);
+
+  await expect
+    .poll(async () => {
+      const [contentBox, mainBox] = await Promise.all([
+        content.boundingBox(),
+        main.boundingBox(),
+      ]);
+      if (!contentBox || !mainBox) return Number.POSITIVE_INFINITY;
+
+      const leftGutter = contentBox.x - mainBox.x;
+      const rightGutter = mainBox.x + mainBox.width - (contentBox.x + contentBox.width);
+      return Math.abs(leftGutter - rightGutter);
+    })
+    .toBeLessThanOrEqual(1);
+});
+
 test("redirects anonymous users to sign in for protected routes", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=%2Fdashboard/);

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (2026-07-16)
+
+- Centered desktop page content within the available area when the navigation sidebar is collapsed.
+
 ### Added
 
 - Initial public release with core CRM features

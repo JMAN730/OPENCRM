@@ -664,6 +664,7 @@
   gap: 22px;
   max-width: 1480px;
   width: 100%;
+  margin-inline: auto;
 }
 
 .crm-page-head {
