@@ -24,6 +24,7 @@ import {
 } from "./lead-list/focus-view-model";
 import {
   chunk,
+  formatLeadCount,
   LEAD_VISIBLE_COLUMNS,
   scoreOf,
   SessionUser,
@@ -298,6 +299,14 @@ export function LeadsList() {
     }
     return counts;
   }, [serverStageCounts, allLeads, customOutcomes]);
+  const nonStageFilteredLeadCount = Object.values(stageCounts).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const matchingLeadCount =
+    stageFilter.size === 0
+      ? nonStageFilteredLeadCount
+      : Array.from(stageFilter).reduce((sum, stage) => sum + (stageCounts[stage] ?? 0), 0);
 
   const scopedLeads = useMemo(() => {
     // Stage / custom-outcome chips are filtered server-side (see getAll query above).
@@ -359,6 +368,15 @@ export function LeadsList() {
       }),
     [dueTodayTasks, overdueTasks, scopedLeads, upcomingFollowUpTasks, scoringRules],
   );
+  const hasClientOnlyFilters =
+    tagFilter.size > 0 ||
+    scoreMin !== null ||
+    scoreMax !== null ||
+    sortBy.key === "starred" ||
+    (viewMode === "focus" && quickFilter !== "ALL" && quickFilter !== "MINE");
+  const countSummary = hasClientOnlyFilters
+    ? `${formatLeadCount(activeLeads.length)} visible on this page · ${formatLeadCount(matchingLeadCount)} match search, stage, and owner filters`
+    : `${formatLeadCount(activeLeads.length)} of ${formatLeadCount(matchingLeadCount)} matching leads`;
 
   const toggleStage = (stage: string) => {
     setStageFilter((current) => {
@@ -548,14 +566,14 @@ export function LeadsList() {
       return `${focusFilteredLeads.length} leads remain available while focus signals reload.`;
     }
     if (focusCards.length === 0) {
-      return `${focusFilteredLeads.length} of ${allLeads.length} leads match the current view.`;
+      return `${countSummary}.`;
     }
     return `${focusCards.length} priority lead${focusCards.length === 1 ? "" : "s"} surfaced from your current lead view.`;
-  }, [allLeads.length, dueTodayQuery.isError, focusCards.length, focusFilteredLeads.length, isLoading, overdueQuery.isError]);
+  }, [countSummary, dueTodayQuery.isError, focusCards.length, focusFilteredLeads.length, isLoading, overdueQuery.isError]);
 
   const classicSubtitle = isLoading
     ? "Loading your leads…"
-    : `${scopedLeads.length} of ${allLeads.length} leads · sorted by ${sortBy.key}`;
+    : `${countSummary} · sorted by ${sortBy.key}`;
 
   const viewToggle = (
     <div
@@ -645,8 +663,8 @@ export function LeadsList() {
             />
 
             <LeadsManagementBar
-              allLeadsCount={scopedLeads.length}
-              filteredCount={focusFilteredLeads.length}
+              countSummary={countSummary}
+              nonStageFilteredLeadCount={nonStageFilteredLeadCount}
               filterOpen={filterOpen}
               columnsOpen={columnsOpen}
               customOutcomes={customOutcomes}
@@ -722,7 +740,7 @@ export function LeadsList() {
         ) : (
           <>
             <LeadsTable
-              allLeadsCount={allLeads.length}
+              nonStageFilteredLeadCount={nonStageFilteredLeadCount}
               customOutcomes={customOutcomes}
               filteredLeads={scopedLeads}
               hasNextPage={hasNextPage}

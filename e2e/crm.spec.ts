@@ -676,6 +676,25 @@ test("covers authenticated leads, tasks, and team admin flows in the browser", a
   await page.goto("/leads");
   const leadsMain = page.getByRole("main");
   await expect(leadsMain.getByRole("heading", { name: /^Leads - Focus$/ })).toBeVisible();
+
+  const originalViewport = page.viewportSize();
+  await leadsMain.getByRole("button", { name: "Classic view" }).click();
+  const leadTableRegion = leadsMain.getByRole("region", { name: "Scrollable lead table" });
+  const companyName = leadTableRegion.locator(".crm-leads-company-name").first();
+
+  await page.setViewportSize({ width: 1151, height: 838 });
+  await expect(leadTableRegion).toBeVisible();
+  expect(await leadTableRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  expect(await companyName.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe("nowrap");
+  expect(await companyName.evaluate((element) => getComputedStyle(element).display)).toBe("block");
+  expect(await companyName.evaluate((element) => getComputedStyle(element).maxWidth)).toBe("100%");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await leadTableRegion.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+
+  if (originalViewport) await page.setViewportSize(originalViewport);
+  await leadsMain.getByRole("button", { name: "Focus view" }).click();
+
   const seededLeadCard = leadsMain.getByRole("button", { name: /Ava Lane.*Signal Labs/ });
   await seededLeadCard.click();
   await expect(page.getByText("4.6 ★ (128 reviews)").first()).toBeVisible();

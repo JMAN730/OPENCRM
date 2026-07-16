@@ -1,5 +1,11 @@
 "use client";
 
+const LEAD_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
+
+export function formatLeadCount(count: number) {
+  return LEAD_COUNT_FORMATTER.format(count);
+}
+
 export type Lead = {
   id: string;
   firstName?: string | null;

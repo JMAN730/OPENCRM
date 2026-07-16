@@ -1278,6 +1278,35 @@
   font-size: 12px;
 }
 
+.crm-leads-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+.crm-leads-table-scroll:focus-visible {
+  outline: 2px solid var(--crm-accent);
+  outline-offset: -2px;
+}
+.crm-leads-table {
+  min-width: 1180px;
+}
+.crm-leads-table th:nth-child(2),
+.crm-leads-table td:nth-child(2) {
+  min-width: 210px;
+}
+.crm-leads-company-cell {
+  min-width: 190px;
+  max-width: 260px;
+}
+.crm-leads-company-name {
+  display: block;
+  max-width: 100%;
+  color: var(--crm-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .crm-contact { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .crm-contact .crm-meta { display: flex; flex-direction: column; min-width: 0; }
 .crm-contact .crm-meta .crm-n {

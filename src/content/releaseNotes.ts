@@ -12,6 +12,12 @@ export interface ReleaseNote {
 // here in the same PR (see docs/adr/0003-curated-release-notes.md).
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-07-16",
+    title: "Clearer lead counts and navigation",
+    tag: "Fixed",
+    body: "Lead lists now distinguish the current page from all matching leads, page headers follow your location, wide lead tables stay readable, and Analytics labels each reporting period clearly.",
+  },
+  {
     date: "2026-07-01",
     title: "Lead Map",
     tag: "New",

@@ -20,6 +20,7 @@ let searchParamView: string | null = null;
 let searchParamLeadId: string | null = null;
 let leadQueryState = { isLoading: false, isFetching: false };
 let customOutcomesState: Array<{ id: string; label: string }> = [];
+let serverStageCountsState: Record<string, number> | undefined;
 let dueTodayState: { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean } = {
   data: [],
   isLoading: false,
@@ -256,7 +257,7 @@ vi.mock("@/app/_trpc/client", () => ({
         list: { useQuery: vi.fn(() => ({ data: customOutcomesState })) },
       },
       getStatusCounts: {
-        useQuery: vi.fn(() => ({ data: undefined })),
+        useQuery: vi.fn(() => ({ data: serverStageCountsState })),
       },
     },
     tasks: {
@@ -379,6 +380,7 @@ describe("LeadsList", () => {
     leadQueryCalls = [];
     leadQueryState = { isLoading: false, isFetching: false };
     customOutcomesState = [];
+    serverStageCountsState = undefined;
     orgMembersState = [
       { id: "user-1", name: "Maya Rivera", email: "user@example.com", image: null },
       { id: "user-2", name: "Theo King", email: "theo@example.com", image: null },
@@ -535,6 +537,31 @@ describe("LeadsList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Focus view" }));
 
     expect(mockReplace).toHaveBeenCalledWith("/leads");
+  });
+
+  it("distinguishes the current lead page from the full matching total", () => {
+    searchParamView = "classic";
+    leadPages.root = {
+      items: [makeLead({ id: "lead-1", company: "Acme Corp" })],
+      nextCursor: "lead-2",
+    };
+    serverStageCountsState = { NOT_CONTACTED: 3_356 };
+
+    render(<LeadsList />);
+
+    expect(
+      screen.getByText("1 of 3,356 matching leads · sorted by createdAt"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All 3,356" })).toBeInTheDocument();
+  });
+
+  it("keeps the classic lead table in an accessible horizontal scroll region", () => {
+    searchParamView = "classic";
+
+    render(<LeadsList />);
+
+    const scrollRegion = screen.getByRole("region", { name: "Scrollable lead table" });
+    expect(scrollRegion).toContainElement(screen.getByRole("table"));
   });
 
   it("switches from focus view to the classic layout route", () => {

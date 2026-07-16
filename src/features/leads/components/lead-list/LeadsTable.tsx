@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   avatarClass,
   effectiveTempOf,
+  formatLeadCount,
   fullNameOf,
   initials,
   lastTouchOf,
@@ -44,7 +45,7 @@ type CustomOutcomeTab = { id: string; label: string };
 type OrgTag = { id: string; name: string };
 
 type LeadsTableProps = {
-  allLeadsCount: number;
+  nonStageFilteredLeadCount: number;
   customOutcomes?: CustomOutcomeTab[];
   filteredLeads: Lead[];
   hasNextPage: boolean;
@@ -79,7 +80,7 @@ type LeadsTableProps = {
 };
 
 export function LeadsTable({
-  allLeadsCount,
+  nonStageFilteredLeadCount,
   customOutcomes,
   filteredLeads,
   hasNextPage,
@@ -229,7 +230,7 @@ export function LeadsTable({
           aria-pressed={stageFilter.size === 0}
           onClick={onClearStageFilters}
         >
-          All <span className="crm-chip-count">{allLeadsCount}</span>
+          All <span className="crm-chip-count">{formatLeadCount(nonStageFilteredLeadCount)}</span>
         </button>
         {STAGE_ORDER.map((stage) => (
           <button
@@ -239,7 +240,7 @@ export function LeadsTable({
             onClick={() => onToggleStage(stage)}
           >
             {STATUS_LABELS[stage]?.label ?? stage}
-            <span className="crm-chip-count">{stageCounts[stage] ?? 0}</span>
+            <span className="crm-chip-count">{formatLeadCount(stageCounts[stage] ?? 0)}</span>
           </button>
         ))}
         {customOutcomes?.map((co) => (
@@ -250,7 +251,7 @@ export function LeadsTable({
             onClick={() => onToggleStage(`CUSTOM:${co.id}`)}
           >
             {co.label}
-            <span className="crm-chip-count">{stageCounts[`CUSTOM:${co.id}`] ?? 0}</span>
+            <span className="crm-chip-count">{formatLeadCount(stageCounts[`CUSTOM:${co.id}`] ?? 0)}</span>
           </button>
         ))}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -412,7 +413,13 @@ export function LeadsTable({
         </div>
       </div>
 
-      <table className="crm-table-v1">
+      <div
+        className="crm-leads-table-scroll"
+        role="region"
+        aria-label="Scrollable lead table"
+        tabIndex={0}
+      >
+        <table className="crm-table-v1 crm-leads-table">
         <thead>
           <tr>
             <th className="cb" onClick={(event) => event.stopPropagation()}>
@@ -487,9 +494,9 @@ export function LeadsTable({
                     </td>
                   )}
                   {show("Company") && (
-                    <td>
+                    <td className="crm-leads-company-cell">
                       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        <span style={{ color: "var(--crm-fg)" }}>{lead.company || "-"}</span>
+                        <span className="crm-leads-company-name">{lead.company || "-"}</span>
                         {lead.source ? (
                           <span style={{ color: "var(--crm-fg-faint)", fontSize: 11.5 }}>{lead.source}</span>
                         ) : null}
@@ -595,7 +602,8 @@ export function LeadsTable({
             </>
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
 
       <div
         style={{

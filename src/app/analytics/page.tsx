@@ -184,14 +184,17 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardLayout>
-      <PageShell title="Analytics" subtitle="30-day pipeline and activity overview">
+      <PageShell
+        title="Analytics"
+        subtitle="All-time totals with 7- and 30-day activity trends"
+      >
         {/* ── KPI strip ── */}
         <div className="crm-kpi-grid">
           <KpiCard label="Total leads" value={fmt(kpis?.totalLeads ?? 0)} sub="all time" />
           <KpiCard label="Added this week" value={fmt(kpis?.leadsThisWeek ?? 0)} sub="new leads · 7d" />
           <KpiCard label="Calls this week" value={fmt(kpis?.callsThisWeek ?? 0)} sub="logged · 7d" />
-          <KpiCard label="Connected" value={fmt(kpis?.connectedCount ?? 0)} sub="total in pipeline" />
-          <KpiCard label="Contact rate" value={`${kpis?.contactRate ?? "0.0"}%`} sub={`${fmt(totalTouched)} of ${fmt(kpis?.totalLeads ?? 0)} touched`} />
+          <KpiCard label="Connected" value={fmt(kpis?.connectedCount ?? 0)} sub="all time · in pipeline" />
+          <KpiCard label="Contact rate" value={`${kpis?.contactRate ?? "0.0"}%`} sub={`all time · ${fmt(totalTouched)} of ${fmt(kpis?.totalLeads ?? 0)} touched`} />
         </div>
 
         {/* ── Rep leaderboard ── */}
@@ -199,7 +202,7 @@ export default function AnalyticsPage() {
           <div className="crm-card flush">
             <div className="crm-card-head">
               <h3>Rep leaderboard</h3>
-              <span className="crm-sub">· cold-calling performance</span>
+              <span className="crm-sub">· all-time calling and pipeline performance</span>
             </div>
             <table className="crm-table">
               <thead>
@@ -238,7 +241,7 @@ export default function AnalyticsPage() {
         {(topNiches.length > 0 || topCities.length > 0) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div className="crm-card" style={{ padding: 24 }}>
-              <SectionHead title="Top niches by conversion" sub="≥3 leads" />
+              <SectionHead title="Top niches by conversion" sub="all time · ≥3 leads" />
               {topNiches.length === 0 ? (
                 <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Not enough data yet</div>
               ) : (
@@ -248,7 +251,7 @@ export default function AnalyticsPage() {
               )}
             </div>
             <div className="crm-card" style={{ padding: 24 }}>
-              <SectionHead title="Top cities by conversion" sub="≥3 leads" />
+              <SectionHead title="Top cities by conversion" sub="all time · ≥3 leads" />
               {topCities.length === 0 ? (
                 <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Not enough data yet</div>
               ) : (
@@ -281,7 +284,7 @@ export default function AnalyticsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
           {/* Touch depth */}
           <div className="crm-card" style={{ padding: 24 }}>
-            <SectionHead title="Touch depth" sub="all leads" />
+            <SectionHead title="Touch depth" sub="all-time leads" />
             {isLoading ? (
               <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>Loading…</div>
             ) : (
@@ -303,7 +306,7 @@ export default function AnalyticsPage() {
 
           {/* Lead status */}
           <div className="crm-card" style={{ padding: 24 }}>
-            <SectionHead title="Pipeline by status" />
+            <SectionHead title="Pipeline by status" sub="all time" />
             {LEAD_STATUS_ORDER.map((s) => {
               const row = leadsByStatus.find((r) => r.status === s);
               const count = row?.count ?? 0;
@@ -315,7 +318,7 @@ export default function AnalyticsPage() {
 
           {/* Temperature */}
           <div className="crm-card" style={{ padding: 24 }}>
-            <SectionHead title="Lead temperature" />
+            <SectionHead title="Lead temperature" sub="all time" />
             {byTemperature.length === 0 ? (
               <div style={{ color: "var(--crm-fg-faint)", fontSize: 13 }}>No temperature data yet</div>
             ) : (
